@@ -10,7 +10,7 @@ export default defineType({
             name: 'title',
             title: 'Category Title',
             type: 'string',
-            validation: (Rule) => Rule.required().unique(),
+            validation: (Rule) => Rule.required(),
             description: 'e.g., Perishables, Dry Goods, Cleaning Materials',
         }),
         defineField({

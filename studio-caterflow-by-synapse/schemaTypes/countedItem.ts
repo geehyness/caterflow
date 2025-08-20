@@ -39,10 +39,12 @@ export default defineType({
             title: 'stockItem.name',
             subtitle: 'countedQuantity',
             unit: 'stockItem.unitOfMeasure',
-            variance: 'variance',
+            systemQty: 'systemQuantityAtCountTime', // Select the system quantity
+            countedQty: 'countedQuantity', // Select the counted quantity
         },
-        prepare({ title, subtitle, unit, variance }) {
-            const varianceText = variance !== undefined ? ` (Variance: ${variance})` : '';
+        prepare({ title, subtitle, unit, systemQty, countedQty }) {
+            const variance = (countedQty !== undefined && systemQty !== undefined) ? countedQty - systemQty : 'N/A';
+            const varianceText = variance !== 'N/A' ? ` (Variance: ${variance})` : '';
             return {
                 title: title,
                 subtitle: `${subtitle} ${unit}${varianceText}`,

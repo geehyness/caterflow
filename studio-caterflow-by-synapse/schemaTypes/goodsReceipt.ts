@@ -1,5 +1,38 @@
 // schemas/goodsReceipt.js
 import { defineType, defineField } from 'sanity';
+import { createClient } from '@sanity/client';
+
+// NOTE: You will need to replace the placeholders below with your actual project details.
+const client = createClient({
+    projectId: 'v3sfsmld', // Replace with your Sanity Project ID
+    dataset: 'production', // Replace with your dataset (e.g., 'production')
+    apiVersion: '2025-08-20', // Use a recent date, like today's date
+    useCdn: true,
+});
+
+// Async helper function to check for unique receipt numbers
+const isUniqueReceiptNumber = async (receiptNumber, context) => {
+    const { document, getClient } = context;
+    if (!receiptNumber) {
+        return true;
+    }
+
+    const id = document._id.replace('drafts.', '');
+    const client = getClient({ apiVersion: '2025-08-20' });
+
+    const query = `
+        !defined(*[_type == "GoodsReceipt" && receiptNumber == $receiptNumber && _id != $draft && _id != $published][0]._id)
+    `;
+
+    const params = {
+        draft: `drafts.${id}`,
+        published: id,
+        receiptNumber,
+    };
+
+    const result = await client.fetch(query, params);
+    return result;
+};
 
 export default defineType({
     name: 'GoodsReceipt',
@@ -10,16 +43,44 @@ export default defineType({
             name: 'receiptNumber',
             title: 'Receipt Number',
             type: 'string',
-            validation: (Rule) => Rule.required().unique(),
+            validation: (Rule) =>
+                Rule.required().custom(async (receiptNumber, context) => {
+                    const isUnique = await isUniqueReceiptNumber(receiptNumber, context);
+                    if (!isUnique) {
+                        return 'Receipt Number already exists.';
+                    }
+                    return true;
+                }),
+            readOnly: ({ document }) => !!document.receiptNumber,
             description: 'Unique Goods Receipt identifier.',
+            initialValue: async () => {
+                const today = new Date().toISOString().slice(0, 10);
+                const query = `
+                    *[_type == "GoodsReceipt" && _createdAt >= "${today}T00:00:00Z" && _createdAt < "${today}T23:59:59Z"] | order(_createdAt desc)[0] {
+                        receiptNumber
+                    }
+                `;
+                const lastReceipt = await client.fetch(query);
+
+                let nextNumber = 1;
+                if (lastReceipt && lastReceipt.receiptNumber) {
+                    const lastNumber = parseInt(lastReceipt.receiptNumber.split('-').pop());
+                    if (!isNaN(lastNumber)) {
+                        nextNumber = lastNumber + 1;
+                    }
+                }
+
+                const paddedNumber = String(nextNumber).padStart(3, '0');
+                return `GR-${today}-${paddedNumber}`;
+            },
         }),
         defineField({
             name: 'receiptDate',
             title: 'Receipt Date',
             type: 'datetime',
+            initialValue: new Date().toISOString(),
             options: {
                 dateFormat: 'YYYY-MM-DD',
-                timeFormat: 'HH:mm',
                 calendarTodayLabel: 'Today',
             },
             validation: (Rule) => Rule.required(),

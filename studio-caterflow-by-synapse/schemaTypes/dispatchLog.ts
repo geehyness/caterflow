@@ -1,5 +1,40 @@
 // schemas/dispatchLog.js
 import { defineType, defineField } from 'sanity';
+import { createClient } from '@sanity/client';
+
+// NOTE: For Sanity Studio v3, it is recommended to create a separate client instance.
+// For example, in a file like 'sanityClient.js'
+// You will need to replace the placeholders below with your actual project details.
+const client = createClient({
+    projectId: 'v3sfsmld', // Replace with your Sanity Project ID
+    dataset: 'production', // Replace with your dataset (e.g., 'production')
+    apiVersion: '2025-08-20', // Use a recent date, like today's date
+    useCdn: true,
+});
+
+// Async helper function to check for unique dispatch numbers
+const isUniqueDispatchNumber = async (dispatchNumber, context) => {
+    const { document, getClient } = context;
+    if (!dispatchNumber) {
+        return true;
+    }
+
+    const id = document._id.replace('drafts.', '');
+    const client = getClient({ apiVersion: '2025-08-20' });
+
+    const query = `
+        !defined(*[_type == "DispatchLog" && dispatchNumber == $dispatchNumber && _id != $draft && _id != $published][0]._id)
+    `;
+
+    const params = {
+        draft: `drafts.${id}`,
+        published: id,
+        dispatchNumber,
+    };
+
+    const result = await client.fetch(query, params);
+    return result;
+};
 
 export default defineType({
     name: 'DispatchLog',
@@ -10,8 +45,36 @@ export default defineType({
             name: 'dispatchNumber',
             title: 'Dispatch Number',
             type: 'string',
-            validation: (Rule) => Rule.required().unique(),
+            validation: (Rule) =>
+                Rule.required().custom(async (dispatchNumber, context) => {
+                    const isUnique = await isUniqueDispatchNumber(dispatchNumber, context);
+                    if (!isUnique) {
+                        return 'Dispatch Number already exists.';
+                    }
+                    return true;
+                }),
+            readOnly: ({ document }) => !!document.dispatchNumber, // Make field read-only after creation
             description: 'Unique Dispatch Log identifier.',
+            initialValue: async () => {
+                const today = new Date().toISOString().slice(0, 10);
+                const query = `
+                    *[_type == "DispatchLog" && _createdAt >= "${today}T00:00:00Z" && _createdAt < "${today}T23:59:59Z"] | order(_createdAt desc)[0] {
+                        dispatchNumber
+                    }
+                `;
+                const lastLog = await client.fetch(query);
+
+                let nextNumber = 1;
+                if (lastLog && lastLog.dispatchNumber) {
+                    const lastNumber = parseInt(lastLog.dispatchNumber.split('-').pop());
+                    if (!isNaN(lastNumber)) {
+                        nextNumber = lastNumber + 1;
+                    }
+                }
+
+                const paddedNumber = String(nextNumber).padStart(3, '0');
+                return `DL-${today}-${paddedNumber}`;
+            },
         }),
         defineField({
             name: 'dispatchDate',

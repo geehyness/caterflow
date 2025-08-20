@@ -15,10 +15,19 @@ export default defineType({
         }),
         defineField({
             name: 'code',
-            title: 'Site Code',
-            type: 'string',
-            validation: (Rule) => Rule.required().unique(),
+            title: 'Slug',
+            type: 'slug',
+            options: {
+                source: 'name', // Automatically generate the code from the 'name' field
+                maxLength: 96,
+                slugify: (input) => input
+                    .toLowerCase()
+                    .replace(/\s+/g, '-')
+                    .slice(0, 200)
+            },
+            validation: (Rule) => Rule.required(),
             description: 'A unique short code for the site.',
+            //readOnly: true, // Prevents manual changes to the code
         }),
         defineField({
             name: 'location',
@@ -54,7 +63,7 @@ export default defineType({
     preview: {
         select: {
             title: 'name',
-            subtitle: 'code',
+            subtitle: 'code.current',
         },
         orderings: [
             {
@@ -70,7 +79,7 @@ export default defineType({
             {
                 name: 'codeAsc',
                 title: 'Site Code (Ascending)',
-                by: [{ field: 'code', direction: 'asc' }],
+                by: [{ field: 'code.current', direction: 'asc' }],
             },
             {
                 name: 'patientCountDesc',

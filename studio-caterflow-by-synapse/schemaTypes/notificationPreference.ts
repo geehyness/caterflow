@@ -10,7 +10,7 @@ export default defineType({
             name: 'title',
             title: 'Notification Type Title',
             type: 'string',
-            validation: (Rule) => Rule.required().unique(),
+            validation: (Rule) => Rule.required(),
             description: 'e.g., Low Stock Alert, Item Expiry Warning',
         }),
         defineField({
@@ -62,7 +62,7 @@ export default defineType({
                     { title: 'Dispatch Staff', value: 'dispatchStaff' },
                     { title: 'Auditor', value: 'auditor' },
                 ],
-                layout: 'tags',
+                layout: 'checkbox', // Changed to checkbox layout
             },
             validation: (Rule) => Rule.required().min(1),
             description: 'Which application user roles should receive this notification.',

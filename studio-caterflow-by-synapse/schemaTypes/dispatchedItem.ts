@@ -2,7 +2,7 @@
 import { defineType, defineField } from 'sanity';
 
 export default defineType({
-    name: 'DispatchedItem', // Capitalized for consistency
+    name: 'DispatchedItem',
     title: 'Dispatched Item',
     type: 'object',
     fields: [
@@ -10,14 +10,21 @@ export default defineType({
             name: 'stockItem',
             title: 'Stock Item',
             type: 'reference',
-            to: [{ type: 'StockItem' }], // Consistent capitalization
+            to: [{ type: 'StockItem' }],
             validation: (Rule) => Rule.required(),
         }),
         defineField({
             name: 'dispatchedQuantity',
             title: 'Dispatched Quantity',
             type: 'number',
-            validation: (Rule) => Rule.required().min(1).integer(),
+            validation: (Rule) => Rule.required().min(0), // Removed .integer()
+        }),
+        defineField({
+            name: 'totalCost',
+            title: 'Total Cost',
+            type: 'number',
+            description: 'This value is calculated automatically and cannot be edited.',
+            readOnly: true, // Prevents manual editing
         }),
     ],
     preview: {

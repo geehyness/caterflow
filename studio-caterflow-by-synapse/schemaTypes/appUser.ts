@@ -1,5 +1,35 @@
 // schemas/appUser.js
-import { defineType, defineField } from 'sanity';
+import { defineType, defineField, ValidationContext } from 'sanity';
+
+// NOTE: This helper function is defined locally for clarity.
+// In a real project, you might place this in a separate utilities file.
+const isUniqueEmail = async (email: string | undefined, context: ValidationContext) => {
+    const { document, getClient } = context;
+    if (!email) {
+        return true;
+    }
+
+    // Get the ID of the document being edited, ignoring the 'drafts' part.
+    const id = document._id.replace('drafts.', '');
+
+    // Get the Sanity client instance.
+    const client = getClient({ apiVersion: '2025-08-20' });
+
+    // Construct a GROQ query to check for documents with the same email.
+    // It excludes the current document (both the draft and the published version).
+    const query = `
+        !defined(*[_type == "AppUser" && email == $email && _id != $draft && _id != $published][0]._id)
+    `;
+
+    const params = {
+        draft: `drafts.${id}`,
+        published: id,
+        email,
+    };
+
+    const result = await client.fetch(query, params);
+    return result;
+};
 
 export default defineType({
     name: 'AppUser',
@@ -16,7 +46,15 @@ export default defineType({
             name: 'email',
             title: 'Email Address',
             type: 'string',
-            validation: (Rule) => Rule.required().unique(),
+            validation: (Rule) =>
+                Rule.required().custom(async (email, context) => {
+                    const isEmailUnique = await isUniqueEmail(email, context);
+
+                    if (!isEmailUnique) {
+                        return 'Email already exists.';
+                    }
+                    return true;
+                }),
             description: 'Must be unique and correspond to the user\'s login email in your Next.js app.',
         }),
         defineField({
@@ -40,7 +78,6 @@ export default defineType({
             type: 'reference',
             to: [{ type: 'Site' }],
             description: 'For Site Managers, links them to their specific site; optional for others.',
-            hidden: ({ document }) => document?.role !== 'siteManager',
         }),
         defineField({
             name: 'isActive',
@@ -71,7 +108,6 @@ export default defineType({
                 media: media,
             };
         },
-        // --- ADDED ORDERINGS ---
         orderings: [
             {
                 name: 'nameAsc',

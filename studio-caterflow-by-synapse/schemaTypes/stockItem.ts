@@ -1,5 +1,40 @@
 // schemas/stockItem.js
 import { defineType, defineField } from 'sanity';
+import { createClient } from '@sanity/client';
+
+// NOTE: For Sanity Studio v3, it is recommended to create a separate client instance.
+// For example, in a file like 'sanityClient.js'
+// You will need to replace the placeholders below with your actual project details.
+const client = createClient({
+    projectId: 'v3sfsmld', // Replace with your Sanity Project ID
+    dataset: 'production', // Replace with your dataset (e.g., 'production')
+    apiVersion: '2025-08-20', // Use a recent date, like today's date
+    useCdn: true,
+});
+
+// Async helper function to check for SKU uniqueness
+const isUniqueSku = async (sku, context) => {
+    const { document, getClient } = context;
+    if (!sku) {
+        return true;
+    }
+
+    const id = document._id.replace('drafts.', '');
+    const client = getClient({ apiVersion: '2025-08-20' });
+
+    const query = `
+        !defined(*[_type == "StockItem" && sku == $sku && _id != $draft && _id != $published][0]._id)
+    `;
+
+    const params = {
+        draft: `drafts.${id}`,
+        published: id,
+        sku,
+    };
+
+    const result = await client.fetch(query, params);
+    return result;
+};
 
 export default defineType({
     name: 'StockItem',
@@ -16,8 +51,34 @@ export default defineType({
             name: 'sku',
             title: 'SKU (Stock Keeping Unit)',
             type: 'string',
-            validation: (Rule) => Rule.required().unique(),
+            validation: (Rule) =>
+                Rule.required().custom(async (sku, context) => {
+                    const isSkuUnique = await isUniqueSku(sku, context);
+
+                    if (!isSkuUnique) {
+                        return 'SKU already exists.';
+                    }
+                    return true;
+                }),
+            readOnly: ({ document }) => !!document.sku, // Makes the field read-only after the initial creation
             description: 'A unique identifier for this stock item.',
+            initialValue: async () => {
+                const query = `
+                    *[_type == "StockItem"]|order(_createdAt desc)[0]{
+                        sku
+                    }
+                `;
+                const lastItem = await client.fetch(query);
+                let nextNumber = 1;
+                if (lastItem && lastItem.sku) {
+                    const lastNumber = parseInt(lastItem.sku.split('-')[1]);
+                    if (!isNaN(lastNumber)) {
+                        nextNumber = lastNumber + 1;
+                    }
+                }
+                const paddedNumber = String(nextNumber).padStart(3, '0');
+                return `sku-${paddedNumber}`;
+            },
         }),
         defineField({
             name: 'itemType',
@@ -46,42 +107,20 @@ export default defineType({
                 list: [
                     { title: 'Kilogram (kg)', value: 'kg' },
                     { title: 'Gram (g)', value: 'g' },
-                    { title: 'Liter (L)', value: 'L' },
+                    { title: 'Liter (l)', value: 'l' },
                     { title: 'Milliliter (ml)', value: 'ml' },
-                    { title: 'Unit (ea)', value: 'ea' },
-                    { title: 'Box (bx)', value: 'bx' },
-                    { title: 'Piece (pc)', value: 'pc' },
-                    { title: 'Pack (pk)', value: 'pk' },
+                    { title: 'Each', value: 'each' },
+                    { title: 'Box', value: 'box' },
+                    { title: 'Case', value: 'case' },
                 ],
             },
             validation: (Rule) => Rule.required(),
         }),
         defineField({
-            name: 'minimumStockLevel',
-            title: 'Minimum Stock Level',
-            type: 'number',
-            description: 'Alerts when stock of this item falls below this level.',
-            validation: (Rule) => Rule.min(0).integer().required(),
-        }),
-        defineField({
-            name: 'reorderPoint',
-            title: 'Reorder Point',
-            type: 'number',
-            description: 'Quantity at which to reorder this item.',
-            validation: (Rule) => Rule.min(0).integer(),
-        }),
-        defineField({
-            name: 'supplier',
-            title: 'Preferred Supplier',
-            type: 'reference',
-            to: [{ type: 'Supplier' }],
-        }),
-        defineField({
-            name: 'purchasePrice',
-            title: 'Last Purchase Price (per unit)',
-            type: 'number',
-            description: 'The price per unit at the last recorded purchase.',
-            validation: (Rule) => Rule.min(0),
+            name: 'imageUrl',
+            title: 'Image URL',
+            type: 'url',
+            description: 'URL to the stock item image.',
         }),
         defineField({
             name: 'description',
@@ -90,19 +129,24 @@ export default defineType({
             rows: 3,
         }),
         defineField({
-            name: 'imageUrl',
-            title: 'Item Image',
-            type: 'image',
-            options: {
-                hotspot: true,
-            },
+            name: 'supplier',
+            title: 'Supplier',
+            type: 'reference',
+            to: [{ type: 'Supplier' }],
         }),
         defineField({
-            name: 'isActive',
-            title: 'Is Active',
-            type: 'boolean',
-            description: 'Whether this item is currently actively stocked and tracked.',
-            initialValue: true,
+            name: 'minimumStockLevel',
+            title: 'Minimum Stock Level',
+            type: 'number',
+            description: 'Set a minimum quantity to trigger low stock alerts.',
+            validation: (Rule) => Rule.required().min(0),
+        }),
+        defineField({
+            name: 'reorderQuantity',
+            title: 'Reorder Quantity',
+            type: 'number',
+            description: 'Suggested quantity to reorder when stock is low.',
+            validation: (Rule) => Rule.min(0),
         }),
     ],
     preview: {
@@ -111,7 +155,6 @@ export default defineType({
             subtitle: 'sku',
             media: 'imageUrl',
         },
-        // --- ADDED ORDERINGS ---
         orderings: [
             {
                 name: 'nameAsc',
@@ -139,12 +182,12 @@ export default defineType({
                 by: [{ field: 'minimumStockLevel', direction: 'desc' }],
             },
             {
-                name: 'createdAt', // Default ordering by creation date
+                name: 'createdAt',
                 title: 'Newest First',
                 by: [{ field: '_createdAt', direction: 'desc' }],
             },
             {
-                name: 'updatedAt', // Default ordering by update date
+                name: 'updatedAt',
                 title: 'Recently Updated',
                 by: [{ field: '_updatedAt', direction: 'desc' }],
             },
