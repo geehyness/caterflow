@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sanity Schema Documentation</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+    <script>
+        mermaid.initialize({ startOnLoad: true, theme: 'forest' });
+    </script>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --primary-dark: #1d4ed8;
+            --secondary: #64748b;
+            --light: #f8fafc;
+            --dark: #0f172a;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background-color: #f1f5f9;
+            color: #334155;
+            line-height: 1.6;
+        }
+
+        header {
+            background: linear-gradient(120deg, var(--primary), var(--primary-dark));
+            color: white;
+            padding: 1.5rem;
+            box-shadow: var(--card-shadow);
+        }
+
+        .header-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        h1 {
+            font-size: 2.2rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .description {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .search-container {
+            width: 300px;
+        }
+
+        #search {
+            width: 100%;
+            padding: 0.75rem;
+            border: none;
+            border-radius: 4px;
+            font-size: 1rem;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 2rem auto;
+            padding: 0 1.5rem;
+        }
+
+        .card {
+            background: white;
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            box-shadow: var(--card-shadow);
+        }
+
+        .card-title {
+            font-size: 1.5rem;
+            color: var(--primary);
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid #e2e8f0;
+        }
+
+        .mermaid-container {
+            overflow-x: auto;
+            padding: 1rem;
+            background: white;
+            border-radius: 8px;
+            margin-bottom: 2rem;
+            box-shadow: var(--card-shadow);
+        }
+
+        .schema-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .schema-card {
+            background: white;
+            border-radius: 8px;
+            padding: 1.25rem;
+            box-shadow: var(--card-shadow);
+            transition: transform 0.2s;
+            border-left: 4px solid var(--primary);
+        }
+
+        .schema-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .schema-card h3 {
+            color: var(--primary);
+            margin-bottom: 0.75rem;
+        }
+
+        .schema-type {
+            display: inline-block;
+            background: #e0f2fe;
+            color: #0369a1;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            margin-bottom: 1rem;
+        }
+
+        .field-list {
+            list-style: none;
+        }
+
+        .field-list li {
+            padding: 0.5rem 0;
+            border-bottom: 1px solid #f1f5f9;
+        }
+
+        .field-list li:last-child {
+            border-bottom: none;
+        }
+
+        .field-name {
+            font-weight: 600;
+            color: var(--dark);
+        }
+
+        .field-type {
+            color: var(--secondary);
+            font-size: 0.9rem;
+        }
+
+        .required {
+            color: var(--danger);
+            font-size: 0.8rem;
+        }
+
+        .filters {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+            flex-wrap: wrap;
+        }
+
+        .filter-btn {
+            padding: 0.5rem 1rem;
+            background: white;
+            border: 1px solid #cbd5e1;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .filter-btn.active {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
+        }
+
+        .filter-btn:hover {
+            border-color: var(--primary);
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        footer {
+            text-align: center;
+            padding: 2rem;
+            margin-top: 2rem;
+            color: var(--secondary);
+            border-top: 1px solid #e2e8f0;
+        }
+
+        @media (max-width: 768px) {
+            .header-content {
+                flex-direction: column;
+                text-align: center;
+                gap: 1rem;
+            }
+
+            .search-container {
+                width: 100%;
+            }
+
+            .schema-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <div class="header-content">
+            <div>
+                <h1>Sanity Schema Documentation</h1>
+                <p class="description">Comprehensive documentation for the inventory management system schemas</p>
+            </div>
+            <div class="search-container">
+                <input type="text" id="search" placeholder="Search schemas and fields...">
+            </div>
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="card">
+            <h2 class="card-title">Schema Relationship Diagram</h2>
+            <div class="mermaid-container">
+                <div class="mermaid">
+                    erDiagram
+                    Site ||--o{ Bin : contains
+                    Site ||--o{ AppUser : manages
+                    Category ||--o{ StockItem : categorizes
+                    Supplier ||--o{ StockItem : supplies
+                    Supplier ||--o{ PurchaseOrder : provides
+                    StockItem ||--o{ OrderedItem : ordered_in
+                    StockItem ||--o{ ReceivedItem : received_in
+                    StockItem ||--o{ DispatchedItem : dispatched_in
+                    StockItem ||--o{ TransferredItem : transferred_in
+                    StockItem ||--o{ AdjustedItem : adjusted_in
+                    StockItem ||--o{ CountedItem : counted_in
+                    PurchaseOrder ||--|| AppUser : ordered_by
+                    PurchaseOrder ||--o{ OrderedItem : contains
+                    PurchaseOrder ||--o{ GoodsReceipt : fulfilled_by
+                    GoodsReceipt ||--|| AppUser : received_by
+                    GoodsReceipt ||--o{ ReceivedItem : contains
+                    GoodsReceipt ||--|| Bin : stored_in
+                    DispatchLog ||--|| AppUser : dispatched_by
+                    DispatchLog ||--|| Bin : from_bin
+                    DispatchLog ||--|| Site : to_site
+                    DispatchLog ||--o{ DispatchedItem : contains
+                    InternalTransfer ||--|| AppUser : transferred_by
+                    InternalTransfer ||--|| Bin : from_bin
+                    InternalTransfer ||--|| Bin : to_bin
+                    InternalTransfer ||--o{ TransferredItem : contains
+                    StockAdjustment ||--|| AppUser : adjusted_by
+                    StockAdjustment ||--|| Bin : in_bin
+                    StockAdjustment ||--o{ AdjustedItem : contains
+                    InventoryCount ||--|| AppUser : counted_by
+                    InventoryCount ||--|| Bin : in_bin
+                    InventoryCount ||--o{ CountedItem : contains
+                    NotificationPreference }o--|| AppUser : applies_to
+                </div>
+            </div>
+        </div>
+
+        <div class="filters">
+            <button class="filter-btn active" data-filter="all">All Schemas</button>
+            <button class="filter-btn" data-filter="document">Document Types</button>
+            <button class="filter-btn" data-filter="object">Object Types</button>
+        </div>
+
+        <h2 class="card-title">Schema Documentation</h2>
+
+        <div class="schema-grid" id="schema-container">
+            <!-- Document Types -->
+            <div class="schema-card" data-type="document">
+                <h3>StockItem</h3>
+                <span class="schema-type">Document</span>
+                <p>Represents an inventory item with details like SKU, category, and stock levels.</p>
+                <ul class="field-list">
+                    <li><span class="field-name">name</span> <span class="field-type">string</span> <span
+                            class="required">required</span></li>
+                    <li><span class="field-name">sku</span> <span class="field-type">string</span> <span
+                            class="required">required, unique</span></li>
+                    <li><span class="field-name">itemType</span> <span class="field-type">string</span> <span
+                            class="required">required</span></li>
+                    <li><span class="field-name">category</span> <span class="field-type">reference</span> <span
+                            class="required">required</span></li>
+                    <li><span class="field-name">unitOfMeasure</span> <span class="field-type">string</span> <span
+                            class="required">required</span></li>
+                    <li><span class="field-name">minimumStockLevel</span> <span class="field-type">number</span> <span
+                            class="required">required</span></li>
+                </ul>
+            </div>
+
+            <div class="schema-card" data-type="document">
+                <h3>Category</h3>
+                <span class="schema-type">Document</span>
+                <p>Categories for grouping inventory items (e.g., Perishables, Dry Goods).</p>
+                <ul class="field-list">
+                    <li><span class="field-name">title</span> <span class="field-type">string</span> <span
+                            class="required">required, unique</span></li>
+                    <li><span class="field-name">description</span> <span class="field-type">text</span></li>
+                </ul>
+            </div>
+
+            <div class="schema-card" data-type="document">
+                <h3>Site</h3>
+                <span class="schema-type">Document</span>
+                <p>Physical locations where inventory is stored (e.g., Kitchen A, Ward 3 Pantry).</p>
+                <ul class="field-list">
+                    <li><span class="field-name">name</span> <span class="field-type">string</span> <span
+                            class="required">required</span></li>
+                    <li><span class="field-name">code</span> <span class="field-type">string</span> <span
+                            class="required">required, unique</span></li>
+                    <li><span class="field-name">location</span> <span class="field-type">string</span></li>
+                    <li><span class="field-name">manager</span> <span class="field-type">reference</span></li>
+                </ul>
+            </div>
+
+            <div class="schema-card" data-type="document">
+                <h3>Bin</h3>
+                <span class="schema-type">Document</span>
+                <p>Storage locations within sites (e.g., Shelf 3, Cold Room 1).</p>
+                <ul class="field-list">
+                    <li><span class="field-name">name</span> <span class="field-type">string</span> <span
+                            class="required">required</span></li>
+                    <li><span class="field-name">site</span> <span class="field-type">reference</span> <span
+                            class="required">required</span></li>
+                    <li><span class="field-name">locationDescription</span> <span class="field-type">string</span></li>
+                    <li><span class="field-name">capacity</span> <span class="field-type">number</span></li>
+                    <li><span class="field-name">binType</span> <span class="field-type">string</span> <span
+                            class="required">required</span></li>
+                </ul>
+            </div>
+
+            <div class="schema-card" data-type="document">
+                <h3>Supplier</h3>
+                <span class="schema-type">Document</span>
+                <p>Vendor information for inventory items.</p>
+                <ul class="field-list">
+                    <li><span class="field-name">name</span> <span class="field-type">string</span> <span
+                            class="required">required, unique</span></li>
+                    <li><span class="field-name">contactPerson</span> <span class="field-type">string</span></li>
+                    <li><span class="field-name">phoneNumber</span> <span class="field-type">string</span></li>
+                    <li><span class="field-name">email</span> <span class="field-type">string</span></li>
+                    <li><span class="field-name">address</span> <span class="field-type">text</span></li>
+                    <li><span class="field-name">terms</span> <span class="field-type">string</span></li>
+                </ul>
+            </div>
+
+            <div class="schema-card" data-type="document">
+                <h3>PurchaseOrder</h3>
+                <span class="schema-type">Document</span>
+                <p>Orders placed with suppliers for inventory items.</p>
+                <ul class="field-list">
+                    <li><span class="field-name">poNumber</span> <span class="field-type">string</span> <span
+                            class="required">required, unique</span></li>
+                    <li><span class="field-name">orderDate</span> <span class="field-type">datetime</span> <span
+                            class="required">required</span></li>
+                    <li><span class="field-name">supplier</span> <span class="field-type">reference</span> <span
+                            class="required">required</span></li>
+                    <li><span class="field-name">status</span> <span class="field-type">string</span> <span
+                            class="required">required</span></li>
+                    <li><span class="field-name">orderedItems</span> <span class="field-type">array</span> <span
+                            class="required">required</span></li>
+                </ul>
+            </div>
+
+            <div class="schema-card" data-type="document">
+                <h3>GoodsReceipt</h3>
+                <span class="schema-type">Document</span>
+                <p>Records of received inventory items from suppliers.</p>
+                <ul class="field-list">
+                    <li><span class="field-name">receiptNumber</span> <span class="field-type">string</span> <span
+                            class="required">required, unique</span></li>
+                    <li><span class="field-name">receiptDate</span> <span class="field-type">datetime</span> <span
+                            class="required">required</span></li>
+                    <li><span class="field-name">purchaseOrder</span> <span class="field-type">reference</span></li>
+                    <li><span class="field-name">receivedBy</span> <span class="field-type">reference</span> <span
+                            class="required">required</span></li>
+                    <li><span class="field-name">receivingBin</span> <span class="field-type">reference</span> <span
+                            class="required">required</span></li>
+                </ul>
+            </div>
+
+            <div class="schema-card" data-type="document">
+                <h3>DispatchLog</h3>
+                <span class="schema-type">Document</span>
+                <p>Records of inventory items dispatched to sites.</p>
+                <ul class="field-list">
+                    <li><span class="field-name">dispatchNumber</span> <span class="field-type">string</span> <span
+                            class="required">required, unique</span></li>
+                    <li><span class="field-name">dispatchDate</span> <span class="field-type">datetime</span> <span
+                            class="required">required</span></li>
+                    <li><span class="field-name">sourceBin</span> <span class="field-type">reference</span> <span
+                            class="required">required</span></li>
+                    <li><span class="field-name">destinationSite</span> <span class="field-type">reference</span> <span
+                            class="required">required</span></li>
+                    <li><span class="field-name">dispatchedBy</span> <span class="field-type">reference</span> <span
+                            class="required">required</span></li>
+                </ul>
+            </div>
+
+            <div class="schema-card" data-type="document">
+                <h3>InternalTransfer</h3>
+                <span class="schema-type">Document</span>
+                <p>Records of inventory transfers between bins.</p>
+                <ul class="field-list">
+                    <li><span class="field-name">transferNumber</span> <span class="field-type">string</span> <span
+                            class="required">required, unique</span></li>
+                    <li><span class="field-name">transferDate</span> <span class="field-type">datetime</span> <span
+                            class="required">required</span></li>
+                    <li><span class="field-name">fromBin</span> <span class="field-type">reference</span> <span
+                            class="required">required</span></li>
+                    <li><span class="field-name">toBin</span> <span class="field-type">reference</span> <span
+                            class="required">required</span></li>
+                    <li><span class="field-name">transferredBy</span> <span class="field-type">reference</span> <span
+                            class="required">required</span></li>
+                </ul>
+            </div>
+
+            <div class="schema-card" data-type="document">
+                <h3>StockAdjustment</h3>
+                <span class="schema-type">Document</span>
+                <p>Records of inventory adjustments (loss, wastage, etc.).</p>
+                <ul class="field-list">
+                    <li><span class="field-name">adjustmentNumber</span> <span class="field-type">string</span> <span
+                            class="required">required, unique</span></li>
+                    <li><span class="field-name">adjustmentDate</span> <span class="field-type">datetime</span> <span
+                            class="required">required</span></li>
+                    <li><span class="field-name">adjustedBy</span> <span class="field-type">reference</span> <span
+                            class="required">required</span></li>
+                    <li><span class="field-name">bin</span> <span class="field-type">reference</span> <span
+                            class="required">required</span></li>
+                    <li><span class="field-name">adjustmentType</span> <span class="field-type">string</span> <span
+                            class="required">required</span></li>
+                </ul>
+            </div>
+
+            <div class="schema-card" data-type="document">
+                <h3>InventoryCount</h3>
+                <span class="schema-type">Document</span>
+                <p>Records of physical inventory counts.</p>
+                <ul class="field-list">
+                    <li><span class="field-name">countDate</span> <span class="field-type">datetime</span> <span
+                            class="required">required</span></li>
+                    <li><span class="field-name">countedBy</span> <span class="field-type">reference</span> <span
+                            class="required">required</span></li>
+                    <li><span class="field-name">bin</span> <span class="field-type">reference</span> <span
+                            class="required">required</span></li>
+                    <li><span class="field-name">countedItems</span> <span class="field-type">array</span> <span
+                            class="required">required</span></li>
+                    <li><span class="field-name">notes</span> <span class="field-type">text</span></li>
+                </ul>
+            </div>
+
+            <div class="schema-card" data-type="document">
+                <h3>AppUser</h3>
+                <span class="schema-type">Document</span>
+                <p>Application users with roles and permissions.</p>
+                <ul class="field-list">
+                    <li><span class="field-name">name</span> <span class="field-type">string</span> <span
+                            class="required">required</span></li>
+                    <li><span class="field-name">email</span> <span class="field-type">string</span> <span
+                            class="required">required, unique</span></li>
+                    <li><span class="field-name">role</span> <span class="field-type">string</span> <span
+                            class="required">required</span></li>
+                    <li><span class="field-name">associatedSite</span> <span class="field-type">reference</span></li>
+                    <li><span class="field-name">isActive</span> <span class="field-type">boolean</span></li>
+                </ul>
+            </div>
+
+            <div class="schema-card" data-type="document">
+                <h3>NotificationPreference</h3>
+                <span class="schema-type">Document</span>
+                <p>System-wide notification settings and preferences.</p>
+                <ul class="field-list">
+                    <li><span class="field-name">title</span> <span class="field-type">string</span> <span
+                            class="required">required, unique</span></li>
+                    <li><span class="field-name">description</span> <span class="field-type">text</span></li>
+                    <li><span class="field-name">isEnabled</span> <span class="field-type">boolean</span></li>
+                    <li><span class="field-name">thresholdValue</span> <span class="field-type">number</span></li>
+                    <li><span class="field-name">notificationChannels</span> <span class="field-type">array</span> <span
+                            class="required">required</span></li>
+                </ul>
+            </div>
+
+            <!-- Object Types -->
+            <div class="schema-card" data-type="object">
+                <h3>OrderedItem</h3>
+                <span class="schema-type">Object</span>
+                <p>Nested object for items within a purchase order.</p>
+                <ul class="field-list">
+                    <li><span class="field-name">stockItem</span> <span class="field-type">reference</span> <span
+                            class="required">required</span></li>
+                    <li><span class="field-name">orderedQuantity</span> <span class="field-type">number</span> <span
+                            class="required">required</span></li>
+                    <li><span class="field-name">unitPrice</span> <span class="field-type">number</span> <span
+                            class="required">required</span></li>
+                </ul>
+            </div>
+
+            <div class="schema-card" data-type="object">
+                <h3>ReceivedItem</h3>
+                <span class="schema-type">Object</span>
+                <p>Nested object for items within a goods receipt.</p>
+                <ul class="field-list">
+                    <li><span class="field-name">stockItem</span> <span class="field-type">reference</span> <span
+                            class="required">required</span></li>
+                    <li><span class="field-name">receivedQuantity</span> <span class="field-type">number</span> <span
+                            class="required">required</span></li>
+                    <li><span class="field-name">batchNumber</span> <span class="field-type">string</span></li>
+                    <li><span class="field-name">expiryDate</span> <span class="field-type">date</span></li>
+                    <li><span class="field-name">condition</span> <span class="field-type">string</span> <span
+                            class="required">required</span></li>
+                </ul>
+            </div>
+
+            <div class="schema-card" data-type="object">
+                <h3>DispatchedItem</h3>
+                <span class="schema-type">Object</span>
+                <p>Nested object for items within a dispatch log.</p>
+                <ul class="field-list">
+                    <li><span class="field-name">stockItem</span> <span class="field-type">reference</span> <span
+                            class="required">required</span></li>
+                    <li><span class="field-name">dispatchedQuantity</span> <span class="field-type">number</span> <span
+                            class="required">required</span></li>
+                </ul>
+            </div>
+
+            <div class="schema-card" data-type="object">
+                <h3>TransferredItem</h3>
+                <span class="schema-type">Object</span>
+                <p>Nested object for items within an internal transfer.</p>
+                <ul class="field-list">
+                    <li><span class="field-name">stockItem</span> <span class="field-type">reference</span> <span
+                            class="required">required</span></li>
+                    <li><span class="field-name">transferredQuantity</span> <span class="field-type">number</span> <span
+                            class="required">required</span></li>
+                </ul>
+            </div>
+
+            <div class="schema-card" data-type="object">
+                <h3>AdjustedItem</h3>
+                <span class="schema-type">Object</span>
+                <p>Nested object for items within a stock adjustment.</p>
+                <ul class="field-list">
+                    <li><span class="field-name">stockItem</span> <span class="field-type">reference</span> <span
+                            class="required">required</span></li>
+                    <li><span class="field-name">adjustedQuantity</span> <span class="field-type">number</span> <span
+                            class="required">required</span></li>
+                    <li><span class="field-name">reason</span> <span class="field-type">text</span> <span
+                            class="required">required</span></li>
+                </ul>
+            </div>
+
+            <div class="schema-card" data-type="object">
+                <h3>CountedItem</h3>
+                <span class="schema-type">Object</span>
+                <p>Nested object for items within an inventory count.</p>
+                <ul class="field-list">
+                    <li><span class="field-name">stockItem</span> <span class="field-type">reference</span> <span
+                            class="required">required</span></li>
+                    <li><span class="field-name">countedQuantity</span> <span class="field-type">number</span> <span
+                            class="required">required</span></li>
+                    <li><span class="field-name">systemQuantityAtCountTime</span> <span class="field-type">number</span>
+                    </li>
+                    <li><span class="field-name">variance</span> <span class="field-type">number</span></li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        <p>Sanity Schema Documentation | Inventory Management System</p>
+    </footer>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const searchInput = document.getElementById('search');
+            const schemaCards = document.querySelectorAll('.schema-card');
+            const filterButtons = document.querySelectorAll('.filter-btn');
+
+            // Search functionality
+            searchInput.addEventListener('input', function () {
+                const searchTerm = this.value.toLowerCase();
+
+                schemaCards.forEach(card => {
+                    const title = card.querySelector('h3').textContent.toLowerCase();
+                    const description = card.querySelector('p').textContent.toLowerCase();
+                    const fields = card.querySelectorAll('.field-name');
+                    let fieldMatch = false;
+
+                    fields.forEach(field => {
+                        if (field.textContent.toLowerCase().includes(searchTerm)) {
+                            fieldMatch = true;
+                        }
+                    });
+
+                    if (title.includes(searchTerm) || description.includes(searchTerm) || fieldMatch) {
+                        card.classList.remove('hidden');
+                    } else {
+                        card.classList.add('hidden');
+                    }
+                });
+            });
+
+            // Filter functionality
+            filterButtons.forEach(button => {
+                button.addEventListener('click', function () {
+                    const filter = this.getAttribute('data-filter');
+
+                    filterButtons.forEach(btn => btn.classList.remove('active'));
+                    this.classList.add('active');
+
+                    schemaCards.forEach(card => {
+                        if (filter === 'all') {
+                            card.classList.remove('hidden');
+                        } else {
+                            if (card.getAttribute('data-type') === filter) {
+                                card.classList.remove('hidden');
+                            } else {
+                                card.classList.add('hidden');
+                            }
+                        }
+                    });
+                });
+            });
+        });
+    </script>
+</body>
+
+</html>

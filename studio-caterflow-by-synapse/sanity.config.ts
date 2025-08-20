@@ -3,6 +3,7 @@ import { structureTool } from 'sanity/structure'
 import { visionTool } from '@sanity/vision'
 import { schemaTypes } from './schemaTypes'
 import { FaBoxes, FaCube, FaTag, FaClipboardList, FaUsers } from 'react-icons/fa'
+import MyLogo from './schemaTypes/logo'
 
 export default defineConfig({
   name: 'default',
@@ -103,8 +104,12 @@ export default defineConfig({
     }),
     visionTool(),
   ],
-
   schema: {
     types: schemaTypes,
   },
-})
+  studio: {
+    components: {
+      logo: MyLogo,
+    },
+  },
+});
