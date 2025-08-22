@@ -226,4 +226,5 @@
 {"_id":"site-psych","_type":"Site","name":"PSYCHIATRIC HOSPITAL","managerName":"PHUMZILE KHUMALO"}
 {"_id":"user-phiwokuhle-cebile","_type":"User","name":"PHIWOKUHLE + CEBILE"}
 {"_id":"user-phumzile","_type":"User","name":"PHUMZILE"}
+{"_id":"user-testAdmin","_type":"User","name":"Test Admin", "email":"admin@caterflow.test"}
 {"_id":"bin-main","_type":"Bin","name":"main"}

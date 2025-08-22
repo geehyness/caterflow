@@ -1,0 +1,39 @@
+// src/components/Footer.tsx
+'use client';
+
+import React from 'react';
+import {
+  Box,
+  Text,
+  Container,
+  useColorModeValue,
+  useTheme,
+  Flex,
+  Link,
+} from '@chakra-ui/react';
+
+interface FooterProps {
+  appName?: string;
+}
+
+export function Footer({ appName = 'Caterflow' }: FooterProps) {
+  const theme = useTheme();
+
+  const footerBg = useColorModeValue(theme.colors.neutral.light['bg-secondary'], theme.colors.neutral.dark['bg-secondary']);
+  const footerText = useColorModeValue(theme.colors.neutral.light['text-secondary'], theme.colors.neutral.dark['text-secondary']);
+
+  return (
+    <Box as="footer" bg={footerBg} color={footerText} p={6} textAlign="center" mt="auto">
+      <Container maxW="container.xl">
+        <Flex direction={{ base: 'column', md: 'row' }} justify="space-between" align="center">
+          <Text>&copy; {new Date().getFullYear()} {appName} by Synapse Digital. All rights reserved.</Text>
+          <Flex mt={{ base: 4, md: 0 }} gap={4}>
+            <Link href="/privacy" fontSize="sm">Privacy Policy</Link>
+            <Link href="/terms" fontSize="sm">Terms of Service</Link>
+            <Link href="/support" fontSize="sm">Support</Link>
+          </Flex>
+        </Flex>
+      </Container>
+    </Box>
+  );
+}

@@ -112,6 +112,7 @@ export default defineType({
                     { title: 'Each', value: 'each' },
                     { title: 'Box', value: 'box' },
                     { title: 'Case', value: 'case' },
+                    { title: 'Bag', value: 'bag' },
                 ],
             },
             validation: (Rule) => Rule.required(),
@@ -129,10 +130,38 @@ export default defineType({
             rows: 3,
         }),
         defineField({
-            name: 'supplier',
-            title: 'Supplier',
+            name: 'suppliers',
+            title: 'Suppliers',
+            type: 'array',
+            of: [
+                {
+                    type: 'reference',
+                    to: [{ type: 'Supplier' }],
+                },
+            ],
+            description: 'List of suppliers that provide this item.',
+        }),
+        defineField({
+            name: 'primarySupplier',
+            title: 'Primary Supplier',
             type: 'reference',
             to: [{ type: 'Supplier' }],
+            description: 'The main supplier for this item.',
+            options: {
+                filter: ({ document }) => {
+                    if (!document.suppliers || !document.suppliers.length) {
+                        return { filter: '', params: {} };
+                    }
+                    const supplierIds = document.suppliers
+                        .filter(supplier => supplier && supplier._ref)
+                        .map(supplier => supplier._ref);
+
+                    return {
+                        filter: '_id in $supplierIds',
+                        params: { supplierIds }
+                    };
+                }
+            }
         }),
         defineField({
             name: 'minimumStockLevel',
@@ -154,6 +183,19 @@ export default defineType({
             title: 'name',
             subtitle: 'sku',
             media: 'imageUrl',
+            suppliers: 'suppliers[].name',
+        },
+        prepare(selection) {
+            const { title, subtitle, media, suppliers } = selection;
+            const supplierList = suppliers && suppliers.length > 0
+                ? `Suppliers: ${suppliers.join(', ')}`
+                : 'No suppliers';
+
+            return {
+                title: title,
+                subtitle: `${subtitle} | ${supplierList}`,
+                media: media,
+            };
         },
         orderings: [
             {

@@ -58,6 +58,13 @@ export default defineType({
             description: 'Must be unique and correspond to the user\'s login email in your Next.js app.',
         }),
         defineField({
+            name: 'password',
+            title: 'Password',
+            type: 'string',
+            hidden: true, // This makes the field hidden in the Studio
+            description: 'Hashed password for authentication. This field is automatically managed.',
+        }),
+        defineField({
             name: 'role',
             title: 'User Role',
             type: 'string',
