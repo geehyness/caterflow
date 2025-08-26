@@ -1,9 +1,7 @@
-// src/context/AuthContext.tsx
 'use client';
 
 import React, { createContext, useState, useContext, useEffect, ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
-import Cookies from 'js-cookie';
 
 interface User {
   _id: string;
@@ -21,11 +19,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<boolean>;
   logout: () => void;
   isAuthenticated: boolean;
-  isAdmin: boolean;
-  isSiteManager: boolean;
-  isStockController: boolean;
-  isDispatchStaff: boolean;
-  isAuditor: boolean;
+  userRole: User['role'] | null;
   isAuthReady: boolean;
 }
 
@@ -43,22 +37,16 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   useEffect(() => {
     const checkAuthStatus = async () => {
       try {
-        const authToken = Cookies.get('auth_token');
-        if (authToken) {
-          const response = await fetch('/api/auth/verify', {
-            headers: {
-              'Authorization': `Bearer ${authToken}`,
-            },
-          });
-          const userData = await response.json();
+        // Only run on client side
+        if (typeof window === 'undefined') return;
 
-          if (response.ok) {
-            setUser(userData);
-          } else {
-            // Token is invalid or expired, clear the cookie
-            Cookies.remove('auth_token');
-            setUser(null);
-          }
+        const response = await fetch('/api/auth/verify');
+
+        if (response.ok) {
+          const userData = await response.json();
+          setUser(userData);
+        } else {
+          setUser(null);
         }
       } catch (error) {
         console.error('Authentication check failed:', error);
@@ -82,7 +70,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
       if (response.ok) {
         setUser(data.user);
-        // The cookie is set by the API route, no need to set it here
         router.push('/');
         return true;
       } else {
@@ -95,19 +82,21 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     }
   };
 
-  const logout = () => {
-    Cookies.remove('auth_token');
-    Cookies.remove('user_role'); // Add this line
-    setUser(null);
-    router.push('/login');
+  const logout = async () => {
+    try {
+      // Call the logout API to clear cookies
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch (error) {
+      console.error('Logout API call failed', error);
+    } finally {
+      // Clear client state regardless of API call success
+      setUser(null);
+      router.push('/login');
+    }
   };
 
   const isAuthenticated = !!user;
-  const isAdmin = user?.role === 'admin';
-  const isSiteManager = user?.role === 'siteManager';
-  const isStockController = user?.role === 'stockController';
-  const isDispatchStaff = user?.role === 'dispatchStaff';
-  const isAuditor = user?.role === 'auditor';
+  const userRole = user?.role || null;
 
   return (
     <AuthContext.Provider value={{
@@ -115,11 +104,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       login,
       logout,
       isAuthenticated,
-      isAdmin,
-      isSiteManager,
-      isStockController,
-      isDispatchStaff,
-      isAuditor,
+      userRole,
       isAuthReady
     }}>
       {children}

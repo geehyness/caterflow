@@ -1,4 +1,3 @@
-// src/app/layout.tsx
 'use client';
 
 import { Inter } from 'next/font/google';
@@ -8,27 +7,19 @@ import { Sidebar } from '../components/Sidebar';
 import { Footer } from '../components/Footer';
 import { Box, Spinner } from '@chakra-ui/react';
 import { useAuth } from '@/context/AuthContext';
-import { useRouter, usePathname } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
 const inter = Inter({ subsets: ['latin'] });
 
 const MainContentLayout = ({ children }: { children: React.ReactNode }) => {
   const { isAuthenticated, isAuthReady } = useAuth();
-  const router = useRouter();
   const pathname = usePathname();
   const [isClient, setIsClient] = useState(false);
 
   useEffect(() => {
     setIsClient(true);
   }, []);
-
-  useEffect(() => {
-    // Only redirect if we're not already on the login page
-    if (isAuthReady && !isAuthenticated && pathname !== '/login') {
-      router.push('/login');
-    }
-  }, [isAuthenticated, isAuthReady, router, pathname]);
 
   if (!isAuthReady || !isClient) {
     return (

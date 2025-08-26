@@ -1,4 +1,3 @@
-// src/app/api/auth/login/route.ts
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { writeClient } from '@/lib/sanity';
@@ -38,15 +37,20 @@ const updateUserPassword = async (userId: string, newPassword: string) => {
   return hashedPassword;
 };
 
-const generateAuthToken = (user: AppUser) =>
-  Buffer.from(
-    JSON.stringify({
-      userId: user._id,
-      email: user.email,
-      role: user.role,
-      exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24,
-    })
-  ).toString('base64');
+const generateAuthToken = (user: AppUser) => {
+  const tokenData = JSON.stringify({
+    userId: user._id,
+    email: user.email,
+    role: user.role,
+    exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24, // 24 hours
+  });
+
+  return Buffer.from(tokenData)
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+};
 
 export async function POST(req: Request) {
   try {
@@ -128,7 +132,7 @@ export async function POST(req: Request) {
       path: '/',
     });
 
-    // Set user_role cookie (NEW)
+    // Set user_role cookie
     response.cookies.set('user_role', user.role, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',

@@ -1,4 +1,4 @@
-// src/app/inventory/page.tsx
+// src/app/stock-items/page.tsx
 'use client'
 
 import React, { useState, useEffect } from 'react';
@@ -217,7 +217,7 @@ export default function InventoryPage() {
         <Box p={8} flex="1">
             <Flex justify="space-between" align="center" mb={6}>
                 <Heading as="h1" size="xl">
-                    Inventory
+                    Stock Items
                 </Heading>
                 <Button colorScheme="blue" onClick={handleNewItem}>
                     Add New Item

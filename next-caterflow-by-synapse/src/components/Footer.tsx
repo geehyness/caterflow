@@ -10,6 +10,7 @@ import {
   useTheme,
   Flex,
   Link,
+  Divider,
 } from '@chakra-ui/react';
 
 interface FooterProps {
@@ -19,11 +20,13 @@ interface FooterProps {
 export function Footer({ appName = 'Caterflow' }: FooterProps) {
   const theme = useTheme();
 
-  const footerBg = useColorModeValue(theme.colors.neutral.light['bg-secondary'], theme.colors.neutral.dark['bg-secondary']);
+  const footerBg = useColorModeValue(theme.colors.neutral.light['bg-secondary'], theme.colors.neutral.dark['bg']);
   const footerText = useColorModeValue(theme.colors.neutral.light['text-secondary'], theme.colors.neutral.dark['text-secondary']);
 
   return (
     <Box as="footer" bg={footerBg} color={footerText} p={6} textAlign="center" mt="auto">
+      <Divider />
+      <br />
       <Container maxW="container.xl">
         <Flex direction={{ base: 'column', md: 'row' }} justify="space-between" align="center">
           <Text>&copy; {new Date().getFullYear()} {appName} by Synapse Digital. All rights reserved.</Text>

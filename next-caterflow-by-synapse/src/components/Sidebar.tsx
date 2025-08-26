@@ -1,9 +1,8 @@
-// src/components/Sidebar.tsx
 'use client'
 
 import React from 'react';
 import {
-    Box, Flex, Heading, Button, Stack, useColorMode, useColorModeValue, IconButton, Link as ChakraLink, Text, useTheme, Tooltip, Icon, Divider
+    Box, Flex, Heading, Button, Stack, useColorMode, useColorModeValue, IconButton, Link as ChakraLink, Text, useTheme, Tooltip, Icon, Divider, Spinner
 } from '@chakra-ui/react';
 import { MoonIcon, SunIcon } from '@chakra-ui/icons';
 import NextLink from 'next/link';
@@ -21,9 +20,9 @@ export function Sidebar({ appName = 'Caterflow' }: SidebarProps) {
     const theme = useTheme();
     const router = useRouter();
     const pathname = usePathname();
-    const { isAuthenticated, logout, userRole } = useAuth();
+    const { isAuthenticated, logout, userRole, isAuthReady } = useAuth();
 
-    const sidebarBg = useColorModeValue(theme.colors.neutral.light['bg-sidebar'], theme.colors.neutral.dark['bg-sidebar']);
+    const sidebarBg = useColorModeValue(theme.colors.neutral.light['bg-secondary'], theme.colors.neutral.dark['bg']);
     const activeBg = useColorModeValue(theme.colors.brand['100'], theme.colors.brand['700']);
     const borderColor = useColorModeValue(theme.colors.neutral.light['border-color'], theme.colors.neutral.dark['border-color']);
     const iconColor = useColorModeValue(theme.colors.neutral.light['text-header'], theme.colors.neutral.dark['text-header']);
@@ -34,7 +33,7 @@ export function Sidebar({ appName = 'Caterflow' }: SidebarProps) {
             heading: 'Main',
             items: [
                 { label: 'Dashboard', href: '/', icon: FiBarChart2, roles: ['admin', 'siteManager', 'stockController', 'dispatchStaff', 'auditor'] },
-                { label: 'Inventory', href: '/inventory', icon: FiBox, roles: ['admin', 'siteManager', 'stockController', 'auditor'] },
+                { label: 'Stock Items', href: '/stock-items', icon: FiBox, roles: ['admin', 'siteManager', 'stockController', 'auditor'] },
                 { label: 'Locations', href: '/locations', icon: FiMapPin, roles: ['admin', 'siteManager', 'auditor'] },
             ],
         },
@@ -61,13 +60,37 @@ export function Sidebar({ appName = 'Caterflow' }: SidebarProps) {
     ];
 
     // Filter menu items based on the user's role
-    const filteredMenuGroups = menuGroups
+    const filteredMenuGroups = userRole ? menuGroups
         .map(group => ({
             ...group,
-            // Added a check for userRole to prevent errors when it's not yet defined
-            items: group.items.filter(item => userRole && item.roles.includes(userRole)),
+            items: group.items.filter(item => item.roles.includes(userRole)),
         }))
-        .filter(group => group.items.length > 0);
+        .filter(group => group.items.length > 0)
+        : [];
+
+    if (!isAuthReady) {
+        return (
+            <Box
+                as="aside"
+                w="250px"
+                bg={sidebarBg}
+                borderRight="1px solid"
+                borderColor={borderColor}
+                position="fixed"
+                left="0"
+                top="0"
+                h="100vh"
+                p={4}
+                pt={6}
+                zIndex="sticky"
+                display={{ base: 'none', md: 'flex' }}
+                justifyContent="center"
+                alignItems="center"
+            >
+                <Spinner size="md" />
+            </Box>
+        );
+    }
 
     return (
         <Box
@@ -90,15 +113,23 @@ export function Sidebar({ appName = 'Caterflow' }: SidebarProps) {
             <Flex direction="column" alignItems="center">
                 {/* App Logo and Name */}
                 <Flex alignItems="center" mb={6} pr={2}>
-                    <Image
-                        src="/icons/icon-512x512.png"
-                        alt="Caterflow Logo"
-                        width={40}
-                        height={40}
-                    />
-                    <Heading as="h1" size="md" fontWeight="bold" ml={2}>
-                        {appName}
-                    </Heading>
+                    {/* White square container for the logo */}
+                    <Box
+                        bg="white"
+                        p={3}
+                        borderRadius="xl"
+                        boxShadow="md"
+                        display="flex"
+                        alignItems="center"
+                        justifyContent="center"
+                    >
+                        <Image
+                            src="/icons/icon-512x512.png"
+                            alt="Caterflow Logo"
+                            width={120}
+                            height={120}
+                        />
+                    </Box>
                 </Flex>
 
                 {/* Menu Items */}

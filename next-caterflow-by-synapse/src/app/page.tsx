@@ -1,431 +1,448 @@
 // src/app/page.tsx
-'use client'
+'use client';
 
 import { useState, useEffect } from 'react';
 import { client } from '@/lib/sanity';
 import { groq } from 'next-sanity';
-import { Box, Heading, Text, Flex, Spinner, SimpleGrid, Card, CardHeader, CardBody, CardFooter, Button, Badge } from '@chakra-ui/react';
-import Link from 'next/link';
-import { calculateStock } from '@/lib/stockCalculations';
+import {
+  Box,
+  Heading,
+  Text,
+  Flex,
+  Spinner,
+  SimpleGrid,
+  Card,
+  CardBody,
+  Button,
+  Badge,
+  Icon,
+  IconButton,
+  useToast,
+  useColorModeValue,
+  VStack,
+  HStack,
+  Divider,
+  Stat,
+  StatLabel,
+  StatNumber,
+} from '@chakra-ui/react';
+import { FiArrowLeft, FiArrowRight } from 'react-icons/fi';
+import { useAuth } from '@/context/AuthContext';
+import { BsBoxSeam, BsArrowRightLeft, BsTruck, BsBuildingAdd } from 'react-icons/bs';
 
-// The types below are used to help with type safety within the component.
-interface StockItemWithBins {
+interface Site {
   _id: string;
   name: string;
-  sku: string;
-  category: { title: string };
-  unitOfMeasure: string;
+}
+
+interface Transaction {
+  _id: string;
+  _type: string;
+  createdAt: string;
+  description: string;
+  siteName: string;
+}
+
+interface ReceivedItem {
+  receivedQuantity: number;
+}
+
+interface DispatchedItem {
+  dispatchedQuantity: number;
+}
+
+interface InternalTransfer {
+  _id: string;
+}
+
+interface StockItem {
   minimumStockLevel: number;
   binStocks: {
-    binId: string;
-    binName: string;
     siteId: string;
-    siteName: string;
     currentQuantity: number;
-    requiresCount?: boolean; // New flag for illogical quantities
   }[];
 }
 
-interface DashboardData {
-  lowStockItems: StockItemWithBins[];
-  purchaseOrders: any[];
-  goodsReceipts: any[];
-  dispatchLogs: any[];
-  internalTransfers: any[];
-  stockAdjustments: any[];
-  inventoryCounts: any[];
+interface DashboardStats {
+  totalItemsReceived: number;
+  totalItemsDispatched: number;
+  pendingInternalTransfers: number;
+  lowStockItems: number;
 }
 
-// TODO: In a real application, replace this with a context or a hook that gets the
-// logged-in user's role and site ID from your authentication system.
-const useAuth = () => {
-  const [userRole, setUserRole] = useState<'admin' | 'siteManager' | 'stockController' | 'dispatchStaff' | 'auditor'>('siteManager');
-  const [siteId, setSiteId] = useState('0f75e3c7-43c9-43c7-95de-98c56e29782a'); // Example site ID
+const StatCard = ({ title, value, icon }: { title: string; value: number | string; icon: any }) => {
+  const cardBg = useColorModeValue('white', 'gray.700');
+  return (
+    <Card bg={cardBg} boxShadow="sm" p={4} borderRadius="md" textAlign="left">
+      <HStack spacing={4}>
+        <Flex
+          align="center"
+          justify="center"
+          w={12}
+          h={12}
+          bg={useColorModeValue('blue.50', 'blue.900')}
+          borderRadius="full"
+        >
+          <Icon as={icon} w={6} h={6} color={useColorModeValue('blue.500', 'blue.300')} />
+        </Flex>
+        <VStack align="flex-start" spacing={0}>
+          <Stat>
+            <StatLabel fontWeight="medium" isTruncated>{title}</StatLabel>
+            <StatNumber fontSize="xl">{value}</StatNumber>
+          </Stat>
+        </VStack>
+      </HStack>
+    </Card>
+  );
+};
 
-  return { userRole, siteId };
-}
+export default function Home() {
+  const { user, isAuthReady } = useAuth();
+  const [sites, setSites] = useState<Site[]>([]);
+  const [selectedSiteId, setSelectedSiteId] = useState<string | null>(null);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSitesLoading, setIsSitesLoading] = useState(true);
+  const [isStatsLoading, setIsStatsLoading] = useState(true);
 
-export default function DashboardPage() {
-  const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const { userRole, siteId } = useAuth();
+  const toast = useToast();
+  const cardBg = useColorModeValue('gray.50', 'gray.700');
 
-  const fetchDashboardData = async () => {
-    setLoading(true);
+  // Fetch sites based on user role
+  useEffect(() => {
+    if (!isAuthReady) return;
 
-    let baseQuery = '';
-    const queryParams: Record<string, any> = { siteId };
-
-    // Conditionally build the query based on the user's role
-    switch (userRole) {
-      case 'siteManager':
-      case 'stockController':
-        baseQuery = groq`
-          {
-            "stockItems": *[_type == "StockItem"] {
-              _id, name, sku, category->{title}, unitOfMeasure, minimumStockLevel,
-              "bins": *[_type == "Bin" && site._ref == $siteId] {
-                _id,
-                name,
-                "site": site->{_id, name}
-              }
-            },
-            "purchaseOrders": *[_type == "PurchaseOrder" && supplier->site._ref == $siteId] | order(orderDate desc)[0..4],
-            "goodsReceipts": *[_type == "GoodsReceipt" && receivingBin->site._ref == $siteId] | order(receiptDate desc)[0..4],
-            "internalTransfers": *[_type == "InternalTransfer" && (fromBin->site._ref == $siteId || toBin->site._ref == $siteId)] | order(transferDate desc)[0..4],
-            "stockAdjustments": *[_type == "StockAdjustment" && bin->site._ref == $siteId] | order(adjustmentDate desc)[0..4],
-            "inventoryCounts": *[_type == "InventoryCount" && bin->site._ref == $siteId] | order(countDate desc)[0..4],
-          }
-        `;
-        break;
-      case 'dispatchStaff':
-        baseQuery = groq`
-          {
-            "dispatchLogs": *[_type == "DispatchLog" && sourceBin->site._ref == $siteId] | order(dispatchDate desc)[0..4],
-            "internalTransfers": *[_type == "InternalTransfer" && (fromBin->site._ref == $siteId || toBin->site._ref == $siteId)] | order(transferDate desc)[0..4],
-          }
-        `;
-        break;
-      case 'admin':
-      case 'auditor':
-      default:
-        // Admin and Auditor get the full view
-        baseQuery = groq`
-          {
-            "stockItems": *[_type == "StockItem"] {
-              _id, name, sku, category->{title}, unitOfMeasure, minimumStockLevel,
-              "bins": *[_type == "Bin"] {
-                _id,
-                name,
-                "site": site->{_id, name}
-              }
-            },
-            "purchaseOrders": *[_type == "PurchaseOrder"] | order(orderDate desc)[0..4],
-            "goodsReceipts": *[_type == "GoodsReceipt"] | order(receiptDate desc)[0..4],
-            "dispatchLogs": *[_type == "DispatchLog"] | order(dispatchDate desc)[0..4],
-            "internalTransfers": *[_type == "InternalTransfer"] | order(transferDate desc)[0..4],
-            "stockAdjustments": *[_type == "StockAdjustment"] | order(adjustmentDate desc)[0..4],
-            "inventoryCounts": *[_type == "InventoryCount"] | order(countDate desc)[0..4],
-          }
-        `;
-        break;
-    }
-
-    try {
-      const data = await client.fetch(baseQuery, queryParams);
-
-      if (data && data.stockItems) {
-        const lowStockItems: StockItemWithBins[] = [];
-        for (const stockItem of data.stockItems) {
-          const itemWithLowStockBins = { ...stockItem, binStocks: [] };
-          for (const bin of stockItem.bins) {
-            const currentQuantity = await calculateStock(stockItem._id, bin._id);
-
-            // Check if quantity is low or illogical (negative)
-            if (currentQuantity <= stockItem.minimumStockLevel) {
-              const binStock: StockItemWithBins['binStocks'][0] = {
-                binId: bin._id,
-                binName: bin.name,
-                siteId: bin.site._id,
-                siteName: bin.site.name,
-                currentQuantity,
-              };
-              if (currentQuantity < 0) {
-                binStock.requiresCount = true;
-              }
-              itemWithLowStockBins.binStocks.push(binStock);
-            }
-          }
-          if (itemWithLowStockBins.binStocks.length > 0) {
-            lowStockItems.push(itemWithLowStockBins);
-          }
+    const fetchSites = async () => {
+      setIsSitesLoading(true);
+      try {
+        let siteQuery = groq`*[_type == "Site"] | order(name asc) { _id, name }`;
+        if (user?.role === 'siteManager') {
+          siteQuery = groq`*[_type == "Site" && _id == $siteId] | order(name asc) { _id, name }`;
+        } else if (user?.role === 'admin' || user?.role === 'auditor') {
+          siteQuery = groq`*[_type == "Site"] | order(name asc) { _id, name }`;
+        } else {
+          setSites([]);
+          setTransactions([]);
+          setDashboardStats(null);
+          setIsLoading(false);
+          setIsSitesLoading(false);
+          return;
         }
-        setDashboardData({ ...data, lowStockItems });
-      } else {
-        setDashboardData(data);
+
+        const siteParams = user?.associatedSite?._id ? { siteId: user.associatedSite._id } : {};
+        const fetchedSites: Site[] = await client.fetch(siteQuery, siteParams);
+        setSites(fetchedSites);
+
+        if (user?.role === 'siteManager' && fetchedSites.length > 0) {
+          setSelectedSiteId(fetchedSites[0]._id);
+        }
+      } catch (error) {
+        console.error("Failed to fetch sites:", error);
+        toast({
+          title: 'Error fetching sites.',
+          description: 'Failed to load site list. Please try again.',
+          status: 'error',
+          duration: 5000,
+          isClosable: true,
+        });
+      } finally {
+        setIsSitesLoading(false);
       }
-    } catch (error) {
-      console.error('Failed to fetch dashboard data:', error);
-      setDashboardData(null);
-    } finally {
-      setLoading(false);
+    };
+
+    fetchSites();
+  }, [isAuthReady, user, toast]);
+
+  // Fetch dashboard data
+  useEffect(() => {
+    if (!isAuthReady || isSitesLoading) return;
+
+    const fetchDashboardData = async () => {
+      setIsLoading(true);
+
+      let siteIdsToQuery = selectedSiteId ? [selectedSiteId] : sites.map(s => s._id);
+
+      // If no site is selected and we have sites, default to the first one
+      if (!selectedSiteId && sites.length > 0) {
+        setSelectedSiteId(sites[0]._id);
+        siteIdsToQuery = [sites[0]._id];
+      } else if (siteIdsToQuery.length === 0) {
+        setTransactions([]);
+        setDashboardStats(null);
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        const query = groq`{
+                    "transactions": {
+                        "goodsReceipts": *[_type == "GoodsReceipt" && receivingBin->site._id in $siteIds] | order(receiptDate desc) [0..20] {
+                            _id, _type, "createdAt": receiptDate, "description": "Receipt " + receiptNumber, "siteName": receivingBin->site->name, receivedItems[] { receivedQuantity }
+                        },
+                        "dispatchLogs": *[_type == "DispatchLog" && sourceBin->site._id in $siteIds] | order(dispatchDate desc) [0..20] {
+                            _id, _type, "createdAt": dispatchDate, "description": "Dispatch " + dispatchNumber, "siteName": sourceBin->site->name, dispatchedItems[] { dispatchedQuantity }
+                        },
+                        "internalTransfers": *[_type == "InternalTransfer" && (fromBin->site._id in $siteIds || toBin->site._id in $siteIds)] | order(transferDate desc) [0..20] {
+                            _id, _type, "createdAt": transferDate, "description": "Transfer " + transferNumber, "siteName": fromBin->site->name
+                        },
+                        "stockAdjustments": *[_type == "StockAdjustment" && bin->site._id in $siteIds] | order(adjustmentDate desc) [0..20] {
+                            _id, _type, "createdAt": adjustmentDate, "description": "Adjustment " + adjustmentNumber, "siteName": bin->site->name
+                        },
+                        "inventoryCounts": *[_type == "InventoryCount" && bin->site._id in $siteIds] | order(countDate desc) [0..20] {
+                            _id, _type, "createdAt": countDate, "description": "Inventory Count " + countNumber, "siteName": bin->site->name
+                        }
+                    },
+                    "statsData": {
+                        "receivedQuantities": *[_type == "GoodsReceipt" && receivingBin->site._id in $siteIds].receivedItems[].receivedQuantity,
+                        "dispatchedQuantities": *[_type == "DispatchLog" && sourceBin->site._id in $siteIds].dispatchedItems[].dispatchedQuantity,
+                        "pendingTransfers": *[_type == "InternalTransfer" && (fromBin->site._id in $siteIds || toBin->site._id in $siteIds) && status == "pending"],
+                        "stockItems": *[_type == "StockItem" && defined(binStocks)] {
+                            minimumStockLevel,
+                            binStocks[] {
+                                siteId,
+                                currentQuantity
+                            }
+                        }
+                    }
+                }`;
+
+        const data = await client.fetch(query, { siteIds: siteIdsToQuery });
+
+        // Process transactions
+        const allTransactions = [
+          ...(data.transactions.goodsReceipts || []),
+          ...(data.transactions.dispatchLogs || []),
+          ...(data.transactions.internalTransfers || []),
+          ...(data.transactions.stockAdjustments || []),
+          ...(data.transactions.inventoryCounts || [])
+        ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+        setTransactions(allTransactions.map(tx => ({
+          ...tx,
+          description: `${tx.description} ${tx.receivedItems ? `received ${tx.receivedItems.length} item(s)` : ''} ${tx.dispatchedItems ? `sent ${tx.dispatchedItems.length} item(s)` : ''}`.trim()
+        })));
+
+        // Calculate stats on the client side
+        const totalItemsReceived = data.statsData.receivedQuantities.reduce((sum: number, qty: number) => sum + qty, 0);
+        const totalItemsDispatched = data.statsData.dispatchedQuantities.reduce((sum: number, qty: number) => sum + qty, 0);
+        const pendingInternalTransfers = data.statsData.pendingTransfers.length;
+
+        const lowStockItems = data.statsData.stockItems.filter((item: StockItem) => {
+          const totalQuantity = item.binStocks
+            .filter(bin => siteIdsToQuery.includes(bin.siteId))
+            .reduce((sum, bin) => sum + bin.currentQuantity, 0);
+          return totalQuantity < item.minimumStockLevel;
+        }).length;
+
+        setDashboardStats({
+          totalItemsReceived,
+          totalItemsDispatched,
+          pendingInternalTransfers,
+          lowStockItems
+        });
+
+      } catch (error) {
+        console.error("Failed to fetch dashboard data:", error);
+        toast({
+          title: 'Error fetching dashboard data.',
+          description: 'Failed to load data. Please try again.',
+          status: 'error',
+          duration: 5000,
+          isClosable: true,
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchDashboardData();
+  }, [isAuthReady, isSitesLoading, selectedSiteId, sites, toast]);
+
+  const TransactionIcon = ({ type }: { type: string }) => {
+    switch (type) {
+      case 'GoodsReceipt':
+        return <Icon as={BsBuildingAdd} color="green.500" />;
+      case 'DispatchLog':
+        return <Icon as={BsTruck} color="red.500" />;
+      case 'InternalTransfer':
+        return <Icon as={BsArrowRightLeft} color="yellow.500" />;
+      case 'StockAdjustment':
+        return <Icon as={BsBoxSeam} color="purple.500" />;
+      case 'InventoryCount':
+        return <Icon as={BsBoxSeam} color="blue.500" />;
+      default:
+        return null;
     }
   };
 
-  useEffect(() => {
-    fetchDashboardData();
-  }, [userRole, siteId]);
+  const handleSiteClick = (siteId: string) => {
+    setSelectedSiteId(siteId === selectedSiteId ? null : siteId);
+  };
 
-  if (loading) {
+  const handleScroll = (direction: 'left' | 'right') => {
+    const container = document.getElementById('sites-container');
+    if (container) {
+      const scrollAmount = 200;
+      if (direction === 'left') {
+        container.scrollLeft -= scrollAmount;
+      } else {
+        container.scrollLeft += scrollAmount;
+      }
+    }
+  };
+
+  if (!isAuthReady || isSitesLoading) {
     return (
-      <Flex justify="center" align="center" height="100vh">
+      <Flex justifyContent="center" alignItems="center" height="100vh">
         <Spinner size="xl" />
       </Flex>
     );
   }
 
-  const isSiteManagerOrAdmin = userRole === 'siteManager' || userRole === 'admin' || userRole === 'auditor';
-  const isStockControllerOrAdmin = userRole === 'stockController' || userRole === 'admin' || userRole === 'auditor';
-  const isDispatchStaffOrAdmin = userRole === 'dispatchStaff' || userRole === 'admin' || userRole === 'auditor';
-
   return (
-    <Box p={8}>
-      <Heading mb={6}>Dashboard</Heading>
-      <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={6}>
+    <Box p={4}>
+      <Heading as="h1" size="lg" mb={4}>
+        Dashboard
+      </Heading>
 
-        {/* Low Stock Items Card - visible to Site Manager, Stock Controller, Admin, Auditor */}
-        {(isSiteManagerOrAdmin || isStockControllerOrAdmin) && (
-          <Card>
-            <CardHeader>
-              <Heading size="md">Low Stock Items</Heading>
-            </CardHeader>
-            <CardBody>
-              {dashboardData?.lowStockItems?.length ? (
-                <Box>
-                  {dashboardData.lowStockItems.map((item: StockItemWithBins) => (
-                    <Box key={item._id} py={2} borderBottom="1px" borderColor="gray.100">
-                      <Flex justify="space-between" align="center">
-                        <Text fontWeight="medium">{item.name}</Text>
-                        <Flex>
-                          {item.binStocks.map((binStock) => (
-                            <Badge
-                              key={binStock.binId}
-                              colorScheme={binStock.requiresCount ? 'orange' : 'red'}
-                              ml={2}
-                            >
-                              {binStock.currentQuantity} {item.unitOfMeasure} ({binStock.binName})
-                            </Badge>
-                          ))}
-                        </Flex>
-                      </Flex>
-                      <Text fontSize="sm" color="gray.600">
-                        SKU: {item.sku}
-                        {item.binStocks.length > 0 && ` • Site: ${item.binStocks[0].siteName}`}
-                      </Text>
-                      {item.binStocks.some(bs => bs.requiresCount) && (
-                        <Text mt={2} fontSize="sm" color="red.500" fontWeight="bold">
-                          ⚠️ The calculated stock for this item is illogical. A **bin count** is highly recommended for
-                          {item.binStocks.filter(bs => bs.requiresCount).map(bs => ` ${bs.binName}`).join(', ')}.
-                        </Text>
-                      )}
-                    </Box>
-                  ))}
-                </Box>
-              ) : (
-                <Text>No low stock items</Text>
-              )}
-            </CardBody>
-            <CardFooter>
-              <Link href="/inventory" passHref>
-                <Button colorScheme="red" size="sm">
-                  View All Stock
-                </Button>
-              </Link>
-            </CardFooter>
-          </Card>
-        )}
+      {/* Sites Section */}
+      <Flex justify="space-between" align="center" mb={4}>
+        <Heading as="h2" size="md">Sites</Heading>
+        <HStack>
+          <IconButton
+            aria-label="Scroll left"
+            icon={<FiArrowLeft />}
+            onClick={() => handleScroll('left')}
+          />
+          <IconButton
+            aria-label="Scroll right"
+            icon={<FiArrowRight />}
+            onClick={() => handleScroll('right')}
+          />
+        </HStack>
+      </Flex>
 
-        {/* Recent Purchase Orders - visible to Site Manager, Admin, Auditor */}
-        {isSiteManagerOrAdmin && (
-          <Card>
-            <CardHeader>
-              <Heading size="md">Recent Purchase Orders</Heading>
-            </CardHeader>
-            <CardBody>
-              {dashboardData?.purchaseOrders?.length ? (
-                <Box>
-                  {dashboardData.purchaseOrders.map((order: any) => (
-                    <Box key={order._id} py={2} borderBottom="1px" borderColor="gray.100">
-                      <Flex justify="space-between">
-                        <Text fontWeight="medium">{order.poNumber}</Text>
-                        <Badge colorScheme={
-                          order.status === 'received' ? 'green' :
-                            order.status === 'ordered' ? 'yellow' : 'gray'
-                        }>
-                          {order.status}
-                        </Badge>
-                      </Flex>
-                      <Text fontSize="sm" color="gray.600">
-                        {order.supplier?.name} • {new Date(order.orderDate).toLocaleDateString()}
-                      </Text>
-                    </Box>
-                  ))}
-                </Box>
-              ) : (
-                <Text>No recent purchase orders</Text>
-              )}
-            </CardBody>
-            <CardFooter>
-              <Link href="/operations/purchases" passHref>
-                <Button colorScheme="blue" size="sm">
-                  View All Orders
-                </Button>
-              </Link>
-            </CardFooter>
-          </Card>
-        )}
+      {sites.length > 0 ? (
+        <Flex
+          id="sites-container"
+          overflowX="auto"
+          whiteSpace="nowrap"
+          pb={4}
+          sx={{
+            '::-webkit-scrollbar': { display: 'none' },
+            msOverflowStyle: 'none',
+            scrollbarWidth: 'none',
+          }}
+        >
+          {sites.map(site => (
+            <Button
+              key={site._id}
+              onClick={() => handleSiteClick(site._id)}
+              mx={2}
+              variant={selectedSiteId === site._id ? 'solid' : 'outline'}
+              colorScheme={selectedSiteId === site._id ? 'blue' : 'gray'}
+              minW="120px"
+            >
+              {site.name}
+            </Button>
+          ))}
+        </Flex>
+      ) : (
+        <Text color="gray.500" mb={6}>No sites found for your account.</Text>
+      )}
 
-        {/* Recent Goods Receipts - visible to Site Manager, Admin, Auditor */}
-        {isSiteManagerOrAdmin && (
-          <Card>
-            <CardHeader>
-              <Heading size="md">Recent Goods Receipts</Heading>
-            </CardHeader>
-            <CardBody>
-              {dashboardData?.goodsReceipts?.length ? (
-                <Box>
-                  {dashboardData.goodsReceipts.map((receipt: any) => (
-                    <Box key={receipt._id} py={2} borderBottom="1px" borderColor="gray.100">
-                      <Text fontWeight="medium">{receipt.receiptNumber}</Text>
-                      <Text fontSize="sm" color="gray.600">
-                        {new Date(receipt.receiptDate).toLocaleDateString()}
-                        {receipt.purchaseOrder?.poNumber && ` (PO: ${receipt.purchaseOrder.poNumber})`}
-                      </Text>
-                    </Box>
-                  ))}
-                </Box>
-              ) : (
-                <Text>No recent goods receipts</Text>
-              )}
-            </CardBody>
-            <CardFooter>
-              <Link href="/operations/receipts" passHref>
-                <Button colorScheme="green" size="sm">
-                  View All Receipts
-                </Button>
-              </Link>
-            </CardFooter>
-          </Card>
+      {/* Stats Section */}
+      <Heading as="h2" size="md" mt={8} mb={4}>
+        Site Statistics
+        {selectedSiteId && (
+          <Badge ml={2} colorScheme="blue">
+            {sites.find(s => s._id === selectedSiteId)?.name}
+          </Badge>
         )}
+      </Heading>
 
-        {/* Recent Dispatch Logs - visible to Site Manager, Dispatch Staff, Admin, Auditor */}
-        {isDispatchStaffOrAdmin && (
-          <Card>
-            <CardHeader>
-              <Heading size="md">Recent Dispatches</Heading>
-            </CardHeader>
-            <CardBody>
-              {dashboardData?.dispatchLogs?.length ? (
-                <Box>
-                  {dashboardData.dispatchLogs.map((log: any) => (
-                    <Box key={log._id} py={2} borderBottom="1px" borderColor="gray.100">
-                      <Text fontWeight="medium">{log.dispatchNumber}</Text>
-                      <Text fontSize="sm" color="gray.600">
-                        {new Date(log.dispatchDate).toLocaleDateString()}
-                      </Text>
-                    </Box>
-                  ))}
-                </Box>
-              ) : (
-                <Text>No recent dispatches</Text>
-              )}
-            </CardBody>
-            <CardFooter>
-              <Link href="/operations/dispatches" passHref>
-                <Button colorScheme="teal" size="sm">
-                  View All Dispatches
-                </Button>
-              </Link>
-            </CardFooter>
-          </Card>
-        )}
+      {isLoading ? (
+        <Flex justifyContent="center" alignItems="center" minHeight="100px">
+          <Spinner size="lg" />
+        </Flex>
+      ) : (
+        <SimpleGrid columns={{ base: 1, md: 3, lg: 4 }} spacing={4} mb={8}>
+          <StatCard
+            title="Items Received"
+            value={dashboardStats?.totalItemsReceived || 0}
+            icon={BsBuildingAdd}
+          />
+          <StatCard
+            title="Items Dispatched"
+            value={dashboardStats?.totalItemsDispatched || 0}
+            icon={BsTruck}
+          />
+          <StatCard
+            title="Pending Transfers"
+            value={dashboardStats?.pendingInternalTransfers || 0}
+            icon={BsArrowRightLeft}
+          />
+          <StatCard
+            title="Low Stock Items"
+            value={dashboardStats?.lowStockItems || 0}
+            icon={BsBoxSeam}
+          />
+        </SimpleGrid>
+      )}
 
-        {/* Recent Internal Transfers - visible to all roles with site access, Admin, Auditor */}
-        {(isSiteManagerOrAdmin || isDispatchStaffOrAdmin) && (
-          <Card>
-            <CardHeader>
-              <Heading size="md">Recent Internal Transfers</Heading>
-            </CardHeader>
-            <CardBody>
-              {dashboardData?.internalTransfers?.length ? (
-                <Box>
-                  {dashboardData.internalTransfers.map((transfer: any) => (
-                    <Box key={transfer._id} py={2} borderBottom="1px" borderColor="gray.100">
-                      <Text fontWeight="medium">{transfer.transferNumber}</Text>
-                      <Text fontSize="sm" color="gray.600">
-                        {new Date(transfer.transferDate).toLocaleDateString()}
-                      </Text>
-                    </Box>
-                  ))}
-                </Box>
-              ) : (
-                <Text>No recent internal transfers</Text>
-              )}
-            </CardBody>
-            <CardFooter>
-              <Link href="/operations/transfers" passHref>
-                <Button colorScheme="purple" size="sm">
-                  View All Transfers
-                </Button>
-              </Link>
-            </CardFooter>
-          </Card>
-        )}
+      <Divider mb={8} />
 
-        {/* Recent Stock Adjustments - visible to Site Manager, Stock Controller, Admin, Auditor */}
-        {(isSiteManagerOrAdmin || isStockControllerOrAdmin) && (
-          <Card>
-            <CardHeader>
-              <Heading size="md">Recent Stock Adjustments</Heading>
-            </CardHeader>
-            <CardBody>
-              {dashboardData?.stockAdjustments?.length ? (
-                <Box>
-                  {dashboardData.stockAdjustments.map((adjustment: any) => (
-                    <Box key={adjustment._id} py={2} borderBottom="1px" borderColor="gray.100">
-                      <Text fontWeight="medium">{adjustment.adjustmentNumber}</Text>
-                      <Text fontSize="sm" color="gray.600">
-                        {new Date(adjustment.adjustmentDate).toLocaleDateString()}
-                      </Text>
-                    </Box>
-                  ))}
-                </Box>
-              ) : (
-                <Text>No recent stock adjustments</Text>
-              )}
-            </CardBody>
-            <CardFooter>
-              <Link href="/operations/adjustments" passHref>
-                <Button colorScheme="yellow" size="sm">
-                  View All Adjustments
-                </Button>
-              </Link>
-            </CardFooter>
-          </Card>
+      {/* Transaction History Section */}
+      <Heading as="h2" size="md" mb={4}>
+        Transaction History
+        {selectedSiteId && (
+          <Badge ml={2} colorScheme="blue">
+            {sites.find(s => s._id === selectedSiteId)?.name}
+          </Badge>
         )}
+        {!selectedSiteId && (user?.role === 'admin' || user?.role === 'auditor') && (
+          <Badge ml={2} colorScheme="green">All Sites</Badge>
+        )}
+      </Heading>
 
-        {/* Recent Inventory Counts - visible to Site Manager, Stock Controller, Admin, Auditor */}
-        {(isSiteManagerOrAdmin || isStockControllerOrAdmin) && (
-          <Card>
-            <CardHeader>
-              <Heading size="md">Recent Inventory Counts</Heading>
-            </CardHeader>
-            <CardBody>
-              {dashboardData?.inventoryCounts?.length ? (
-                <Box>
-                  {dashboardData.inventoryCounts.map((count: any) => (
-                    <Box key={count._id} py={2} borderBottom="1px" borderColor="gray.100">
-                      <Text fontWeight="medium">{count.countNumber}</Text>
-                      <Text fontSize="sm" color="gray.600">
-                        {new Date(count.countDate).toLocaleDateString()}
+      {isLoading ? (
+        <Flex justifyContent="center" alignItems="center" minHeight="200px">
+          <Spinner size="lg" />
+        </Flex>
+      ) : transactions.length > 0 ? (
+        <VStack spacing={4} align="stretch">
+          {transactions.map(transaction => (
+            <Card key={transaction._id} bg={cardBg} boxShadow="sm">
+              <CardBody>
+                <HStack spacing={4} alignItems="center">
+                  <Box flexShrink={0}>
+                    <TransactionIcon type={transaction._type} />
+                  </Box>
+                  <VStack align="flex-start" spacing={0} flex="1">
+                    <Text fontWeight="medium" isTruncated>{transaction.description}</Text>
+                    <HStack>
+                      <Text fontSize="sm" color="gray.500">
+                        {new Date(transaction.createdAt).toLocaleDateString()}
                       </Text>
-                    </Box>
-                  ))}
-                </Box>
-              ) : (
-                <Text>No recent inventory counts</Text>
-              )}
-            </CardBody>
-            <CardFooter>
-              <Link href="/operations/counts" passHref>
-                <Button colorScheme="orange" size="sm">
-                  View All Counts
-                </Button>
-              </Link>
-            </CardFooter>
-          </Card>
-        )}
-      </SimpleGrid>
+                      <Text fontSize="sm" color="gray.500">•</Text>
+                      <Text fontSize="sm" color="gray.500">
+                        {transaction.siteName}
+                      </Text>
+                    </HStack>
+                  </VStack>
+                </HStack>
+              </CardBody>
+            </Card>
+          ))}
+        </VStack>
+      ) : (
+        <Box textAlign="center" py={10}>
+          <Text fontSize="lg" color="gray.500">
+            No transaction history found for {selectedSiteId ? "this site." : "your account."}
+          </Text>
+        </Box>
+      )}
     </Box>
   );
 }

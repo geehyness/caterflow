@@ -1,7 +1,6 @@
-// src/app/login/page.tsx
 'use client';
 
-import { useState, useEffect, SetStateAction, SetStateAction } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Box,
   Button,
@@ -13,6 +12,7 @@ import {
   Flex,
   useToast,
   useColorModeValue,
+  Spinner
 } from '@chakra-ui/react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
@@ -56,8 +56,11 @@ export default function LoginPage() {
   };
 
   if (!isAuthReady || (isAuthReady && isAuthenticated)) {
-    // Optionally show a loading state while checking auth or redirecting
-    return <Box minH="100vh" display="flex" justifyContent="center" alignItems="center"><Text>Loading...</Text></Box>
+    return (
+      <Box minH="100vh" display="flex" justifyContent="center" alignItems="center">
+        <Spinner size="xl" />
+      </Box>
+    );
   }
 
   return (
@@ -89,7 +92,7 @@ export default function LoginPage() {
             <Input
               type="email"
               value={email}
-              onChange={(e: { target: { value: SetStateAction<string>; }; }) => setEmail(e.target.value)}
+              onChange={(e) => setEmail(e.target.value)}
               placeholder="Enter your email"
             />
           </FormControl>
@@ -98,7 +101,7 @@ export default function LoginPage() {
             <Input
               type="password"
               value={password}
-              onChange={(e: { target: { value: SetStateAction<string>; }; }) => setPassword(e.target.value)}
+              onChange={(e) => setPassword(e.target.value)}
               placeholder="Enter your password"
             />
           </FormControl>
