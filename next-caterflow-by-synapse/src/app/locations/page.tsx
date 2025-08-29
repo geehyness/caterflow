@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
     Box,
     Heading,
@@ -65,14 +65,10 @@ export default function LocationsPage() {
     const { user, isAuthReady } = useAuth();
     const isSiteManagerOrAdmin = user?.role === 'siteManager' || user?.role === 'admin';
 
-    useEffect(() => {
-        if (isAuthReady) {
-            fetchLocations();
-        }
-    }, [isAuthReady]);
+
 
     // Fetch all sites and bins using API
-    const fetchLocations = async () => {
+    const fetchLocations = useCallback(async () => {
         try {
             setLoading(true);
             const [sitesResponse, binsResponse] = await Promise.all([
@@ -103,7 +99,13 @@ export default function LocationsPage() {
         } finally {
             setLoading(false);
         }
-    };
+    }, [toast]);
+
+    useEffect(() => {
+        if (isAuthReady) {
+            fetchLocations();
+        }
+    }, [isAuthReady, fetchLocations]);
 
     // Handlers for Site actions
     const handleAddSite = () => {

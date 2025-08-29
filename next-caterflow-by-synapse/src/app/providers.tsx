@@ -4,6 +4,7 @@ import { ChakraProvider } from '@chakra-ui/react';
 import dynamic from 'next/dynamic';
 import themes from './theme/theme';
 import { AuthProvider } from '@/context/AuthContext';
+import { LoadingProvider } from '@/context/LoadingContext';
 
 const ThemeProvider = dynamic(
   () => import('next-themes').then((mod) => mod.ThemeProvider),
@@ -23,7 +24,12 @@ export function Providers({ children }: ProvidersProps) {
         enableSystem={false}
         disableTransitionOnChange
       >
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider>
+          <LoadingProvider> {/* Wrap with LoadingProvider */}
+            {children}
+          </LoadingProvider>
+        </AuthProvider>
+
       </ThemeProvider>
     </ChakraProvider>
   );

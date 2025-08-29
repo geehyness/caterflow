@@ -28,8 +28,7 @@ import {
 } from '@chakra-ui/react';
 import { FiArrowLeft, FiArrowRight } from 'react-icons/fi';
 import { useAuth } from '@/context/AuthContext';
-import { BsBoxSeam, BsArrowRightLeft, BsTruck, BsBuildingAdd } from 'react-icons/bs';
-
+import { BsBoxSeam, BsArrowRight, BsTruck, BsBuildingAdd } from 'react-icons/bs';
 interface Site {
   _id: string;
   name: string;
@@ -266,7 +265,7 @@ export default function Home() {
       case 'DispatchLog':
         return <Icon as={BsTruck} color="red.500" />;
       case 'InternalTransfer':
-        return <Icon as={BsArrowRightLeft} color="yellow.500" />;
+        return <Icon as={BsArrowRight} color="yellow.500" />;
       case 'StockAdjustment':
         return <Icon as={BsBoxSeam} color="purple.500" />;
       case 'InventoryCount':
@@ -381,7 +380,7 @@ export default function Home() {
           <StatCard
             title="Pending Transfers"
             value={dashboardStats?.pendingInternalTransfers || 0}
-            icon={BsArrowRightLeft}
+            icon={BsArrowRight}
           />
           <StatCard
             title="Low Stock Items"

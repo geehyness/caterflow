@@ -1,7 +1,7 @@
 // src/app/stock-items/page.tsx
 'use client'
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Box, Heading, Flex, Text, Button, useDisclosure, IconButton, HStack, useToast, Tag } from '@chakra-ui/react';
 import { client } from '@/lib/sanity';
 import { groq } from 'next-sanity';
@@ -40,12 +40,7 @@ export default function InventoryPage() {
     const [isMounted, setIsMounted] = useState(false);
     const toast = useToast();
 
-    useEffect(() => {
-        setIsMounted(true);
-        fetchStockItems();
-    }, []);
-
-    const fetchStockItems = async () => {
+    const fetchStockItems = useCallback(async () => {
         const query = groq`
       *[_type == "StockItem"]{
         _id,
@@ -75,7 +70,12 @@ export default function InventoryPage() {
         } finally {
             setLoading(false);
         }
-    };
+    }, [toast]);
+
+    useEffect(() => {
+        setIsMounted(true);
+        fetchStockItems();
+    }, [fetchStockItems]);
 
     const handleEdit = (item: StockItem) => {
         setSelectedItem(item);
@@ -93,7 +93,7 @@ export default function InventoryPage() {
                     duration: 3000,
                     isClosable: true,
                 });
-                fetchStockItems(); // Refresh the list
+                fetchStockItems();
             } catch (error) {
                 console.error("Failed to delete item:", error);
                 toast({
@@ -114,7 +114,7 @@ export default function InventoryPage() {
 
     const handleItemSaved = () => {
         onClose();
-        fetchStockItems(); // Refresh the list
+        fetchStockItems();
     };
 
     const columns: Column[] = [
@@ -134,7 +134,7 @@ export default function InventoryPage() {
                             handleEdit(row);
                         }}
                     />
-                    {/*<IconButton
+                    <IconButton
                         aria-label="Delete item"
                         icon={<DeleteIcon />}
                         size="sm"
@@ -143,7 +143,7 @@ export default function InventoryPage() {
                             e.stopPropagation();
                             handleDelete(row);
                         }}
-                    />*/}
+                    />
                 </HStack>
             ),
         },
@@ -206,9 +206,13 @@ export default function InventoryPage() {
                 </HStack>
             ),
         },
+        {
+            accessorKey: 'unitOfMeasure',
+            header: 'Unit',
+            isSortable: true,
+        },
     ];
 
-    // Prevent rendering until after hydration
     if (!isMounted) {
         return null;
     }

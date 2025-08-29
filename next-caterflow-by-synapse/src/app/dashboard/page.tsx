@@ -1,6 +1,7 @@
 // src/app/dashboard/page.tsx
 import { getStockItems, getPurchaseOrders, getAppUsers } from '@/lib/queries';
 import Link from 'next/link';
+import { AppUser } from '@/lib/sanityTypes';
 
 export default async function DashboardPage() {
     const [stockItems, purchaseOrders, appUsers] = await Promise.all([
@@ -9,7 +10,7 @@ export default async function DashboardPage() {
         getAppUsers()
     ]);
 
-    const activeUsers = appUsers.filter(user => user.isActive);
+    const activeUsers = appUsers.filter((user: AppUser) => user.isActive);
 
     return (
         <div className="p-6">
@@ -34,7 +35,7 @@ export default async function DashboardPage() {
                 <div className="bg-white p-4 rounded shadow">
                     <h2 className="text-lg font-semibold">Pending Orders</h2>
                     <p className="text-3xl">
-                        {purchaseOrders.filter(po => po.status === 'ordered').length}
+                        {purchaseOrders.filter((po: any) => po.status === 'ordered').length}
                     </p>
                 </div>
             </div>
@@ -43,7 +44,7 @@ export default async function DashboardPage() {
                 <div className="bg-white p-4 rounded shadow">
                     <h2 className="text-lg font-semibold mb-4">Recent Stock Items</h2>
                     <ul>
-                        {stockItems.slice(0, 5).map(item => (
+                        {stockItems.slice(0, 5).map((item: any) => (
                             <li key={item._id} className="flex justify-between py-2 border-b">
                                 <span>{item.name}</span>
                                 <span>{item.sku}</span>
@@ -58,13 +59,13 @@ export default async function DashboardPage() {
                 <div className="bg-white p-4 rounded shadow">
                     <h2 className="text-lg font-semibold mb-4">Recent Orders</h2>
                     <ul>
-                        {purchaseOrders.slice(0, 5).map(order => (
+                        {purchaseOrders.slice(0, 5).map((order: any) => (
                             <li key={order._id} className="py-2 border-b">
                                 <div className="flex justify-between">
                                     <span>{order.poNumber}</span>
                                     <span className={`px-2 py-1 rounded text-xs ${order.status === 'received' ? 'bg-green-100 text-green-800' :
-                                            order.status === 'ordered' ? 'bg-yellow-100 text-yellow-800' :
-                                                'bg-gray-100 text-gray-800'
+                                        order.status === 'ordered' ? 'bg-yellow-100 text-yellow-800' :
+                                            'bg-gray-100 text-gray-800'
                                         }`}>
                                         {order.status}
                                     </span>

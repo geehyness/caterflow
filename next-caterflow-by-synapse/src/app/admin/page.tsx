@@ -8,25 +8,24 @@ import {
   Text,
   Flex,
   useToast,
-  Stack,
+  Spinner,
+  useColorModeValue,
+  useTheme,
+  IconButton,
+  HStack,
   Table,
   Thead,
   Tbody,
   Tr,
   Th,
   Td,
-  Spinner,
-  useColorModeValue,
-  useTheme,
-  IconButton,
-  HStack,
 } from '@chakra-ui/react';
 import { client } from '@/lib/sanity';
 import { groq } from 'next-sanity';
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
 import { FiEdit } from 'react-icons/fi';
-import { AppUser, Site } from '@/lib/sanityTypes'; // Import your types
+import { AppUser, Site } from '@/lib/sanityTypes';
 import UserManagementModal from '@/components/UserManagementModal';
 
 interface UserWithSiteName extends AppUser {
@@ -34,7 +33,9 @@ interface UserWithSiteName extends AppUser {
 }
 
 export default function AdminPage() {
-  const { isAuthenticated, isAdmin, isAuthReady } = useAuth();
+  const { isAuthenticated, user, isAuthReady } = useAuth();
+  const isAdmin = user?.role === 'admin';
+
   const router = useRouter();
   const toast = useToast();
   const theme = useTheme();
@@ -58,44 +59,40 @@ export default function AdminPage() {
   const fetchData = useCallback(async () => {
     setIsLoadingData(true);
     try {
-      // Fetch users from a new API route that gets your custom user data
       const usersQuery = groq`
         *[_type == "AppUser"]{
           _id,
           name,
           email,
           role,
-          'associatedSite': associatedSite->{_id, name},
-          isActive,
-          profileImage
+          associatedSite->{_id, name}
         }
       `;
-      const fetchedUsers: AppUser[] = await client.fetch(usersQuery);
-
-      // Fetch all sites for the dropdown in the modal
       const sitesQuery = groq`
         *[_type == "Site"]{
           _id,
           name
-        } | order(name asc)
+        }
       `;
-      const fetchedSites: Site[] = await client.fetch(sitesQuery);
 
-      setSites(fetchedSites);
+      const [usersData, sitesData] = await Promise.all([
+        client.fetch(usersQuery),
+        client.fetch(sitesQuery)
+      ]);
 
-      const usersWithSiteNames = fetchedUsers.map(user => ({
-        ...user,
-        associatedSiteName: user.associatedSite?.name || '-'
+      const usersWithSiteNames = usersData.map((u: any) => ({
+        ...u,
+        associatedSiteName: u.associatedSite?.name || 'N/A'
       }));
 
       setUsers(usersWithSiteNames);
-
+      setSites(sitesData);
     } catch (error) {
-      console.error('Error fetching data:', error);
+      console.error("Failed to fetch data:", error);
       toast({
-        title: 'Error',
-        description: 'Failed to fetch users or sites.',
-        status: 'error',
+        title: "Error",
+        description: "Failed to load data. Please try again.",
+        status: "error",
         duration: 5000,
         isClosable: true,
       });
@@ -105,24 +102,27 @@ export default function AdminPage() {
   }, [toast]);
 
   useEffect(() => {
-    if (!isAuthReady) {
-      return;
-    }
-
-    if (!isAuthenticated || !isAdmin) {
-      router.push('/login');
-    } else {
+    if (isAuthReady && isAuthenticated && isAdmin) {
       fetchData();
+    } else if (isAuthReady && !isAdmin) {
+      toast({
+        title: "Access Denied",
+        description: "You do not have permission to view this page.",
+        status: "error",
+        duration: 5000,
+        isClosable: true,
+      });
+      router.push('/');
     }
-  }, [isAuthenticated, isAdmin, isAuthReady, router, fetchData]);
+  }, [isAuthenticated, isAuthReady, isAdmin, router, toast, fetchData]);
 
-  const handleAddUserClick = () => {
-    setUserToEdit(null);
+  const handleEditUserClick = (user: UserWithSiteName | null) => {
+    setUserToEdit(user);
     setIsModalOpen(true);
   };
 
-  const handleEditUserClick = (user: UserWithSiteName) => {
-    setUserToEdit(user);
+  const handleCreateUserClick = () => {
+    setUserToEdit(null);
     setIsModalOpen(true);
   };
 
@@ -132,49 +132,55 @@ export default function AdminPage() {
   };
 
   const handleSaveSuccess = () => {
-    fetchData();
+    handleModalClose();
+    fetchData(); // Refresh data after saving
   };
 
-  if (!isAuthReady) {
+  if (isLoadingData && isAuthReady) {
     return (
-      <Flex minH="100vh" align="center" justify="center" bg={bgColor}>
-        <Spinner size="xl" color="blue.500" />
-      </Flex>
+      <Box p={4}>
+        <Flex justifyContent="center" alignItems="center" height="50vh">
+          <Spinner size="xl" />
+        </Flex>
+      </Box>
     );
   }
 
-  if (!isAuthenticated || !isAdmin) {
+  if (!isAuthenticated && isAuthReady) {
+    return (
+      <Box p={4}>
+        <Text>Please log in to view this page.</Text>
+      </Box>
+    );
+  }
+
+  if (!isAdmin) {
     return null;
   }
 
-  if (isLoadingData) {
-    return (
-      <Flex minH="100vh" align="center" justify="center" bg={bgColor}>
-        <Spinner size="xl" color="blue.500" />
-      </Flex>
-    );
-  }
-
   return (
-    <Box p={8} minH="100vh" bg={bgColor} pt="64px">
+    <Box p={6} bg={bgColor} minH="100vh">
       <Flex justifyContent="space-between" alignItems="center" mb={6}>
-        <Heading as="h1" size="xl" color={textColor}>
-          User Management
+        <Heading as="h1" size="lg" color={textColor}>
+          Admin Panel
         </Heading>
-        <Button colorScheme="blue" onClick={handleAddUserClick}>
-          Add New User
+        <Button colorScheme="blue" onClick={handleCreateUserClick}>
+          Create New User
         </Button>
       </Flex>
 
-      <Box bg={cardBgColor} p={6} borderRadius="lg" boxShadow="md">
-        <Heading as="h2" size="lg" mb={4} color={textColor}>Existing Users</Heading>
+      <Box bg={cardBgColor} p={6} borderRadius="lg" boxShadow="md" borderWidth="1px" borderColor={tableCardBorderColor}>
+        <Heading as="h2" size="md" mb={4} color={textColor}>
+          User Management
+        </Heading>
+
         {users.length === 0 ? (
-          <Text color={textColor}>No users found.</Text>
+          <Text color={textColorSecondary}>No users found.</Text>
         ) : (
-          <Box overflowX="auto" bg={tableCardBg} borderRadius="lg" shadow="md" border="1px solid" borderColor={tableCardBorderColor}>
+          <Box overflowX="auto">
             <Table variant="simple">
-              <Thead>
-                <Tr bg={tableHeaderBg}>
+              <Thead bg={tableHeaderBg}>
+                <Tr>
                   <Th color={textColor}>Name</Th>
                   <Th color={textColor}>Email</Th>
                   <Th color={textColor}>Role</Th>
@@ -208,12 +214,11 @@ export default function AdminPage() {
         )}
       </Box>
 
-      {/* Make sure your UserManagementModal component accepts these new props */}
       <UserManagementModal
         isOpen={isModalOpen}
         onClose={handleModalClose}
         userToEdit={userToEdit}
-        sites={sites} // Pass the list of sites to the modal
+        sites={sites}
         onSaveSuccess={handleSaveSuccess}
       />
     </Box>

@@ -10,6 +10,7 @@ import Image from 'next/image';
 import { useRouter, usePathname } from 'next/navigation';
 import { FiLogOut, FiBarChart2, FiBox, FiMapPin, FiTruck, FiUsers, FiSettings, FiBell } from 'react-icons/fi';
 import { useAuth } from '@/context/AuthContext';
+import { useLoading } from '@/context/LoadingContext'; // Add this import
 
 interface SidebarProps {
     appName?: string;
@@ -26,6 +27,7 @@ export function Sidebar({ appName = 'Caterflow' }: SidebarProps) {
     const activeBg = useColorModeValue(theme.colors.brand['100'], theme.colors.brand['700']);
     const borderColor = useColorModeValue(theme.colors.neutral.light['border-color'], theme.colors.neutral.dark['border-color']);
     const iconColor = useColorModeValue(theme.colors.neutral.light['text-header'], theme.colors.neutral.dark['text-header']);
+    const { setLoading } = useLoading(); // Add this
 
     // Define menu items with roles and groups
     const menuGroups = [
@@ -160,6 +162,7 @@ export function Sidebar({ appName = 'Caterflow' }: SidebarProps) {
                                         _hover={{ bg: activeBg, color: theme.colors.brand['500'] }}
                                         onClick={(e: { preventDefault: () => void; }) => {
                                             e.preventDefault();
+                                            setLoading(true); // Add this line
                                             router.push(item.href);
                                         }}
                                     >

@@ -19,7 +19,7 @@ import {
     VStack,
     FormErrorMessage,
 } from '@chakra-ui/react';
-import { AppUser, Site } from '@/lib/sanityTypes';
+import { AppUser, Site, Reference } from '@/lib/sanityTypes';
 
 interface UserManagementModalProps {
     isOpen: boolean;
@@ -52,11 +52,28 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({
             setEmail(userToEdit.email || '');
             setRole(userToEdit.role || 'siteManager');
             setIsActive(userToEdit.isActive !== undefined ? userToEdit.isActive : true);
-            setSelectedSiteId(
-                userToEdit.associatedSite && typeof userToEdit.associatedSite === 'object'
-                    ? userToEdit.associatedSite._id
-                    : userToEdit.associatedSite || ''
-            );
+
+            // Handle both Reference and expanded Site objects
+            if (userToEdit.associatedSite) {
+                const associatedSite = userToEdit.associatedSite;
+
+                if (typeof associatedSite === 'object') {
+                    // Use type guards with proper type assertions
+                    if ('_id' in associatedSite) {
+                        // It's an expanded Site object
+                        setSelectedSiteId((associatedSite as unknown as Site)._id);
+                    } else if ('_ref' in associatedSite) {
+                        // It's a Reference object
+                        setSelectedSiteId((associatedSite as Reference)._ref);
+                    }
+                } else if (typeof associatedSite === 'string') {
+                    // It's a string ID
+                    setSelectedSiteId(associatedSite);
+                }
+            } else {
+                setSelectedSiteId('');
+            }
+
             setPassword(''); // Don't prefill password for existing users
         } else {
             // Reset form for new user

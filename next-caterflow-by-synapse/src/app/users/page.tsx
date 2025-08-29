@@ -27,13 +27,22 @@ import {
 import { FiPlus, FiSearch, FiFilter } from 'react-icons/fi';
 import DataTable from '@/components/DataTable';
 import UserManagementModal from '@/components/UserManagementModal';
-import { AppUser, Site } from '@/lib/sanityTypes';
+import { AppUser, Site, Reference } from '@/lib/sanityTypes';
 import { useAuth } from '@/context/AuthContext';
 import { EditIcon } from '@chakra-ui/icons';
 
-// Extended interface with expanded site reference
-interface AppUserWithSite extends Omit<AppUser, 'associatedSite'> {
+// Interface for display with expanded site reference
+interface AppUserWithSite {
+    _id: string;
+    _type: string;
+    _createdAt: string;
+    _updatedAt: string;
+    _rev: string;
+    name: string;
+    email: string;
+    role: 'admin' | 'siteManager' | 'stockController' | 'dispatchStaff' | 'auditor';
     associatedSite?: Site;
+    isActive: boolean;
 }
 
 export default function UsersPage() {
@@ -60,7 +69,7 @@ export default function UsersPage() {
             try {
                 const [usersResponse, sitesResponse] = await Promise.all([
                     fetch('/api/users'),
-                    fetch('/api/sites') // You'll need to create this API endpoint
+                    fetch('/api/sites')
                 ]);
 
                 if (!usersResponse.ok || !sitesResponse.ok) {
@@ -72,8 +81,27 @@ export default function UsersPage() {
                     sitesResponse.json()
                 ]);
 
-                setUsers(usersData);
-                setFilteredUsers(usersData);
+                // Transform users data to include expanded site information
+                const usersWithSites = usersData.map((user: AppUser) => {
+                    let associatedSite: Site | undefined;
+
+                    if (user.associatedSite && typeof user.associatedSite === 'object' && '_id' in user.associatedSite) {
+                        // If associatedSite is already expanded (has _id property)
+                        associatedSite = user.associatedSite as unknown as Site;
+                    } else if (user.associatedSite && typeof user.associatedSite === 'object' && '_ref' in user.associatedSite) {
+                        // If associatedSite is a reference (has _ref property)
+                        const siteRef = (user.associatedSite as Reference)._ref;
+                        associatedSite = sitesData.find((site: Site) => site._id === siteRef);
+                    }
+
+                    return {
+                        ...user,
+                        associatedSite
+                    };
+                });
+
+                setUsers(usersWithSites);
+                setFilteredUsers(usersWithSites);
                 setSites(sitesData);
             } catch (error) {
                 console.error('Error fetching data:', error);
@@ -99,7 +127,7 @@ export default function UsersPage() {
         // Apply search filter
         if (searchTerm) {
             const term = searchTerm.toLowerCase();
-            result = result.filter(user =>
+            result = result.filter((user: AppUserWithSite) =>
                 user.name.toLowerCase().includes(term) ||
                 user.email.toLowerCase().includes(term)
             );
@@ -107,13 +135,13 @@ export default function UsersPage() {
 
         // Apply role filter
         if (roleFilter !== 'all') {
-            result = result.filter(user => user.role === roleFilter);
+            result = result.filter((user: AppUserWithSite) => user.role === roleFilter);
         }
 
         // Apply status filter
         if (statusFilter !== 'all') {
             const status = statusFilter === 'active';
-            result = result.filter(user => user.isActive === status);
+            result = result.filter((user: AppUserWithSite) => user.isActive === status);
         }
 
         setFilteredUsers(result);
@@ -125,7 +153,12 @@ export default function UsersPage() {
     };
 
     const handleEditUser = (user: AppUserWithSite) => {
-        setSelectedUser(user);
+        // Convert back to AppUser format for the modal
+        const userForModal = {
+            ...user,
+            associatedSite: user.associatedSite ? { _ref: user.associatedSite._id } as Reference : undefined
+        };
+        setSelectedUser(userForModal as any);
         onOpen();
     };
 
@@ -210,8 +243,25 @@ export default function UsersPage() {
                 }
                 return response.json();
             })
-            .then(data => {
-                setUsers(data);
+            .then(usersData => {
+                // Transform the data again
+                const usersWithSites = usersData.map((user: AppUser) => {
+                    let associatedSite: Site | undefined;
+
+                    if (user.associatedSite && typeof user.associatedSite === 'object' && '_id' in user.associatedSite) {
+                        associatedSite = user.associatedSite as unknown as Site;
+                    } else if (user.associatedSite && typeof user.associatedSite === 'object' && '_ref' in user.associatedSite) {
+                        const siteRef = (user.associatedSite as Reference)._ref;
+                        associatedSite = sites.find((site: Site) => site._id === siteRef);
+                    }
+
+                    return {
+                        ...user,
+                        associatedSite
+                    };
+                });
+
+                setUsers(usersWithSites);
             })
             .catch(error => {
                 console.error('Error fetching users:', error);
@@ -303,7 +353,7 @@ export default function UsersPage() {
                         colorScheme={getStatusColor(row.isActive)}
                         size="md"
                         mr={2}
-                        isDisabled={row._id === currentUser?._id} // Prevent deactivating own account
+                        isDisabled={row._id === currentUser?._id}
                     />
                     <Badge colorScheme={getStatusColor(row.isActive)}>
                         {row.isActive ? 'Active' : 'Inactive'}
@@ -409,7 +459,7 @@ export default function UsersPage() {
             <UserManagementModal
                 isOpen={isOpen}
                 onClose={onClose}
-                userToEdit={selectedUser}
+                userToEdit={selectedUser as any} // Cast to any to avoid type issues
                 sites={sites}
                 onSaveSuccess={handleSaveSuccess}
             />

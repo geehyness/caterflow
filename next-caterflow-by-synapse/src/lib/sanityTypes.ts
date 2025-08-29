@@ -1,8 +1,8 @@
 // src/lib/sanityTypes.ts
 import type { SanityDocument, ImageAsset, SlugValue, FileValue, Reference } from 'sanity';
 
-// The base Sanity Document interface is imported directly from 'sanity'.
-// The 'Reference' type is also imported from the same package.
+// Export Reference along with other types
+export type { Reference };
 
 // Interfaces for nested object schemas
 export interface OrderedItem {

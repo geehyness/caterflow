@@ -109,7 +109,7 @@ export async function POST(req: Request) {
       user._id,
       user.email,
       true,
-      { passwordMigrated: needsPasswordUpdate }
+      { payload: { passwordMigrated: needsPasswordUpdate } }
     );
 
     const response = NextResponse.json({
