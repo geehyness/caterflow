@@ -1,60 +1,210 @@
 // src/lib/stockCalculations.ts
 import { client } from '@/lib/sanity';
 import { groq } from 'next-sanity';
+import Decimal from 'decimal.js';
 
-/**
- * Calculates the current stock quantity for a single stock item in a specific bin.
- * This function determines the current stock by finding the latest inventory count
- * and then aggregating all subsequent transactions.
- * @param stockItemId The ID of the StockItem document.
- * @param binId The ID of the Bin document.
- * @returns A promise that resolves to the calculated current stock quantity.
- */
 export const calculateStock = async (stockItemId: string, binId: string): Promise<number> => {
-  const query = groq`{
-        "latestCount": *[_type == "InventoryCount" && countDate < now() && bin._ref == $binId] | order(countDate desc)[0] {
-            "countedItem": countedItems[stockItem._ref == $stockItemId][0],
-            countDate,
-        },
-        "inbound": {
-            "receipts": *[_type == "GoodsReceipt" && receiptDate > ^.latestCount.countDate && receivedItems[].stockItem._ref == $stockItemId && receivingBin._ref == $binId] {
-                "quantity": receivedItems[stockItem._ref == $stockItemId][0].receivedQuantity
-            },
-            "transfers": *[_type == "InternalTransfer" && transferDate > ^.latestCount.countDate && transferredItems[].stockItem._ref == $stockItemId && toBin._ref == $binId] {
-                "quantity": transferredItems[stockItem._ref == $stockItemId][0].transferredQuantity
-            },
-            "adjustments": *[_type == "StockAdjustment" && adjustmentDate > ^.latestCount.countDate && adjustedItems[].stockItem._ref == $stockItemId && bin._ref == $binId] {
-                "quantity": adjustedItems[stockItem._ref == $stockItemId][0].adjustedQuantity
-            }
-        },
-        "outbound": {
-            "dispatches": *[_type == "DispatchLog" && dispatchDate > ^.latestCount.countDate && dispatchedItems[].stockItem._ref == $stockItemId && sourceBin._ref == $binId] {
-                "quantity": dispatchedItems[stockItem._ref == $stockItemId][0].dispatchedQuantity
-            },
-            "transfers": *[_type == "InternalTransfer" && transferDate > ^.latestCount.countDate && transferredItems[].stockItem._ref == $stockItemId && fromBin._ref == $binId] {
-                "quantity": transferredItems[stockItem._ref == $stockItemId][0].transferredQuantity
-            },
-            "adjustments": *[_type == "StockAdjustment" && adjustmentDate > ^.latestCount.countDate && adjustedItems[].stockItem._ref == $stockItemId && bin._ref == $binId] {
-                "quantity": adjustedItems[stockItem._ref == $stockItemId][0].adjustedQuantity
-            }
+    const query = groq`{
+    "latestCount": *[_type == "InventoryCount" && bin._ref == $binId && countDate < now()] | order(countDate desc)[0] {
+      countDate,
+      "countedItem": countedItems[stockItem._ref == $stockItemId][0] {
+        countedQuantity
+      }
+    },
+    "transactions": *[_type in ["GoodsReceipt", "DispatchLog", "InternalTransfer", "StockAdjustment"] 
+      && (receivingBin._ref == $binId || sourceBin._ref == $binId || toBin._ref == $binId || fromBin._ref == $binId || bin._ref == $binId)
+      && dateTime(coalesce(receiptDate, dispatchDate, transferDate, adjustmentDate)) > dateTime(^.latestCount.countDate)
+    ] {
+      _type,
+      receiptDate,
+      dispatchDate,
+      transferDate,
+      adjustmentDate,
+      receivingBin,
+      sourceBin,
+      toBin,
+      fromBin,
+      bin,
+      "receiptItems": receivedItems[stockItem._ref == $stockItemId][0] {
+        receivedQuantity
+      },
+      "dispatchItems": dispatchedItems[stockItem._ref == $stockItemId][0] {
+        dispatchedQuantity
+      },
+      "transferInItems": transferredItems[stockItem._ref == $stockItemId && toBin._ref == $binId][0] {
+        transferredQuantity
+      },
+      "transferOutItems": transferredItems[stockItem._ref == $stockItemId && fromBin._ref == $binId][0] {
+        transferredQuantity
+      },
+      "adjustmentItems": adjustedItems[stockItem._ref == $stockItemId][0] {
+        adjustedQuantity
+      }
+    }
+  }`;
+
+    const data = await client.fetch(query, { stockItemId, binId });
+
+    const baseQuantity = new Decimal(data.latestCount?.countedItem?.countedQuantity || 0);
+
+    let stock = baseQuantity;
+
+    data.transactions?.forEach((tx: any) => {
+        switch (tx._type) {
+            case 'GoodsReceipt':
+                if (tx.receiptItems) {
+                    stock = stock.plus(new Decimal(tx.receiptItems.receivedQuantity || 0));
+                }
+                break;
+            case 'DispatchLog':
+                if (tx.dispatchItems) {
+                    stock = stock.minus(new Decimal(tx.dispatchItems.dispatchedQuantity || 0));
+                }
+                break;
+            case 'InternalTransfer':
+                if (tx.transferInItems) {
+                    stock = stock.plus(new Decimal(tx.transferInItems.transferredQuantity || 0));
+                }
+                if (tx.transferOutItems) {
+                    stock = stock.minus(new Decimal(tx.transferOutItems.transferredQuantity || 0));
+                }
+                break;
+            case 'StockAdjustment':
+                if (tx.adjustmentItems) {
+                    const quantity = new Decimal(tx.adjustmentItems.adjustedQuantity || 0);
+                    if (quantity.isPositive()) {
+                        stock = stock.plus(quantity);
+                    } else {
+                        stock = stock.minus(quantity.absoluteValue());
+                    }
+                }
+                break;
         }
-    }`;
+    });
 
-  const data = await client.fetch(query, { stockItemId, binId });
+    return stock.toNumber();
+};
 
-  // Handle initial quantity from the latest count
-  // Access the quantity from the new `countedItem` object
-  const baseQuantity = data.latestCount?.countedItem?.countedQuantity || 0;
+// Bulk calculation for multiple items and bins
+export const calculateBulkStock = async (stockItemIds: string[], binIds: string[]): Promise<{ [key: string]: number }> => {
+    if (stockItemIds.length === 0 || binIds.length === 0) {
+        return {};
+    }
 
-  // Aggregate all inbound movements
-  const totalInbound = (data.inbound.receipts?.reduce((sum: number, item: any) => sum + item.quantity, 0) || 0) +
-    (data.inbound.transfers?.reduce((sum: number, item: any) => sum + item.quantity, 0) || 0) +
-    (data.inbound.adjustments?.reduce((sum: number, item: any) => sum + Math.max(0, item.quantity), 0) || 0);
+    const query = groq`{
+    "counts": *[_type == "InventoryCount" && bin._ref in $binIds] | order(countDate desc) {
+      bin->{ _ref },
+      countDate,
+      countedItems[] {
+        stockItem->{ _ref },
+        countedQuantity
+      }
+    },
+    "transactions": *[_type in ["GoodsReceipt", "DispatchLog", "InternalTransfer", "StockAdjustment"] 
+      && (receivingBin._ref in $binIds || sourceBin._ref in $binIds || toBin._ref in $binIds || fromBin._ref in $binIds || bin._ref in $binIds)
+    ] | order(coalesce(receiptDate, dispatchDate, transferDate, adjustmentDate) asc) {
+      _type,
+      receiptDate,
+      dispatchDate,
+      transferDate,
+      adjustmentDate,
+      receivingBin->{ _ref },
+      sourceBin->{ _ref },
+      toBin->{ _ref },
+      fromBin->{ _ref },
+      bin->{ _ref },
+      receivedItems[] {
+        stockItem->{ _ref },
+        receivedQuantity
+      },
+      dispatchedItems[] {
+        stockItem->{ _ref },
+        dispatchedQuantity
+      },
+      transferredItems[] {
+        stockItem->{ _ref },
+        transferredQuantity
+      },
+      adjustedItems[] {
+        stockItem->{ _ref },
+        adjustedQuantity
+      },
+      adjustmentType
+    }
+  }`;
 
-  // Aggregate all outbound movements
-  const totalOutbound = (data.outbound.dispatches?.reduce((sum: number, item: any) => sum + item.quantity, 0) || 0) +
-    (data.outbound.transfers?.reduce((sum: number, item: any) => sum + item.quantity, 0) || 0) +
-    (data.outbound.adjustments?.reduce((sum: number, item: any) => sum + Math.min(0, item.quantity), 0) || 0);
+    const data = await client.fetch(query, { binIds, stockItemIds });
 
-  return baseQuantity + totalInbound - totalOutbound;
+    // Step 1: Initialize results with latest counts
+    const results: { [key: string]: Decimal } = {};
+    const latestCountDates: { [key: string]: string } = {};
+
+    data.counts.forEach((count: any) => {
+        const binId = count.bin?._ref;
+        if (!latestCountDates[binId]) { // Only consider the latest count per bin
+            latestCountDates[binId] = count.countDate;
+            count.countedItems.forEach((item: any) => {
+                const itemId = item.stockItem?._ref;
+                if (stockItemIds.includes(itemId)) {
+                    const key = `${itemId}-${binId}`;
+                    results[key] = new Decimal(item.countedQuantity || 0);
+                }
+            });
+        }
+    });
+
+    // Step 2: Apply transactions that occurred after the latest count
+    data.transactions.forEach((tx: any) => {
+        const txDate = new Date(tx.receiptDate || tx.dispatchDate || tx.transferDate || tx.adjustmentDate).toISOString();
+
+        const processItems = (items: any[], binId: string, isInbound: boolean) => {
+            if (!binId || !latestCountDates[binId]) return;
+
+            // Only process transactions that occurred after the latest count for that bin
+            if (txDate > latestCountDates[binId]) {
+                items?.forEach((item: any) => {
+                    const itemId = item.stockItem?._ref;
+                    if (itemId && stockItemIds.includes(itemId)) {
+                        const key = `${itemId}-${binId}`;
+                        const quantity = new Decimal(item.receivedQuantity || item.dispatchedQuantity || item.transferredQuantity || item.adjustedQuantity || 0);
+
+                        // Ensure the item exists in the results map before calculating
+                        if (!results[key]) {
+                            results[key] = new Decimal(0);
+                        }
+
+                        if (isInbound) {
+                            results[key] = results[key].plus(quantity);
+                        } else {
+                            results[key] = results[key].minus(quantity);
+                        }
+                    }
+                });
+            }
+        };
+
+        switch (tx._type) {
+            case 'GoodsReceipt':
+                processItems(tx.receivedItems, tx.receivingBin?._ref, true);
+                break;
+            case 'DispatchLog':
+                processItems(tx.dispatchedItems, tx.sourceBin?._ref, false);
+                break;
+            case 'InternalTransfer':
+                processItems(tx.transferredItems, tx.toBin?._ref, true);
+                processItems(tx.transferredItems, tx.fromBin?._ref, false);
+                break;
+            case 'StockAdjustment':
+                processItems(tx.adjustedItems, tx.bin?._ref, tx.adjustmentType === 'addition');
+                break;
+        }
+    });
+
+    // Step 3: Convert Decimal objects to numbers for the final return
+    const finalResults: { [key: string]: number } = {};
+    for (const key in results) {
+        finalResults[key] = results[key].toNumber();
+    }
+
+    return finalResults;
 };

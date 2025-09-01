@@ -2,8 +2,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { client } from '@/lib/sanity';
-import { groq } from 'next-sanity';
 import {
   Box,
   Heading,
@@ -25,10 +23,12 @@ import {
   Stat,
   StatLabel,
   StatNumber,
+  Skeleton,
 } from '@chakra-ui/react';
 import { FiArrowLeft, FiArrowRight } from 'react-icons/fi';
 import { useAuth } from '@/context/AuthContext';
 import { BsBoxSeam, BsArrowRight, BsTruck, BsBuildingAdd } from 'react-icons/bs';
+
 interface Site {
   _id: string;
   name: string;
@@ -42,34 +42,25 @@ interface Transaction {
   siteName: string;
 }
 
-interface ReceivedItem {
-  receivedQuantity: number;
-}
-
-interface DispatchedItem {
-  dispatchedQuantity: number;
-}
-
-interface InternalTransfer {
-  _id: string;
-}
-
-interface StockItem {
-  minimumStockLevel: number;
-  binStocks: {
-    siteId: string;
-    currentQuantity: number;
-  }[];
-}
-
 interface DashboardStats {
   totalItemsReceived: number;
   totalItemsDispatched: number;
   pendingInternalTransfers: number;
   lowStockItems: number;
+  totalStock: number;
 }
 
-const StatCard = ({ title, value, icon }: { title: string; value: number | string; icon: any }) => {
+const StatCard = ({
+  title,
+  value,
+  icon,
+  isLoading = false
+}: {
+  title: string;
+  value: number | string;
+  icon: any;
+  isLoading?: boolean;
+}) => {
   const cardBg = useColorModeValue('white', 'gray.700');
   return (
     <Card bg={cardBg} boxShadow="sm" p={4} borderRadius="md" textAlign="left">
@@ -87,7 +78,13 @@ const StatCard = ({ title, value, icon }: { title: string; value: number | strin
         <VStack align="flex-start" spacing={0}>
           <Stat>
             <StatLabel fontWeight="medium" isTruncated>{title}</StatLabel>
-            <StatNumber fontSize="xl">{value}</StatNumber>
+            <StatNumber fontSize="xl">
+              {isLoading ? (
+                <Skeleton height="24px" width="60px" />
+              ) : (
+                value
+              )}
+            </StatNumber>
           </Stat>
         </VStack>
       </HStack>
@@ -103,7 +100,7 @@ export default function Home() {
   const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSitesLoading, setIsSitesLoading] = useState(true);
-  const [isStatsLoading, setIsStatsLoading] = useState(true);
+  const [isCalculatingStock, setIsCalculatingStock] = useState(false);
 
   const toast = useToast();
   const cardBg = useColorModeValue('gray.50', 'gray.700');
@@ -115,11 +112,11 @@ export default function Home() {
     const fetchSites = async () => {
       setIsSitesLoading(true);
       try {
-        let siteQuery = groq`*[_type == "Site"] | order(name asc) { _id, name }`;
+        let siteQuery = `*[_type == "Site"] | order(name asc) { _id, name }`;
         if (user?.role === 'siteManager') {
-          siteQuery = groq`*[_type == "Site" && _id == $siteId] | order(name asc) { _id, name }`;
+          siteQuery = `*[_type == "Site" && _id == $siteId] | order(name asc) { _id, name }`;
         } else if (user?.role === 'admin' || user?.role === 'auditor') {
-          siteQuery = groq`*[_type == "Site"] | order(name asc) { _id, name }`;
+          siteQuery = `*[_type == "Site"] | order(name asc) { _id, name }`;
         } else {
           setSites([]);
           setTransactions([]);
@@ -130,7 +127,22 @@ export default function Home() {
         }
 
         const siteParams = user?.associatedSite?._id ? { siteId: user.associatedSite._id } : {};
-        const fetchedSites: Site[] = await client.fetch(siteQuery, siteParams);
+        const response = await fetch('/api/sanity', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            query: siteQuery,
+            params: siteParams
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch sites');
+        }
+
+        const fetchedSites: Site[] = await response.json();
         setSites(fetchedSites);
 
         if (user?.role === 'siteManager' && fetchedSites.length > 0) {
@@ -153,12 +165,13 @@ export default function Home() {
     fetchSites();
   }, [isAuthReady, user, toast]);
 
-  // Fetch dashboard data
+  // Fetch dashboard data from API route
   useEffect(() => {
     if (!isAuthReady || isSitesLoading) return;
 
     const fetchDashboardData = async () => {
       setIsLoading(true);
+      setIsCalculatingStock(true);
 
       let siteIdsToQuery = selectedSiteId ? [selectedSiteId] : sites.map(s => s._id);
 
@@ -170,75 +183,32 @@ export default function Home() {
         setTransactions([]);
         setDashboardStats(null);
         setIsLoading(false);
+        setIsCalculatingStock(false);
         return;
       }
 
       try {
-        const query = groq`{
-                    "transactions": {
-                        "goodsReceipts": *[_type == "GoodsReceipt" && receivingBin->site._id in $siteIds] | order(receiptDate desc) [0..20] {
-                            _id, _type, "createdAt": receiptDate, "description": "Receipt " + receiptNumber, "siteName": receivingBin->site->name, receivedItems[] { receivedQuantity }
-                        },
-                        "dispatchLogs": *[_type == "DispatchLog" && sourceBin->site._id in $siteIds] | order(dispatchDate desc) [0..20] {
-                            _id, _type, "createdAt": dispatchDate, "description": "Dispatch " + dispatchNumber, "siteName": sourceBin->site->name, dispatchedItems[] { dispatchedQuantity }
-                        },
-                        "internalTransfers": *[_type == "InternalTransfer" && (fromBin->site._id in $siteIds || toBin->site._id in $siteIds)] | order(transferDate desc) [0..20] {
-                            _id, _type, "createdAt": transferDate, "description": "Transfer " + transferNumber, "siteName": fromBin->site->name
-                        },
-                        "stockAdjustments": *[_type == "StockAdjustment" && bin->site._id in $siteIds] | order(adjustmentDate desc) [0..20] {
-                            _id, _type, "createdAt": adjustmentDate, "description": "Adjustment " + adjustmentNumber, "siteName": bin->site->name
-                        },
-                        "inventoryCounts": *[_type == "InventoryCount" && bin->site._id in $siteIds] | order(countDate desc) [0..20] {
-                            _id, _type, "createdAt": countDate, "description": "Inventory Count " + countNumber, "siteName": bin->site->name
-                        }
-                    },
-                    "statsData": {
-                        "receivedQuantities": *[_type == "GoodsReceipt" && receivingBin->site._id in $siteIds].receivedItems[].receivedQuantity,
-                        "dispatchedQuantities": *[_type == "DispatchLog" && sourceBin->site._id in $siteIds].dispatchedItems[].dispatchedQuantity,
-                        "pendingTransfers": *[_type == "InternalTransfer" && (fromBin->site._id in $siteIds || toBin->site._id in $siteIds) && status == "pending"],
-                        "stockItems": *[_type == "StockItem" && defined(binStocks)] {
-                            minimumStockLevel,
-                            binStocks[] {
-                                siteId,
-                                currentQuantity
-                            }
-                        }
-                    }
-                }`;
+        const response = await fetch('/api/dashboard/stats', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ siteIds: siteIdsToQuery }),
+        });
 
-        const data = await client.fetch(query, { siteIds: siteIdsToQuery });
+        if (!response.ok) {
+          throw new Error('Failed to fetch dashboard data');
+        }
 
-        // Process transactions
-        const allTransactions = [
-          ...(data.transactions.goodsReceipts || []),
-          ...(data.transactions.dispatchLogs || []),
-          ...(data.transactions.internalTransfers || []),
-          ...(data.transactions.stockAdjustments || []),
-          ...(data.transactions.inventoryCounts || [])
-        ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        const data = await response.json();
 
-        setTransactions(allTransactions.map(tx => ({
-          ...tx,
-          description: `${tx.description} ${tx.receivedItems ? `received ${tx.receivedItems.length} item(s)` : ''} ${tx.dispatchedItems ? `sent ${tx.dispatchedItems.length} item(s)` : ''}`.trim()
-        })));
-
-        // Calculate stats on the client side
-        const totalItemsReceived = data.statsData.receivedQuantities.reduce((sum: number, qty: number) => sum + qty, 0);
-        const totalItemsDispatched = data.statsData.dispatchedQuantities.reduce((sum: number, qty: number) => sum + qty, 0);
-        const pendingInternalTransfers = data.statsData.pendingTransfers.length;
-
-        const lowStockItems = data.statsData.stockItems.filter((item: StockItem) => {
-          const totalQuantity = item.binStocks
-            .filter(bin => siteIdsToQuery.includes(bin.siteId))
-            .reduce((sum, bin) => sum + bin.currentQuantity, 0);
-          return totalQuantity < item.minimumStockLevel;
-        }).length;
-
-        setDashboardStats({
-          totalItemsReceived,
-          totalItemsDispatched,
-          pendingInternalTransfers,
-          lowStockItems
+        setTransactions(data.transactions || []);
+        setDashboardStats(data.stats || {
+          totalItemsReceived: 0,
+          totalItemsDispatched: 0,
+          pendingInternalTransfers: 0,
+          lowStockItems: 0,
+          totalStock: 0
         });
 
       } catch (error) {
@@ -252,6 +222,7 @@ export default function Home() {
         });
       } finally {
         setIsLoading(false);
+        setIsCalculatingStock(false);
       }
     };
 
@@ -366,26 +337,36 @@ export default function Home() {
           <Spinner size="lg" />
         </Flex>
       ) : (
-        <SimpleGrid columns={{ base: 1, md: 3, lg: 4 }} spacing={4} mb={8}>
+        <SimpleGrid columns={{ base: 1, md: 2, lg: 4 }} spacing={4} mb={8}>
           <StatCard
             title="Items Received"
             value={dashboardStats?.totalItemsReceived || 0}
             icon={BsBuildingAdd}
+            isLoading={isCalculatingStock}
           />
           <StatCard
             title="Items Dispatched"
             value={dashboardStats?.totalItemsDispatched || 0}
             icon={BsTruck}
+            isLoading={isCalculatingStock}
           />
           <StatCard
             title="Pending Transfers"
             value={dashboardStats?.pendingInternalTransfers || 0}
             icon={BsArrowRight}
+            isLoading={isCalculatingStock}
           />
           <StatCard
             title="Low Stock Items"
-            value={dashboardStats?.lowStockItems || 0}
+            value={isCalculatingStock ? "Calculating..." : dashboardStats?.lowStockItems || 0}
             icon={BsBoxSeam}
+            isLoading={isCalculatingStock}
+          />
+          <StatCard
+            title="Total Stock"
+            value={isCalculatingStock ? "Calculating..." : dashboardStats?.totalStock || 0}
+            icon={BsBoxSeam}
+            isLoading={isCalculatingStock}
           />
         </SimpleGrid>
       )}
@@ -439,6 +420,30 @@ export default function Home() {
         <Box textAlign="center" py={10}>
           <Text fontSize="lg" color="gray.500">
             No transaction history found for {selectedSiteId ? "this site." : "your account."}
+          </Text>
+        </Box>
+      )}
+
+      {/* Calculating Overlay */}
+      {isCalculatingStock && (
+        <Box
+          position="fixed"
+          top="50%"
+          left="50%"
+          transform="translate(-50%, -50%)"
+          bg="blackAlpha.800"
+          color="white"
+          p={6}
+          borderRadius="md"
+          zIndex="overlay"
+          textAlign="center"
+        >
+          <Spinner size="xl" color="white" mb={4} />
+          <Text fontSize="lg" fontWeight="bold">
+            Calculating stock levels...
+          </Text>
+          <Text fontSize="sm" mt={2}>
+            This may take a moment while we process your inventory data
           </Text>
         </Box>
       )}
