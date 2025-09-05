@@ -1,4 +1,4 @@
-// src/lib/sanityTypes.ts
+// schemas/sanityTypes.ts
 import type { SanityDocument, ImageAsset, SlugValue, FileValue, Reference } from 'sanity';
 
 // Export Reference along with other types
@@ -7,13 +7,17 @@ export type { Reference };
 // Interfaces for nested object schemas
 export interface OrderedItem {
     _type: 'OrderedItem';
+    _key: string;
     stockItem: Reference;
     orderedQuantity: number;
     unitPrice: number;
+    // Add this field to track if price was manually updated
+    priceManuallyUpdated?: boolean;
 }
 
 export interface ReceivedItem {
     _type: 'ReceivedItem';
+    _key: string;
     stockItem: Reference;
     receivedQuantity: number;
     batchNumber?: string;
@@ -23,6 +27,7 @@ export interface ReceivedItem {
 
 export interface DispatchedItem {
     _type: 'DispatchedItem';
+    _key: string;
     stockItem: Reference;
     dispatchedQuantity: number;
     totalCost?: number;
@@ -30,6 +35,7 @@ export interface DispatchedItem {
 
 export interface AdjustedItem {
     _type: 'AdjustedItem';
+    _key: string;
     stockItem: Reference;
     adjustedQuantity: number;
     reason: string;
@@ -37,6 +43,7 @@ export interface AdjustedItem {
 
 export interface CountedItem {
     _type: 'CountedItem';
+    _key: string;
     stockItem: Reference;
     countedQuantity: number;
     systemQuantityAtCountTime?: number;
@@ -45,6 +52,7 @@ export interface CountedItem {
 
 export interface TransferredItem {
     _type: 'TransferredItem';
+    _key: string;
     stockItem: Reference;
     transferredQuantity: number;
 }
@@ -59,9 +67,11 @@ export interface StockItem extends SanityDocument {
     unitOfMeasure: string;
     imageUrl?: string;
     description?: string;
-    supplier?: Reference;
+    suppliers?: Reference[];
+    primarySupplier?: Reference;
     minimumStockLevel: number;
     reorderQuantity?: number;
+    unitPrice?: number;
 }
 
 export interface AppUser extends SanityDocument {
@@ -116,9 +126,17 @@ export interface PurchaseOrder extends SanityDocument {
     poNumber: string;
     supplier: Reference;
     orderDate: string;
-    poItems: OrderedItem[];
-    status: 'draft' | 'pending' | 'partially-received' | 'received' | 'cancelled';
+    orderedItems: OrderedItem[];
+    status: 'draft' | 'pending-approval' | 'approved' | 'processing' | 'partially-received' | 'complete' | 'cancelled';
+    expectedDeliveryDate?: string;
+    totalAmount?: number;
+    orderedBy: Reference;
+    approvedBy?: Reference;
+    approvedAt?: string;
+    attachments?: Reference[];
+    evidenceStatus: 'pending' | 'partial' | 'complete';
     notes?: string;
+    completedSteps?: number;
 }
 
 export interface GoodsReceipt extends SanityDocument {
@@ -126,9 +144,13 @@ export interface GoodsReceipt extends SanityDocument {
     receiptNumber: string;
     receiptDate: string;
     purchaseOrder?: Reference;
+    receivedBy: Reference;
     receivingBin: Reference;
     receivedItems: ReceivedItem[];
+    attachments?: Reference[];
+    evidenceStatus: 'pending' | 'partial' | 'complete';
     notes?: string;
+    completedSteps?: number;
 }
 
 export interface DispatchLog extends SanityDocument {
@@ -137,8 +159,12 @@ export interface DispatchLog extends SanityDocument {
     dispatchDate: string;
     sourceBin: Reference;
     destinationSite: Reference;
+    dispatchedBy: Reference;
     dispatchedItems: DispatchedItem[];
+    attachments?: Reference[];
+    evidenceStatus: 'pending' | 'partial' | 'complete';
     notes?: string;
+    completedSteps?: number;
 }
 
 export interface InternalTransfer extends SanityDocument {
@@ -147,20 +173,25 @@ export interface InternalTransfer extends SanityDocument {
     transferDate: string;
     fromBin: Reference;
     toBin: Reference;
+    transferredBy: Reference;
     transferredItems: TransferredItem[];
+    notes?: string;
     status: 'pending' | 'completed' | 'cancelled';
+    completedSteps?: number;
 }
 
 export interface StockAdjustment extends SanityDocument {
     _type: 'StockAdjustment';
     adjustmentNumber: string;
     adjustmentDate: string;
-    adjustmentType: 'addition' | 'reduction' | 'correction';
-    bin: Reference;
-    reason: string;
     adjustedBy: Reference;
+    bin: Reference;
+    adjustmentType: 'loss' | 'wastage' | 'expiry' | 'damage' | 'inventory-correction' | 'theft' | 'positive-adjustment';
     adjustedItems: AdjustedItem[];
+    attachments?: Reference[];
+    evidenceStatus: 'pending' | 'partial' | 'complete';
     notes?: string;
+    completedSteps?: number;
 }
 
 export interface InventoryCount extends SanityDocument {
@@ -180,5 +211,55 @@ export interface NotificationPreference extends SanityDocument {
     isEnabled: boolean;
     thresholdValue?: number;
     notificationChannels: string[];
-    roles: ('admin' | 'siteManager' | 'stockController' | 'dispatchStaff' | 'auditor')[];
+    appliesToRoles: ('admin' | 'siteManager' | 'stockController' | 'dispatchStaff' | 'auditor')[];
+}
+
+export interface FileAttachment extends SanityDocument {
+    _type: 'FileAttachment';
+    fileName: string;
+    fileType: 'invoice' | 'receipt' | 'photo' | 'contract' | 'delivery-note' | 'quality-check' | 'other';
+    file: FileValue;
+    uploadedBy: Reference;
+    uploadedAt: string;
+    description?: string;
+    relatedTo: Reference;
+    isArchived: boolean;
+}
+
+// Interface for pending actions used in the Actions page
+export interface PendingAction {
+    _id: string;
+    _type: string;
+    title: string;
+    description: string;
+    createdAt: string;
+    priority: 'high' | 'medium' | 'low';
+    siteName: string;
+    actionType: string;
+    evidenceRequired: boolean;
+    evidenceTypes?: string[];
+    evidenceStatus?: 'pending' | 'partial' | 'complete';
+    attachments?: any[];
+    workflow?: {
+        title: string;
+        description: string;
+        completed: boolean;
+        required: boolean;
+    }[];
+    completedSteps?: number;
+    status?: string;
+    poNumber?: string;
+    supplierName?: string;
+    orderedItems?: Array<{
+        _key: string;
+        stockItem: {
+            name: string;
+        };
+        orderedQuantity: number;
+        unitPrice: number;
+    }>;
+    site?: string;
+    fromSite?: string;
+    toSite?: string;
+    orderedBy?: string;
 }

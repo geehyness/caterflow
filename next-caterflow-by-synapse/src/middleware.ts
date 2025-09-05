@@ -17,6 +17,10 @@ export async function middleware(request: NextRequest) {
   // Define protected routes and their required roles for Caterflow
   const protectedRoutes = {
     '/': ['admin', 'siteManager', 'stockController', 'dispatchStaff', 'auditor'],
+    '/actions': ['admin', 'siteManager', 'stockController', 'dispatchStaff'],
+    '/approvals': ['admin', 'siteManager'], // New route for approvals
+    '/activity': ['admin', 'siteManager', 'stockController', 'auditor'],
+    '/low-stock': ['admin', 'siteManager', 'stockController', 'auditor'],
     '/inventory': ['admin', 'siteManager', 'stockController', 'auditor'],
     '/operations/purchases': ['admin', 'siteManager', 'auditor'],
     '/operations/receipts': ['admin', 'siteManager', 'auditor'],
@@ -84,6 +88,10 @@ export const config = {
   matcher: [
     '/',
     '/login',
+    '/actions',
+    '/approvals', // New matcher for approvals page
+    '/activity',
+    '/low-stock',
     '/inventory/:path*',
     '/operations/:path*',
     '/admin/:path*',

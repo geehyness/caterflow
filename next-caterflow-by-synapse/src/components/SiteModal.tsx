@@ -83,14 +83,17 @@ export default function SiteModal({ isOpen, onClose, site, onSave }: SiteModalPr
             setEmail(site.email || '');
             setPatientCount(site.patientCount ?? '');
         } else {
-            setName('');
-            setLocation('');
-            setManagerId('');
-            setContactNumber('');
-            setEmail('');
-            setPatientCount('');
+            // Reset form when modal is closed
+            if (!isOpen) {
+                setName('');
+                setLocation('');
+                setManagerId('');
+                setContactNumber('');
+                setEmail('');
+                setPatientCount('');
+            }
         }
-    }, [site]);
+    }, [site, isOpen]);
 
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();

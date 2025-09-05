@@ -65,8 +65,6 @@ export default function LocationsPage() {
     const { user, isAuthReady } = useAuth();
     const isSiteManagerOrAdmin = user?.role === 'siteManager' || user?.role === 'admin';
 
-
-
     // Fetch all sites and bins using API
     const fetchLocations = useCallback(async () => {
         try {
@@ -355,6 +353,7 @@ export default function LocationsPage() {
                 onClose={onBinModalClose}
                 bin={selectedBin}
                 onSave={handleItemSaved}
+                sites={sites}  // Pass sites as a prop
             />
         </Box>
     );

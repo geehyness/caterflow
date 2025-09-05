@@ -18,6 +18,7 @@ import {
     Select,
     chakra,
     Spinner,
+    Checkbox, // Added Checkbox import
 } from '@chakra-ui/react';
 import { ChevronLeftIcon, ChevronRightIcon, ChevronUpIcon, ChevronDownIcon } from '@chakra-ui/icons';
 
@@ -29,20 +30,52 @@ export interface Column {
     isSortable?: boolean;
 }
 
+// Add these props to the DataTable component interface
+interface DataTableProps {
+    columns: Column[];
+    data: any[];
+    loading: boolean;
+    onSelectionChange?: (selectedItems: any[]) => void; // Add selection callback
+}
+
 export default function DataTable({
     columns,
     data,
     loading,
-}: {
-    columns: Column[];
-    data: any[];
-    loading: boolean;
-}) {
+    onSelectionChange, // Add this prop
+}: DataTableProps) {
     const [searchTerm, setSearchTerm] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(10);
     const [sortColumn, setSortColumn] = useState<string | null>(null);
     const [sortDirection, setSortDirection] = useState<'asc' | 'desc' | null>(null);
+
+    // Add state for selected rows
+    const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
+
+    // Add checkbox handler
+    const handleRowSelection = (id: string) => {
+        const newSelected = new Set(selectedRows);
+        if (newSelected.has(id)) {
+            newSelected.delete(id);
+        } else {
+            newSelected.add(id);
+        }
+        setSelectedRows(newSelected);
+        onSelectionChange?.(data.filter(item => newSelected.has(item._id)));
+    };
+
+    // Add select all handler
+    const handleSelectAll = () => {
+        if (selectedRows.size === data.length) {
+            setSelectedRows(new Set());
+            onSelectionChange?.([]);
+        } else {
+            const allIds = new Set(data.map(item => item._id));
+            setSelectedRows(allIds);
+            onSelectionChange?.(data);
+        }
+    };
 
     const processedData = useMemo(() => {
         // 1. Filter Data
@@ -113,6 +146,28 @@ export default function DataTable({
         );
     };
 
+    // Add to columns definition for checkbox column
+    const checkboxColumn: Column = {
+        accessorKey: 'select',
+        header: (
+            <Checkbox
+                isChecked={selectedRows.size === paginatedData.length && paginatedData.length > 0}
+                isIndeterminate={selectedRows.size > 0 && selectedRows.size < paginatedData.length}
+                onChange={handleSelectAll}
+            />
+        ),
+        cell: (row) => (
+            <Checkbox
+                isChecked={selectedRows.has(row._id)}
+                onChange={() => handleRowSelection(row._id)}
+            />
+        ),
+        isSortable: false,
+    };
+
+    // Use checkboxColumn as the first column
+    const allColumns = [checkboxColumn, ...columns];
+
     return (
         <Box p={4} borderRadius="md" borderWidth="1px" overflowX="auto" className="shadow-sm">
             <Flex mb={4} justifyContent="space-between" alignItems="center">
@@ -157,7 +212,7 @@ export default function DataTable({
                 <Table variant="simple" size="sm" className="min-w-full divide-y divide-gray-200">
                     <Thead>
                         <Tr className="bg-gray-50">
-                            {columns.map((column) => (
+                            {allColumns.map((column) => (
                                 <Th
                                     key={column.accessorKey}
                                     onClick={() => handleSort(column.accessorKey, column.isSortable)}
@@ -177,7 +232,7 @@ export default function DataTable({
                         {paginatedData.length > 0 ? (
                             paginatedData.map((row, rowIndex) => (
                                 <Tr key={rowIndex} className="even:bg-gray-50">
-                                    {columns.map((column) => (
+                                    {allColumns.map((column) => (
                                         <Td
                                             key={column.accessorKey}
                                             className="px-6 py-4 whitespace-nowrap text-sm text-gray-900"
@@ -199,7 +254,7 @@ export default function DataTable({
                             ))
                         ) : (
                             <Tr>
-                                <Td colSpan={columns.length} textAlign="center" py={10}>
+                                <Td colSpan={allColumns.length} textAlign="center" py={10}>
                                     No results found.
                                 </Td>
                             </Tr>

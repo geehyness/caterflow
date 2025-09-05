@@ -6,17 +6,23 @@ import { logSanityInteraction } from '@/lib/sanityLogger';
 export async function GET() {
     try {
         const query = groq`*[_type == "GoodsReceipt"] | order(receiptDate desc) {
-      _id, receiptNumber, receiptDate, status, notes,
-      "purchaseOrder": purchaseOrder->{poNumber},
-      "receivingBin": receivingBin->{name},
-      "items": receivedItems[]{
-        "stockItem": stockItem->{name, sku},
-        receivedQuantity,
-        batchNumber,
-        expiryDate,
-        condition
-      }
-    }`;
+            _id,
+            receiptNumber,
+            receiptDate,
+            status,
+            notes,
+            "purchaseOrder": purchaseOrder->{_id, poNumber},
+            "receivingBin": receivingBin->{name},
+            "items": receivedItems[] {
+                "stockItem": stockItem->{name, sku, unitOfMeasure, _id},
+                orderedQuantity,
+                receivedQuantity,
+                batchNumber,
+                expiryDate,
+                condition,
+                _key
+            }
+        }`;
 
         const goodsReceipts = await client.fetch(query);
         return NextResponse.json(goodsReceipts);
@@ -41,15 +47,26 @@ export async function POST(request: Request) {
 
         const goodsReceipt = await writeClient.create({
             _type: 'GoodsReceipt',
-            ...body,
-            status: body.status || 'draft',
-            receiptDate: body.receiptDate || new Date().toISOString().split('T')[0],
-            receivedItems: body.items || [],
+            receiptNumber: body.receiptNumber,
+            receiptDate: body.receiptDate,
+            purchaseOrder: { _ref: body.purchaseOrder, _type: 'reference' },
+            receivingBin: { _ref: body.receivingBin, _type: 'reference' },
+            status: body.status,
+            notes: body.notes,
+            receivedItems: body.items.map((item: any) => ({
+                _type: 'ReceivedItem',
+                stockItem: { _ref: item.stockItem, _type: 'reference' },
+                orderedQuantity: item.orderedQuantity,
+                receivedQuantity: item.receivedQuantity,
+                batchNumber: item.batchNumber,
+                expiryDate: item.expiryDate,
+                condition: item.condition,
+            })),
         });
 
         await logSanityInteraction(
             'create',
-            `Created goods receipt: ${body.receiptNumber}`,
+            `Created new goods receipt: ${goodsReceipt.receiptNumber}`,
             'GoodsReceipt',
             goodsReceipt._id,
             'system',
@@ -71,11 +88,29 @@ export async function PATCH(request: Request) {
         const body = await request.json();
         const { _id, ...updateData } = body;
 
+        if (!_id) {
+            return NextResponse.json(
+                { error: 'Goods receipt ID is required' },
+                { status: 400 }
+            );
+        }
+
         const goodsReceipt = await writeClient
             .patch(_id)
             .set({
                 ...updateData,
-                receivedItems: updateData.items || [],
+                purchaseOrder: updateData.purchaseOrder ? { _ref: updateData.purchaseOrder, _type: 'reference' } : undefined,
+                receivingBin: updateData.receivingBin ? { _ref: updateData.receivingBin, _type: 'reference' } : undefined,
+                receivedItems: updateData.items ? updateData.items.map((item: any) => ({
+                    _type: 'ReceivedItem',
+                    _key: item._key,
+                    stockItem: { _ref: item.stockItem, _type: 'reference' },
+                    orderedQuantity: item.orderedQuantity,
+                    receivedQuantity: item.receivedQuantity,
+                    batchNumber: item.batchNumber,
+                    expiryDate: item.expiryDate,
+                    condition: item.condition,
+                })) : undefined,
             })
             .commit();
 

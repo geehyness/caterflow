@@ -1,3 +1,4 @@
+// app/api/stock-items/route.ts
 import { NextResponse } from 'next/server';
 import { client } from '@/lib/sanity';
 import { groq } from 'next-sanity';
@@ -8,11 +9,16 @@ export async function GET(request: Request) {
         const search = searchParams.get('search') || '';
 
         const query = groq`*[_type == "StockItem" && (name match $search || sku match $search)] {
-      _id,
-      name,
-      sku,
-      unitOfMeasure
-    } | order(name asc) [0..19]`;
+            _id,
+            name,
+            sku,
+            unitOfMeasure,
+            unitPrice,
+            category->{
+                _id,
+                title
+            }
+        } | order(name asc)`;
 
         const stockItems = await client.fetch(query, { search: `${search}*` });
         return NextResponse.json(stockItems);

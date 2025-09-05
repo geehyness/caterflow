@@ -130,6 +130,13 @@ export default defineType({
             rows: 3,
         }),
         defineField({
+            name: 'unitPrice',
+            title: 'Unit Price',
+            type: 'number',
+            validation: (Rule) => Rule.required().min(0),
+            description: 'Price per unit.',
+        }),
+        defineField({
             name: 'suppliers',
             title: 'Suppliers',
             type: 'array',
@@ -183,13 +190,18 @@ export default defineType({
             title: 'name',
             subtitle: 'sku',
             media: 'imageUrl',
-            suppliers: 'suppliers[].name',
+            // 'suppliers' is not a field in the document, it's an array of references
+            // The correct way to select properties from referenced documents is to dot-walk
+            // e.g., 'suppliers.0.name' to get the name of the first supplier.
+            // However, it's not possible to select a list of properties directly like `suppliers[].name` in the select clause.
+            // You'd need to fetch them in a separate query if you want them.
+            // The following will select the reference to suppliers
+            suppliers: 'suppliers',
         },
         prepare(selection) {
             const { title, subtitle, media, suppliers } = selection;
-            const supplierList = suppliers && suppliers.length > 0
-                ? `Suppliers: ${suppliers.join(', ')}`
-                : 'No suppliers';
+            const supplierNames = suppliers?.map(supplier => supplier.name).join(', ') || 'No suppliers';
+            const supplierList = `Suppliers: ${supplierNames}`;
 
             return {
                 title: title,

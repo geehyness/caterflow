@@ -1,16 +1,19 @@
+// src/components/Sidebar.tsx
 'use client'
 
-import React from 'react';
+import React, { useState } from 'react';
 import {
-    Box, Flex, Heading, Button, Stack, useColorMode, useColorModeValue, IconButton, Link as ChakraLink, Text, useTheme, Tooltip, Icon, Divider, Spinner
+    Box, Flex, Heading, Button, Stack, useColorMode, useColorModeValue, IconButton, Link as ChakraLink, Text, useTheme, Tooltip, Icon, Divider, Spinner, Collapse,
+    HStack, // ADDED
 } from '@chakra-ui/react';
 import { MoonIcon, SunIcon } from '@chakra-ui/icons';
 import NextLink from 'next/link';
 import Image from 'next/image';
 import { useRouter, usePathname } from 'next/navigation';
-import { FiLogOut, FiBarChart2, FiBox, FiMapPin, FiTruck, FiUsers, FiSettings, FiBell } from 'react-icons/fi';
+import { FiLogOut, FiBarChart2, FiBox, FiMapPin, FiTruck, FiUsers, FiSettings, FiBell, FiClock, FiActivity, FiChevronDown, FiChevronUp } from 'react-icons/fi';
 import { useAuth } from '@/context/AuthContext';
-import { useLoading } from '@/context/LoadingContext'; // Add this import
+import { useLoading } from '@/context/LoadingContext';
+import { FaCheckCircle } from 'react-icons/fa';
 
 interface SidebarProps {
     appName?: string;
@@ -22,162 +25,212 @@ export function Sidebar({ appName = 'Caterflow' }: SidebarProps) {
     const router = useRouter();
     const pathname = usePathname();
     const { isAuthenticated, logout, userRole, isAuthReady } = useAuth();
+    const [expandedGroups, setExpandedGroups] = useState<string[]>(['Main', 'Operations', 'Admin']);
 
     const sidebarBg = useColorModeValue(theme.colors.neutral.light['bg-secondary'], theme.colors.neutral.dark['bg']);
-    const activeBg = useColorModeValue(theme.colors.brand['100'], theme.colors.brand['700']);
-    const borderColor = useColorModeValue(theme.colors.neutral.light['border-color'], theme.colors.neutral.dark['border-color']);
-    const iconColor = useColorModeValue(theme.colors.neutral.light['text-header'], theme.colors.neutral.dark['text-header']);
-    const { setLoading } = useLoading(); // Add this
+    const activeBg = useColorModeValue('neutral.light.bg-brand-highlight', 'neutral.dark.bg-brand-highlight');
+    const linkColor = useColorModeValue('gray.600', 'gray.300');
+    const activeLinkColor = useColorModeValue('brand.500', 'brand.300');
+    const groupHeaderColor = useColorModeValue('gray.500', 'gray.400');
+    const borderColor = useColorModeValue('gray.200', 'gray.700');
+    const { setLoading, isLoading } = useLoading();
 
-    // Define menu items with roles and groups
     const menuGroups = [
         {
-            heading: 'Main',
+            groupName: 'Main',
             items: [
-                { label: 'Dashboard', href: '/', icon: FiBarChart2, roles: ['admin', 'siteManager', 'stockController', 'dispatchStaff', 'auditor'] },
-                { label: 'Stock Items', href: '/stock-items', icon: FiBox, roles: ['admin', 'siteManager', 'stockController', 'auditor'] },
-                { label: 'Locations', href: '/locations', icon: FiMapPin, roles: ['admin', 'siteManager', 'auditor'] },
-            ],
+                {
+                    label: 'Dashboard',
+                    href: '/',
+                    icon: FiBarChart2,
+                    roles: ['admin', 'siteManager', 'auditor', 'user']
+                },
+                {
+                    label: 'Approvals',
+                    href: '/approvals',
+                    icon: FaCheckCircle,
+                    roles: ['admin', 'siteManager', 'auditor']
+                },
+                {
+                    label: 'Actions',
+                    href: '/actions',
+                    icon: FiClock,
+                    roles: ['admin', 'siteManager', 'user']
+                },
+                {
+                    label: 'Activity Log',
+                    href: '/activity',
+                    icon: FiActivity,
+                    roles: ['admin', 'siteManager', 'auditor', 'user']
+                },
+            ]
         },
         {
-            heading: 'Operations',
+            groupName: 'Operations',
             items: [
-                { label: 'Purchases', href: '/operations/purchases', icon: FiTruck, roles: ['admin', 'siteManager', 'auditor'] },
-                { label: 'Receipts', href: '/operations/receipts', icon: FiTruck, roles: ['admin', 'siteManager', 'auditor'] },
-                { label: 'Dispatches', href: '/operations/dispatches', icon: FiTruck, roles: ['admin', 'siteManager', 'dispatchStaff', 'auditor'] },
-                { label: 'Transfers', href: '/operations/transfers', icon: FiTruck, roles: ['admin', 'siteManager', 'stockController', 'dispatchStaff', 'auditor'] },
-                { label: 'Adjustments', href: '/operations/adjustments', icon: FiBox, roles: ['admin', 'siteManager', 'stockController', 'auditor'] },
-                { label: 'Counts', href: '/operations/counts', icon: FiBox, roles: ['admin', 'siteManager', 'stockController', 'auditor'] },
-            ],
+                {
+                    label: 'Inventory',
+                    href: '/inventory',
+                    icon: FiBox,
+                    roles: ['admin', 'siteManager', 'user']
+                },
+                {
+                    label: 'Transfers',
+                    href: '/transfers',
+                    icon: FiTruck,
+                    roles: ['admin', 'siteManager']
+                },
+                {
+                    label: 'Sites',
+                    href: '/sites',
+                    icon: FiMapPin,
+                    roles: ['admin', 'siteManager', 'auditor']
+                },
+            ]
         },
         {
-            heading: 'Admin',
+            groupName: 'Admin',
             items: [
-                { label: 'Users', href: '/users', icon: FiUsers, roles: ['admin'] },
-                { label: 'Suppliers', href: '/suppliers', icon: FiTruck, roles: ['admin'] },
-                { label: 'Notifications', href: '/notifications', icon: FiBell, roles: ['admin'] },
-                { label: 'Settings', href: '/settings', icon: FiSettings, roles: ['admin'] },
-            ],
-        },
+                {
+                    label: 'Users',
+                    href: '/users',
+                    icon: FiUsers,
+                    roles: ['admin', 'siteManager']
+                },
+                {
+                    label: 'Settings',
+                    href: '/settings',
+                    icon: FiSettings,
+                    roles: ['admin']
+                },
+            ]
+        }
     ];
 
-    // Filter menu items based on the user's role
-    const filteredMenuGroups = userRole ? menuGroups
-        .map(group => ({
-            ...group,
-            items: group.items.filter(item => item.roles.includes(userRole)),
-        }))
-        .filter(group => group.items.length > 0)
-        : [];
+    const hasPermission = (roles: string[]) => {
+        return roles.includes(userRole as string);
+    };
 
-    if (!isAuthReady) {
-        return (
-            <Box
-                as="aside"
-                w="250px"
-                bg={sidebarBg}
-                borderRight="1px solid"
-                borderColor={borderColor}
-                position="fixed"
-                left="0"
-                top="0"
-                h="100vh"
-                p={4}
-                pt={6}
-                zIndex="sticky"
-                display={{ base: 'none', md: 'flex' }}
-                justifyContent="center"
-                alignItems="center"
-            >
-                <Spinner size="md" />
-            </Box>
+    const toggleGroup = (groupName: string) => {
+        setExpandedGroups(prev =>
+            prev.includes(groupName)
+                ? prev.filter(name => name !== groupName)
+                : [...prev, groupName]
         );
-    }
+    };
 
     return (
         <Box
             as="aside"
-            w="250px"
             bg={sidebarBg}
-            borderRight="1px solid"
+            borderRight="1px"
             borderColor={borderColor}
-            position="fixed"
-            left="0"
-            top="0"
+            w="280px"
             h="100vh"
             p={4}
-            pt={6}
-            zIndex="sticky"
+            position="fixed"
+            left={0}
+            top={0}
+            zIndex={10}
+            overflowY="auto"
+            display={{ base: 'none', lg: 'flex' }}
             flexDirection="column"
             justifyContent="space-between"
-            display={{ base: 'none', md: 'flex' }}
+            sx={{
+                '&::-webkit-scrollbar': {
+                    width: '8px',
+                },
+                '&::-webkit-scrollbar-track': {
+                    background: 'transparent',
+                },
+                '&::-webkit-scrollbar-thumb': {
+                    background: useColorModeValue('rgba(0, 0, 0, 0.2)', 'rgba(255, 255, 255, 0.2)'),
+                    borderRadius: '4px',
+                },
+            }}
         >
-            <Flex direction="column" alignItems="center">
-                {/* App Logo and Name */}
-                <Flex alignItems="center" mb={6} pr={2}>
-                    {/* White square container for the logo */}
-                    <Box
-                        bg="white"
-                        p={3}
-                        borderRadius="xl"
-                        boxShadow="md"
-                        display="flex"
-                        alignItems="center"
-                        justifyContent="center"
-                    >
-                        <Image
-                            src="/icons/icon-512x512.png"
-                            alt="Caterflow Logo"
-                            width={120}
-                            height={120}
-                        />
-                    </Box>
-                </Flex>
+            {/* Top Logo and Navigation */}
+            <Flex direction="column">
+                <HStack mb={6}>
+                    <Image src="/logo.svg" alt="Caterflow Logo" width={32} height={32} />
+                    <Heading as="h1" size="md" color={useColorModeValue('gray.800', 'white')}>
+                        {appName}
+                    </Heading>
+                </HStack>
 
-                {/* Menu Items */}
-                <Stack direction="column" spacing={2} w="full">
-                    {filteredMenuGroups.map((group, groupIndex) => (
-                        <Box key={group.heading} w="full">
-                            <Text
-                                fontSize="xs"
-                                fontWeight="bold"
-                                textTransform="uppercase"
-                                color="gray.500"
-                                mt={groupIndex > 0 ? 4 : 0}
-                                mb={2}
-                                pl={3}
-                            >
-                                {group.heading}
-                            </Text>
-                            {group.items.map((item) => (
-                                <NextLink key={item.href} href={item.href} passHref>
-                                    <ChakraLink
-                                        as={Button}
-                                        variant="ghost"
-                                        justifyContent="flex-start"
-                                        w="full"
-                                        leftIcon={<Icon as={item.icon} boxSize={5} />}
-                                        color={pathname === item.href ? theme.colors.brand['500'] : iconColor}
-                                        bg={pathname === item.href ? activeBg : 'transparent'}
-                                        _hover={{ bg: activeBg, color: theme.colors.brand['500'] }}
-                                        onClick={(e: { preventDefault: () => void; }) => {
-                                            e.preventDefault();
-                                            setLoading(true); // Add this line
-                                            router.push(item.href);
-                                        }}
+                <Stack spacing={4}>
+                    {menuGroups.map(group => {
+                        const hasVisibleItems = group.items.some(item => hasPermission(item.roles));
+                        if (!hasVisibleItems) {
+                            return null;
+                        }
+                        return (
+                            <Box key={group.groupName}>
+                                <Flex
+                                    as="button"
+                                    onClick={() => toggleGroup(group.groupName)}
+                                    w="full"
+                                    justifyContent="space-between"
+                                    alignItems="center"
+                                    py={1}
+                                    px={2}
+                                    mb={1}
+                                >
+                                    <Text
+                                        fontSize="xs"
+                                        fontWeight="bold"
+                                        color={groupHeaderColor}
+                                        textTransform="uppercase"
+                                        letterSpacing="wide"
                                     >
-                                        {item.label}
-                                    </ChakraLink>
-                                </NextLink>
-                            ))}
-                        </Box>
-                    ))}
+                                        {group.groupName}
+                                    </Text>
+                                    <Icon
+                                        as={expandedGroups.includes(group.groupName) ? FiChevronUp : FiChevronDown}
+                                        color={groupHeaderColor}
+                                    />
+                                </Flex>
+                                <Collapse in={expandedGroups.includes(group.groupName)} animateOpacity>
+                                    <Stack spacing={1}>
+                                        {group.items
+                                            .filter(item => hasPermission(item.roles))
+                                            .map(item => (
+                                                <NextLink key={item.href} href={item.href} passHref>
+                                                    <ChakraLink
+                                                        w="full"
+                                                        display="flex"
+                                                        alignItems="center"
+                                                        p={2}
+                                                        borderRadius="md"
+                                                        _hover={{
+                                                            bg: activeBg,
+                                                            color: 'brand.500',
+                                                        }}
+                                                        bg={pathname === item.href ? activeBg : 'transparent'}
+                                                        color={pathname === item.href ? activeLinkColor : linkColor}
+                                                        fontWeight={pathname === item.href ? 'bold' : 'normal'}
+                                                        onClick={() => {
+                                                            if (pathname !== item.href) {
+                                                                setLoading(true);
+                                                            }
+                                                        }}
+                                                    >
+                                                        <Icon as={item.icon} mr={3} />
+                                                        {item.label}
+                                                    </ChakraLink>
+                                                </NextLink>
+                                            ))}
+                                    </Stack>
+                                </Collapse>
+                            </Box>
+                        );
+                    })}
                 </Stack>
             </Flex>
 
-            {/* Bottom controls */}
-            <Flex direction="column" alignItems="flex-start">
-                <Divider mb={4} />
+            {/* Bottom Fixed Section */}
+            <Box>
+                <Divider my={4} />
                 <Button
                     w="full"
                     variant="ghost"
@@ -198,7 +251,7 @@ export function Sidebar({ appName = 'Caterflow' }: SidebarProps) {
                         Logout
                     </Button>
                 )}
-            </Flex>
+            </Box>
         </Box>
     );
 }

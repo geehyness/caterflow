@@ -21,7 +21,7 @@ import {
 import { FiPlus, FiSearch, FiEdit, FiTrash2, FiEye } from 'react-icons/fi';
 import DataTable from '@/components/DataTable';
 import { useAuth } from '@/context/AuthContext';
-import GoodsReceiptModal from '@/components/GoodsReceiptModal';
+import GoodsReceiptModal from '@/app/actions/GoodsReceiptModal';
 
 // Update the interface to match what GoodsReceiptModal expects
 interface ReceivedItem {

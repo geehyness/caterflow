@@ -1,18 +1,14 @@
-// schemas/dispatchLog.js
+// schemas/dispatchLog.ts
 import { defineType, defineField } from 'sanity';
 import { createClient } from '@sanity/client';
 
-// NOTE: For Sanity Studio v3, it is recommended to create a separate client instance.
-// For example, in a file like 'sanityClient.js'
-// You will need to replace the placeholders below with your actual project details.
 const client = createClient({
-    projectId: 'v3sfsmld', // Replace with your Sanity Project ID
-    dataset: 'production', // Replace with your dataset (e.g., 'production')
-    apiVersion: '2025-08-20', // Use a recent date, like today's date
+    projectId: 'v3sfsmld',
+    dataset: 'production',
+    apiVersion: '2025-08-20',
     useCdn: true,
 });
 
-// Async helper function to check for unique dispatch numbers
 const isUniqueDispatchNumber = async (dispatchNumber, context) => {
     const { document, getClient } = context;
     if (!dispatchNumber) {
@@ -53,7 +49,7 @@ export default defineType({
                     }
                     return true;
                 }),
-            readOnly: ({ document }) => !!document.dispatchNumber, // Make field read-only after creation
+            readOnly: ({ document }) => !!document.dispatchNumber,
             description: 'Unique Dispatch Log identifier.',
             initialValue: async () => {
                 const today = new Date().toISOString().slice(0, 10);
@@ -118,6 +114,27 @@ export default defineType({
             validation: (Rule) => Rule.required().min(1),
         }),
         defineField({
+            name: 'attachments',
+            title: 'Attachments',
+            type: 'array',
+            of: [{ type: 'reference', to: [{ type: 'FileAttachment' }] }],
+            description: 'Related documents like delivery notes, proof of delivery, etc.',
+        }),
+        defineField({
+            name: 'evidenceStatus',
+            title: 'Evidence Status',
+            type: 'string',
+            options: {
+                list: [
+                    { title: 'Pending', value: 'pending' },
+                    { title: 'Partial', value: 'partial' },
+                    { title: 'Complete', value: 'complete' },
+                ],
+            },
+            initialValue: 'pending',
+            validation: (Rule) => Rule.required(),
+        }),
+        defineField({
             name: 'notes',
             title: 'Notes',
             type: 'text',
@@ -130,30 +147,31 @@ export default defineType({
             date: 'dispatchDate',
             source: 'sourceBin.name',
             destination: 'destinationSite.name',
+            evidenceStatus: 'evidenceStatus',
         },
-        prepare({ title, date, source, destination }) {
+        prepare({ title, date, source, destination, evidenceStatus }) {
+            const statusText = evidenceStatus ? ` | Evidence: ${evidenceStatus}` : '';
             return {
                 title: `Dispatch: ${title}`,
-                subtitle: `${new Date(date).toLocaleDateString()} | From: ${source} To: ${destination}`,
+                subtitle: `${new Date(date).toLocaleDateString()} | From: ${source} To: ${destination}${statusText}`,
             };
         },
-        // --- ADDED ORDERINGS ---
-        orderings: [
-            {
-                name: 'newest',
-                title: 'Newest First',
-                by: [{ field: 'dispatchDate', direction: 'desc' }],
-            },
-            {
-                name: 'oldest',
-                title: 'Oldest First',
-                by: [{ field: 'dispatchDate', direction: 'asc' }],
-            },
-            {
-                name: 'dispatchNumberAsc',
-                title: 'Dispatch Number (Ascending)',
-                by: [{ field: 'dispatchNumber', direction: 'asc' }],
-            },
-        ],
     },
+    orderings: [
+        {
+            name: 'newest',
+            title: 'Newest First',
+            by: [{ field: 'dispatchDate', direction: 'desc' }],
+        },
+        {
+            name: 'oldest',
+            title: 'Oldest First',
+            by: [{ field: 'dispatchDate', direction: 'asc' }],
+        },
+        {
+            name: 'dispatchNumberAsc',
+            title: 'Dispatch Number (Ascending)',
+            by: [{ field: 'dispatchNumber', direction: 'asc' }],
+        },
+    ],
 });

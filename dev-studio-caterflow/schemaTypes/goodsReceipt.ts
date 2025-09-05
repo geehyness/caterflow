@@ -1,16 +1,14 @@
-// schemas/goodsReceipt.js
+// schemas/goodsReceipt.ts
 import { defineType, defineField } from 'sanity';
 import { createClient } from '@sanity/client';
 
-// NOTE: You will need to replace the placeholders below with your actual project details.
 const client = createClient({
-    projectId: 'v3sfsmld', // Replace with your Sanity Project ID
-    dataset: 'production', // Replace with your dataset (e.g., 'production')
-    apiVersion: '2025-08-20', // Use a recent date, like today's date
+    projectId: 'v3sfsmld',
+    dataset: 'production',
+    apiVersion: '2025-08-20',
     useCdn: true,
 });
 
-// Async helper function to check for unique receipt numbers
 const isUniqueReceiptNumber = async (receiptNumber, context) => {
     const { document, getClient } = context;
     if (!receiptNumber) {
@@ -115,6 +113,27 @@ export default defineType({
             validation: (Rule) => Rule.required().min(1),
         }),
         defineField({
+            name: 'attachments',
+            title: 'Attachments',
+            type: 'array',
+            of: [{ type: 'reference', to: [{ type: 'FileAttachment' }] }],
+            description: 'Related documents like delivery notes, quality checks, etc.',
+        }),
+        defineField({
+            name: 'evidenceStatus',
+            title: 'Evidence Status',
+            type: 'string',
+            options: {
+                list: [
+                    { title: 'Pending', value: 'pending' },
+                    { title: 'Partial', value: 'partial' },
+                    { title: 'Complete', value: 'complete' },
+                ],
+            },
+            initialValue: 'pending',
+            validation: (Rule) => Rule.required(),
+        }),
+        defineField({
             name: 'notes',
             title: 'Notes',
             type: 'text',
@@ -127,30 +146,32 @@ export default defineType({
             date: 'receiptDate',
             po: 'purchaseOrder.poNumber',
             bin: 'receivingBin.name',
+            evidenceStatus: 'evidenceStatus',
         },
-        prepare({ title, date, po, bin }) {
+        prepare({ title, date, po, bin, evidenceStatus }) {
             const poText = po ? ` (PO: ${po})` : '';
+            const statusText = evidenceStatus ? ` | Evidence: ${evidenceStatus}` : '';
             return {
                 title: `Receipt: ${title}`,
-                subtitle: `${new Date(date).toLocaleDateString()} | To: ${bin}${poText}`,
+                subtitle: `${new Date(date).toLocaleDateString()} | To: ${bin}${poText}${statusText}`,
             };
         },
-        orderings: [
-            {
-                name: 'newest',
-                title: 'Newest First',
-                by: [{ field: 'receiptDate', direction: 'desc' }],
-            },
-            {
-                name: 'oldest',
-                title: 'Oldest First',
-                by: [{ field: 'receiptDate', direction: 'asc' }],
-            },
-            {
-                name: 'receiptNumberAsc',
-                title: 'Receipt Number (Ascending)',
-                by: [{ field: 'receiptNumber', direction: 'asc' }],
-            },
-        ],
     },
+    orderings: [
+        {
+            name: 'newest',
+            title: 'Newest First',
+            by: [{ field: 'receiptDate', direction: 'desc' }],
+        },
+        {
+            name: 'oldest',
+            title: 'Oldest First',
+            by: [{ field: 'receiptDate', direction: 'asc' }],
+        },
+        {
+            name: 'receiptNumberAsc',
+            title: 'Receipt Number (Ascending)',
+            by: [{ field: 'receiptNumber', direction: 'asc' }],
+        },
+    ],
 });

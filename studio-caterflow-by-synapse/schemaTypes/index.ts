@@ -1,7 +1,7 @@
-// schemas/index.js (or schema.js)
+// schemas/index.ts
 import stockItem from './stockItem';
 import category from './category';
-import site from './site'; // No change needed here for import path or variable name
+import site from './site';
 import bin from './bin';
 import supplier from './supplier';
 import purchaseOrder from './purchaseOrder';
@@ -12,6 +12,7 @@ import stockAdjustment from './stockAdjustment';
 import inventoryCount from './inventoryCount';
 import appUser from './appUser';
 import notificationPreference from './notificationPreference';
+import fileAttachment from './fileAttachment';
 
 // Nested object schemas
 import orderedItem from './orderedItem';
@@ -21,12 +22,11 @@ import adjustedItem from './adjustedItem';
 import countedItem from './countedItem';
 import transferredItem from './transferredItem';
 
-
 export const schemaTypes = [
     // Document types
     stockItem,
     category,
-    site, // This refers to the imported 'site' object, which internally has name: 'Site'
+    site,
     bin,
     supplier,
     purchaseOrder,
@@ -37,8 +37,9 @@ export const schemaTypes = [
     inventoryCount,
     appUser,
     notificationPreference,
+    fileAttachment,
 
-    // Nested object types (if defined as separate files)
+    // Nested object types
     orderedItem,
     receivedItem,
     dispatchedItem,

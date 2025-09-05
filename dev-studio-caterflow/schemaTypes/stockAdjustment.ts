@@ -1,16 +1,14 @@
-// schemas/stockAdjustment.js
+// schemas/stockAdjustment.ts
 import { defineType, defineField } from 'sanity';
 import { createClient } from '@sanity/client';
 
-// NOTE: You will need to replace the placeholders below with your actual project details.
 const client = createClient({
-    projectId: 'v3sfsmld', // Replace with your Sanity Project ID
-    dataset: 'production', // Replace with your dataset (e.g., 'production')
-    apiVersion: '2025-08-20', // Use a recent date, like today's date
+    projectId: 'v3sfsmld',
+    dataset: 'production',
+    apiVersion: '2025-08-20',
     useCdn: true,
 });
 
-// Async helper function to check for unique adjustment numbers
 const isUniqueAdjustmentNumber = async (adjustmentNumber, context) => {
     const { document, getClient } = context;
     if (!adjustmentNumber) {
@@ -125,6 +123,27 @@ export default defineType({
             validation: (Rule) => Rule.required().min(1),
         }),
         defineField({
+            name: 'attachments',
+            title: 'Attachments',
+            type: 'array',
+            of: [{ type: 'reference', to: [{ type: 'FileAttachment' }] }],
+            description: 'Related documents like photos, investigation reports, etc.',
+        }),
+        defineField({
+            name: 'evidenceStatus',
+            title: 'Evidence Status',
+            type: 'string',
+            options: {
+                list: [
+                    { title: 'Pending', value: 'pending' },
+                    { title: 'Partial', value: 'partial' },
+                    { title: 'Complete', value: 'complete' },
+                ],
+            },
+            initialValue: 'pending',
+            validation: (Rule) => Rule.required(),
+        }),
+        defineField({
             name: 'notes',
             title: 'Notes',
             type: 'text',
@@ -137,34 +156,36 @@ export default defineType({
             date: 'adjustmentDate',
             type: 'adjustmentType',
             bin: 'bin.name',
+            evidenceStatus: 'evidenceStatus',
         },
-        prepare({ title, date, type, bin }) {
+        prepare({ title, date, type, bin, evidenceStatus }) {
+            const statusText = evidenceStatus ? ` | Evidence: ${evidenceStatus}` : '';
             return {
                 title: `Adjustment: ${title}`,
-                subtitle: `${new Date(date).toLocaleDateString()} | Type: ${type} | Bin: ${bin}`,
+                subtitle: `${new Date(date).toLocaleDateString()} | Type: ${type} | Bin: ${bin}${statusText}`,
             };
         },
-        orderings: [
-            {
-                name: 'newest',
-                title: 'Newest First',
-                by: [{ field: 'adjustmentDate', direction: 'desc' }],
-            },
-            {
-                name: 'oldest',
-                title: 'Oldest First',
-                by: [{ field: 'adjustmentDate', direction: 'asc' }],
-            },
-            {
-                name: 'adjustmentNumberAsc',
-                title: 'Adjustment Number (Ascending)',
-                by: [{ field: 'adjustmentNumber', direction: 'asc' }],
-            },
-            {
-                name: 'type',
-                title: 'Adjustment Type',
-                by: [{ field: 'adjustmentType', direction: 'asc' }],
-            },
-        ],
     },
+    orderings: [
+        {
+            name: 'newest',
+            title: 'Newest First',
+            by: [{ field: 'adjustmentDate', direction: 'desc' }],
+        },
+        {
+            name: 'oldest',
+            title: 'Oldest First',
+            by: [{ field: 'adjustmentDate', direction: 'asc' }],
+        },
+        {
+            name: 'adjustmentNumberAsc',
+            title: 'Adjustment Number (Ascending)',
+            by: [{ field: 'adjustmentNumber', direction: 'asc' }],
+        },
+        {
+            name: 'type',
+            title: 'Adjustment Type',
+            by: [{ field: 'adjustmentType', direction: 'asc' }],
+        },
+    ],
 });

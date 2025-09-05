@@ -28,50 +28,26 @@ interface Bin {
     };
 }
 
-interface BinModalProps {
-    isOpen: boolean;
-    onClose: () => void;
-    bin: Bin | null;
-    onSave: () => void;
-}
-
 interface Site {
     _id: string;
     name: string;
 }
 
-export default function BinModal({ isOpen, onClose, bin, onSave }: BinModalProps) {
+interface BinModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    bin: Bin | null;
+    onSave: () => void;
+    sites: Site[]; // Add sites as a prop
+}
+
+export default function BinModal({ isOpen, onClose, bin, onSave, sites }: BinModalProps) {
     const [name, setName] = useState('');
     const [binType, setBinType] = useState('');
     const [locationDescription, setLocationDescription] = useState('');
     const [siteId, setSiteId] = useState('');
     const [loading, setLoading] = useState(false);
-    const [sites, setSites] = useState<Site[]>([]);
     const toast = useToast();
-
-    useEffect(() => {
-        const fetchSites = async () => {
-            try {
-                const response = await fetch('/api/sites');
-                if (response.ok) {
-                    const data = await response.json();
-                    setSites(data);
-                } else {
-                    throw new Error('Failed to fetch sites');
-                }
-            } catch (error) {
-                console.error('Error fetching sites:', error);
-                toast({
-                    title: 'Error',
-                    description: 'Failed to load sites',
-                    status: 'error',
-                    duration: 5000,
-                    isClosable: true,
-                });
-            }
-        };
-        fetchSites();
-    }, [toast]);
 
     useEffect(() => {
         if (bin) {
@@ -80,12 +56,15 @@ export default function BinModal({ isOpen, onClose, bin, onSave }: BinModalProps
             setLocationDescription(bin.locationDescription || '');
             setSiteId(bin.site?._id || '');
         } else {
-            setName('');
-            setBinType('');
-            setLocationDescription('');
-            setSiteId('');
+            // Reset form when modal is closed
+            if (!isOpen) {
+                setName('');
+                setBinType('');
+                setLocationDescription('');
+                setSiteId('');
+            }
         }
-    }, [bin]);
+    }, [bin, isOpen]);
 
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -195,7 +174,7 @@ export default function BinModal({ isOpen, onClose, bin, onSave }: BinModalProps
                                     ))}
                                 </Select>
                             ) : (
-                                <Text>Loading sites...</Text>
+                                <Text>No sites available. Please add a site first.</Text>
                             )}
                         </FormControl>
                     </ModalBody>

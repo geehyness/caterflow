@@ -1,12 +1,12 @@
-// schemas/purchaseOrder.js
+// schemas/purchaseOrder.ts
 import { defineType, defineField } from 'sanity';
 import { createClient } from '@sanity/client';
 
 // NOTE: You will need to replace the placeholders below with your actual project details.
 const client = createClient({
-    projectId: 'v3sfsmld', // Replace with your Sanity Project ID
-    dataset: 'production', // Replace with your dataset (e.g., 'production')
-    apiVersion: '2025-08-20', // Use a recent date, like today's date
+    projectId: 'v3sfsmld',
+    dataset: 'production',
+    apiVersion: '2025-08-20',
     useCdn: true,
 });
 
@@ -100,9 +100,10 @@ export default defineType({
                 list: [
                     { title: 'Draft', value: 'draft' },
                     { title: 'Pending Approval', value: 'pending-approval' },
-                    { title: 'Ordered', value: 'ordered' },
-                    { title: 'Partially Received', value: 'partiallyReceived' },
-                    { title: 'Received', value: 'received' },
+                    { title: 'Approved', value: 'approved' },
+                    { title: 'Processing', value: 'processing' },
+                    { title: 'Partially Received', value: 'partially-received' },
+                    { title: 'Complete', value: 'complete' },
                     { title: 'Cancelled', value: 'cancelled' },
                 ],
             },
@@ -139,6 +140,40 @@ export default defineType({
             validation: (Rule) => Rule.required(),
         }),
         defineField({
+            name: 'approvedBy',
+            title: 'Approved By',
+            type: 'reference',
+            to: [{ type: 'AppUser' }],
+            hidden: ({ document }) => document?.status !== 'approved' && document?.status !== 'complete',
+        }),
+        defineField({
+            name: 'approvedAt',
+            title: 'Approved At',
+            type: 'datetime',
+            hidden: ({ document }) => document?.status !== 'approved' && document?.status !== 'complete',
+        }),
+        defineField({
+            name: 'attachments',
+            title: 'Attachments',
+            type: 'array',
+            of: [{ type: 'reference', to: [{ type: 'FileAttachment' }] }],
+            description: 'Related documents like invoices, contracts, etc.',
+        }),
+        defineField({
+            name: 'evidenceStatus',
+            title: 'Evidence Status',
+            type: 'string',
+            options: {
+                list: [
+                    { title: 'Pending', value: 'pending' },
+                    { title: 'Partial', value: 'partial' },
+                    { title: 'Complete', value: 'complete' },
+                ],
+            },
+            initialValue: 'pending',
+            validation: (Rule) => Rule.required(),
+        }),
+        defineField({
             name: 'notes',
             title: 'Notes',
             type: 'text',
@@ -158,33 +193,32 @@ export default defineType({
                 subtitle: `${subtitle} | ${new Date(date).toLocaleDateString()} | Status: ${status}`,
             };
         },
-        // --- ADDED ORDERINGS ---
-        orderings: [
-            {
-                name: 'newest',
-                title: 'Newest First',
-                by: [{ field: 'orderDate', direction: 'desc' }],
-            },
-            {
-                name: 'oldest',
-                title: 'Oldest First',
-                by: [{ field: 'orderDate', direction: 'asc' }],
-            },
-            {
-                name: 'poNumberAsc',
-                title: 'PO Number (Ascending)',
-                by: [{ field: 'poNumber', direction: 'asc' }],
-            },
-            {
-                name: 'status',
-                title: 'Status',
-                by: [{ field: 'status', direction: 'asc' }],
-            },
-            {
-                name: 'totalAmountDesc',
-                title: 'Total Amount (High to Low)',
-                by: [{ field: 'totalAmount', direction: 'desc' }],
-            },
-        ],
     },
+    orderings: [
+        {
+            name: 'newest',
+            title: 'Newest First',
+            by: [{ field: 'orderDate', direction: 'desc' }],
+        },
+        {
+            name: 'oldest',
+            title: 'Oldest First',
+            by: [{ field: 'orderDate', direction: 'asc' }],
+        },
+        {
+            name: 'poNumberAsc',
+            title: 'PO Number (Ascending)',
+            by: [{ field: 'poNumber', direction: 'asc' }],
+        },
+        {
+            name: 'status',
+            title: 'Status',
+            by: [{ field: 'status', direction: 'asc' }],
+        },
+        {
+            name: 'totalAmountDesc',
+            title: 'Total Amount (High to Low)',
+            by: [{ field: 'totalAmount', direction: 'desc' }],
+        },
+    ],
 });
