@@ -21,7 +21,7 @@ import {
 import { FiPlus, FiSearch, FiEdit, FiTrash2, FiEye } from 'react-icons/fi';
 import DataTable from '@/components/DataTable';
 import { useAuth } from '@/context/AuthContext';
-import PurchaseOrderModal from '@/components/PurchaseOrderModal';
+import CreatePurchaseOrderModal from './CreatePurchaseOrderModal';;
 
 // Update the interface to match what PurchaseOrderModal expects
 interface PurchaseOrderItem {
@@ -43,7 +43,7 @@ interface PurchaseOrder {
 export default function PurchasesPage() {
     const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
     const [filteredOrders, setFilteredOrders] = useState<PurchaseOrder[]>([]);
-    const [selectedOrder, setSelectedOrder] = useState<PurchaseOrder | null>(null);
+    //const [selectedOrder, setSelectedOrder] = useState<PurchaseOrder | null>(null);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const { isOpen, onOpen, onClose } = useDisclosure();
@@ -101,14 +101,13 @@ export default function PurchasesPage() {
     }, [purchaseOrders, searchTerm]);
 
     const handleAddOrder = () => {
-        setSelectedOrder(null);
         onOpen();
     };
 
-    const handleEditOrder = (order: PurchaseOrder) => {
+    {/*const handleEditOrder = (order: PurchaseOrder) => {
         setSelectedOrder(order);
         onOpen();
-    };
+    };*/}
 
     const handleViewOrder = (order: PurchaseOrder) => {
         // Navigate to detail page or open a view modal
@@ -176,16 +175,7 @@ export default function PurchasesPage() {
                         colorScheme="blue"
                         variant="ghost"
                         mr={2}
-                        onClick={() => handleViewOrder(row)}
-                    />
-                    <IconButton
-                        aria-label="Edit order"
-                        icon={<FiEdit />}
-                        size="sm"
-                        colorScheme="green"
-                        variant="ghost"
-                        mr={2}
-                        onClick={() => handleEditOrder(row)}
+                        onClick={() => console.log('View order:', row)}
                     />
                     <IconButton
                         aria-label="Delete order"
@@ -281,10 +271,9 @@ export default function PurchasesPage() {
                 </CardBody>
             </Card>
 
-            <PurchaseOrderModal
+            <CreatePurchaseOrderModal
                 isOpen={isOpen}
                 onClose={onClose}
-                order={selectedOrder}
                 onSave={handleSaveSuccess}
             />
         </Box>

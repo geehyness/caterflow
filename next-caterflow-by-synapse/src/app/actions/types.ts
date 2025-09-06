@@ -25,6 +25,7 @@ export interface PendingAction {
     status?: string;
     poNumber?: string;
     supplierName?: string;
+    orderedBy?: string; // Added this line
     orderedItems?: Array<{
         _key: string;
         stockItem: {
@@ -33,6 +34,30 @@ export interface PendingAction {
         orderedQuantity: number;
         unitPrice: number;
     }>;
+}
+
+// Add this to your types.ts file
+export interface PurchaseOrder {
+    _id: string;
+    poNumber?: string;
+    supplier?: {
+        name: string;
+    };
+    site?: {
+        name: string;
+    };
+    orderedItems?: Array<{
+        _key: string;
+        stockItem: {
+            _id: string;
+            name: string;
+            sku: string;
+            unitOfMeasure: string;
+        };
+        orderedQuantity: number;
+        unitPrice: number;
+    }>;
+    orderedBy?: string;
 }
 
 // Update the interface for the add item modal to match the API response

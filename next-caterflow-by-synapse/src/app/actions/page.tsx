@@ -70,6 +70,7 @@ interface PurchaseOrder {
     supplier?: { name: string };
     site?: { name: string };
     orderedItems?: any[];
+    orderedBy?: string; // Add this line
     // Add other relevant properties from your PurchaseOrder type if needed
 }
 
@@ -87,7 +88,7 @@ export default function ActionsPage() {
     const { isOpen: isApprovalModalOpen, onOpen: onApprovalModalOpen, onClose: onApprovalModalClose } = useDisclosure();
     const { isOpen: isGoodsReceiptModalOpen, onOpen: onGoodsReceiptModalOpen, onClose: onGoodsReceiptModalClose } = useDisclosure();
     const [selectedAction, setSelectedAction] = useState<PendingAction | null>(null);
-    const [selectedApproval, setSelectedApproval] = useState<PendingAction | null>(null);
+    const [selectedApproval, setSelectedApproval] = useState<PurchaseOrder | null>(null);
     const [poDetails, setPoDetails] = useState<PendingAction | null>(null);
     const [editedPrices, setEditedPrices] = useState<{ [key: string]: number | undefined }>({});
     const [editedQuantities, setEditedQuantities] = useState<{ [key: string]: number | undefined }>({});
@@ -100,6 +101,7 @@ export default function ActionsPage() {
     const [approvedPurchaseOrders, setApprovedPurchaseOrders] = useState<PurchaseOrder[]>([]);
     const [preSelectedPO, setPreSelectedPO] = useState<string | null>(null);
     const [loadingApprovedPOs, setLoadingApprovedPOs] = useState(false);
+
 
     const fetchActions = useCallback(async () => {
         setLoading(true);
@@ -640,18 +642,23 @@ export default function ActionsPage() {
                                                         </Button>
                                                     )
                                                 },
-                                                { accessorKey: 'poNumber', header: 'PO Number', isSortable: true },
                                                 {
-                                                    accessorKey: 'supplier.name',
-                                                    header: 'Supplier',
+                                                    accessorKey: 'poNumber',
+                                                    header: 'PO Number',
                                                     isSortable: true,
-                                                    cell: (row: any) => <Text>{row.supplier?.name}</Text>
+                                                    cell: (row: any) => <Text>{row.poNumber || 'N/A'}</Text>
                                                 },
                                                 {
-                                                    accessorKey: 'site.name',
+                                                    accessorKey: 'supplierName',
+                                                    header: 'Supplier',
+                                                    isSortable: true,
+                                                    cell: (row: any) => <Text>{row.supplier?.name || 'N/A'}</Text>
+                                                },
+                                                {
+                                                    accessorKey: 'siteName',
                                                     header: 'Site',
                                                     isSortable: true,
-                                                    cell: (row: any) => <Text>{row.site?.name}</Text>
+                                                    cell: (row: any) => <Text>{row.site?.name || 'N/A'}</Text>
                                                 },
                                                 {
                                                     accessorKey: 'orderedItems',
@@ -661,7 +668,7 @@ export default function ActionsPage() {
                                                         <Box>
                                                             {row.orderedItems?.slice(0, 2).map((item: any, index: number) => (
                                                                 <Text key={index} fontSize="sm">
-                                                                    {item.stockItem.name} (x{item.orderedQuantity})
+                                                                    {item.stockItem?.name || 'Unknown Item'} (x{item.orderedQuantity || 0})
                                                                 </Text>
                                                             ))}
                                                             {row.orderedItems?.length > 2 && (
@@ -669,11 +676,22 @@ export default function ActionsPage() {
                                                                     +{row.orderedItems.length - 2} more items
                                                                 </Text>
                                                             )}
+                                                            {(!row.orderedItems || row.orderedItems.length === 0) && (
+                                                                <Text fontSize="sm" color="gray.500">
+                                                                    No items
+                                                                </Text>
+                                                            )}
                                                         </Box>
                                                     )
                                                 }
                                             ]}
-                                            data={approvedPurchaseOrders}
+                                            data={approvedPurchaseOrders.map(po => ({
+                                                _id: po._id,
+                                                poNumber: po.poNumber || '',
+                                                supplier: po.supplier || { name: '' },
+                                                site: po.site || { name: '' },
+                                                orderedItems: po.orderedItems || []
+                                            }))}
                                             loading={loadingApprovedPOs}
                                             onActionClick={() => { }}
                                             hideStatusColumn={true}
@@ -872,7 +890,7 @@ export default function ActionsPage() {
                     <ModalHeader>
                         <HStack spacing={2} alignItems="center">
                             <Icon as={FaBoxes} color="blue.500" />
-                            <Text>{selectedApproval?.title} Details</Text>
+                            <Text>{selectedApproval?.poNumber} Details</Text>
                         </HStack>
                     </ModalHeader>
                     <ModalBody>
@@ -882,15 +900,15 @@ export default function ActionsPage() {
                                     <Text fontWeight="bold">Reference Number:</Text>
                                     <Text>{selectedApproval?.poNumber}</Text>
                                 </Box>
-                                {selectedApproval?.supplierName && (
+                                {selectedApproval?.supplier?.name && (
                                     <Box>
                                         <Text fontWeight="bold">Supplier:</Text>
-                                        <Text>{selectedApproval.supplierName}</Text>
+                                        <Text>{selectedApproval.supplier?.name}</Text>
                                     </Box>
                                 )}
                                 <Box>
                                     <Text fontWeight="bold">Site:</Text>
-                                    <Text>{selectedApproval?.siteName}</Text>
+                                    <Text>{selectedApproval?.site?.name}</Text>
                                 </Box>
                                 {selectedApproval?.orderedBy && (
                                     <Box>

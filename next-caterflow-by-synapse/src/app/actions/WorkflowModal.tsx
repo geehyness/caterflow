@@ -92,14 +92,14 @@ export default function WorkflowModal({ isOpen, onClose, selectedAction, onCompl
                     <Button variant="ghost" mr={3} onClick={onClose}>
                         Close
                     </Button>
-                    {isActionComplete && (
+                    {/*{isActionComplete && (
                         <Button
                             colorScheme="green"
                             onClick={() => selectedAction && onCompleteAction(selectedAction)}
                         >
                             Mark as Complete
                         </Button>
-                    )}
+                    )}*/}
                 </ModalFooter>
             </ModalContent>
         </Modal>

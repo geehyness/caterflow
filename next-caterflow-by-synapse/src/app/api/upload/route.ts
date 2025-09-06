@@ -1,7 +1,6 @@
 // src/app/api/upload/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { writeClient } from '@/lib/sanity';
-import { getServerSession } from 'next-auth/next';
 
 // Maximum file size (10MB)
 const MAX_FILE_SIZE = 10 * 1024 * 1024;

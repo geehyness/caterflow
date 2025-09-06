@@ -37,8 +37,11 @@ import {
     Flex,
     useColorModeValue,
     Checkbox,
+    Box,
 } from '@chakra-ui/react';
 import { FiCheck, FiX } from 'react-icons/fi';
+
+import { PurchaseOrder } from './types';
 import DataTable, { Column } from './ReceiptsTable';
 
 // Define the interface for an item within the goods receipt
@@ -65,29 +68,6 @@ interface GoodsReceipt {
     items: ReceivedItem[];
     status: 'draft' | 'partial' | 'completed';
     notes?: string;
-}
-
-// Define the interface for a purchase order, matching the data from your route.ts query
-interface PurchaseOrder {
-    _id: string;
-    poNumber: string;
-    supplier: {
-        name: string;
-    };
-    site: {
-        name: string;
-    };
-    orderedItems: Array<{
-        _key: string;
-        stockItem: {
-            _id: string;
-            name: string;
-            sku: string;
-            unitOfMeasure: string;
-        };
-        orderedQuantity: number;
-        unitPrice: number;
-    }>;
 }
 
 // Define the interface for a bin location
@@ -179,7 +159,7 @@ export default function GoodsReceiptModal({
                 if (selectedOrder) {
                     try {
                         // Fetch bins for the selected PO's site
-                        const response = await fetch(`/api/bins?siteName=${selectedOrder.site.name}`);
+                        const response = await fetch(`/api/bins?siteName=${selectedOrder.site?.name || ''}`);
                         if (response.ok) {
                             const bins: Bin[] = await response.json();
                             setAvailableBins(bins);
@@ -208,7 +188,7 @@ export default function GoodsReceiptModal({
                             stockItemName: item.stockItem.name,
                             orderedQuantity: item.orderedQuantity,
                             receivedQuantity: 0, // Initialize received quantity to 0
-                            condition: 'good',
+                            condition: 'good' as const, // Explicitly type as 'good'
                             _key: item._key
                         }));
                         setItems(receiptItems);
@@ -238,7 +218,7 @@ export default function GoodsReceiptModal({
                 return {
                     ...item,
                     receivedQuantity: item.orderedQuantity,
-                    condition: 'good'
+                    condition: 'good' as const // Explicitly type as 'good'
                 };
             }
             return item;
@@ -254,7 +234,7 @@ export default function GoodsReceiptModal({
                 return {
                     ...item,
                     receivedQuantity: 0,
-                    condition: 'good'
+                    condition: 'good' as const // Explicitly type as 'good'
                 };
             }
             return item;
@@ -295,8 +275,8 @@ export default function GoodsReceiptModal({
                     receiptDate,
                     purchaseOrder: selectedPO,
                     purchaseOrderNumber: selectedOrder?.poNumber || '',
-                    supplierName: selectedOrder?.supplier.name || '',
-                    siteName: selectedOrder?.site.name || '',
+                    supplierName: selectedOrder?.supplier?.name || '',
+                    siteName: selectedOrder?.site?.name || '',
                     receivingBin: selectedBin,
                     receivingBinName: selectedBinObj?.name || '',
                     status: finalStatus,
@@ -358,12 +338,14 @@ export default function GoodsReceiptModal({
 
     // Helper to generate a truncated list of items for the dropdown
     const getItemListForPO = (po: PurchaseOrder) => {
-        const itemNames = po.orderedItems.map(item => item.stockItem.name);
+        const itemNames = po.orderedItems?.map(item => item.stockItem.name);
         const maxItemsToShow = 2;
-        if (itemNames.length <= maxItemsToShow) {
-            return itemNames.join(', ');
-        } else {
-            return `${itemNames.slice(0, maxItemsToShow).join(', ')} +${itemNames.length - maxItemsToShow} more`;
+        if (itemNames != null) {
+            if (itemNames.length <= maxItemsToShow) {
+                return itemNames.join(', ');
+            } else {
+                return `${itemNames.slice(0, maxItemsToShow).join(', ')} +${itemNames.length - maxItemsToShow} more`;
+            }
         }
     };
 
@@ -399,7 +381,11 @@ export default function GoodsReceiptModal({
             cell: (row, index) => (
                 <NumberInput
                     value={row.receivedQuantity}
-                    onChange={(_, valueAsNumber) => handleItemChange(index, 'receivedQuantity', valueAsNumber)}
+                    onChange={(_, valueAsNumber) => {
+                        if (index !== undefined) {
+                            handleItemChange(index, 'receivedQuantity', valueAsNumber);
+                        }
+                    }}
                     min={0}
                     max={row.orderedQuantity * 2}
                     width="80px"
@@ -419,7 +405,11 @@ export default function GoodsReceiptModal({
             cell: (row, index) => (
                 <Select
                     value={row.condition}
-                    onChange={(e) => handleItemChange(index, 'condition', e.target.value as any)}
+                    onChange={(e) => {
+                        if (index !== undefined) {
+                            handleItemChange(index, 'condition', e.target.value as 'good' | 'damaged' | 'short-shipped' | 'over-shipped');
+                        }
+                    }}
                     width="120px"
                     size="sm"
                 >
@@ -436,7 +426,11 @@ export default function GoodsReceiptModal({
             cell: (row, index) => (
                 <Input
                     value={row.batchNumber || ''}
-                    onChange={(e) => handleItemChange(index, 'batchNumber', e.target.value)}
+                    onChange={(e) => {
+                        if (index !== undefined) {
+                            handleItemChange(index, 'batchNumber', e.target.value);
+                        }
+                    }}
                     placeholder="Batch #"
                     width="80px"
                     size="sm"
@@ -448,132 +442,137 @@ export default function GoodsReceiptModal({
     const selectedOrder = approvedPurchaseOrders?.find(po => po._id === selectedPO) || null;
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} size="xl" scrollBehavior="inside">
+        <Modal isOpen={isOpen} onClose={onClose} size="6xl" scrollBehavior="inside">
             <ModalOverlay />
-            <ModalContent maxW="800px" mx="auto" my={8} borderRadius="xl" boxShadow="xl">
+            <ModalContent maxW="1200px" mx="auto" my={8} borderRadius="xl" boxShadow="xl" height="90vh">
                 <ModalHeader
                     bg={useColorModeValue('brand.50', 'brand.900')}
                     borderTopRadius="xl"
                     py={4}
+                    position="sticky"
+                    top={0}
+                    zIndex={10}
                 >
                     {receipt ? 'Edit Goods Receipt' : 'Create Goods Receipt'}
                 </ModalHeader>
-                <ModalCloseButton />
-                <form onSubmit={(e) => handleSave(e)}>
-                    <ModalBody pb={6}>
-                        <VStack spacing={4} align="stretch">
-                            <HStack>
-                                <FormControl isRequired>
-                                    <FormLabel>Receipt Number</FormLabel>
-                                    <Input
-                                        value={receiptNumber}
-                                        onChange={(e) => setReceiptNumber(e.target.value)}
-                                        placeholder="e.g., GR-001"
-                                    />
-                                </FormControl>
-                                <FormControl isRequired>
-                                    <FormLabel>Receipt Date</FormLabel>
-                                    <Input
-                                        type="date"
-                                        value={receiptDate}
-                                        onChange={(e) => setReceiptDate(e.target.value)}
-                                    />
-                                </FormControl>
-                            </HStack>
+                <ModalCloseButton position="absolute" right="12px" top="12px" />
 
-                            <FormControl>
-                                <FormLabel>Status</FormLabel>
-                                <Badge
-                                    colorScheme={getStatusColor(status)}
-                                    fontSize="md"
-                                    px={3}
-                                    py={1}
-                                    borderRadius="full"
-                                >
-                                    {status.toUpperCase()}
-                                </Badge>
+                <ModalBody pb={6} overflowY="auto" maxH="calc(90vh - 140px)">
+                    <VStack spacing={4} align="stretch">
+                        <HStack>
+                            <FormControl isRequired>
+                                <FormLabel>Receipt Number</FormLabel>
+                                <Input
+                                    value={receiptNumber}
+                                    onChange={(e) => setReceiptNumber(e.target.value)}
+                                    placeholder="e.g., GR-001"
+                                />
                             </FormControl>
+                            <FormControl isRequired>
+                                <FormLabel>Receipt Date</FormLabel>
+                                <Input
+                                    type="date"
+                                    value={receiptDate}
+                                    onChange={(e) => setReceiptDate(e.target.value)}
+                                />
+                            </FormControl>
+                        </HStack>
 
-                            <HStack>
-                                <FormControl isRequired>
-                                    <FormLabel>Purchase Order</FormLabel>
+                        <FormControl>
+                            <FormLabel>Status</FormLabel>
+                            <Badge
+                                colorScheme={getStatusColor(status)}
+                                fontSize="md"
+                                px={3}
+                                py={1}
+                                borderRadius="full"
+                            >
+                                {status.toUpperCase()}
+                            </Badge>
+                        </FormControl>
+
+                        <HStack>
+                            <FormControl isRequired>
+                                <FormLabel>Purchase Order</FormLabel>
+                                <Select
+                                    value={selectedPO}
+                                    onChange={(e) => setSelectedPO(e.target.value)}
+                                    placeholder="Select Purchase Order"
+                                    width="100%"
+                                    isDisabled={poDataLoading}
+                                >
+                                    {approvedPurchaseOrders?.map(po => (
+                                        <option key={po._id} value={po._id}>
+                                            {po.poNumber} - {po.supplier?.name}
+                                            {po.orderedItems && po.orderedItems.length > 0 && (
+                                                ` (${getItemListForPO(po)})`
+                                            )}
+                                        </option>
+                                    ))}
+                                </Select>
+                            </FormControl>
+                            <FormControl isRequired>
+                                <FormLabel>Receiving Bin</FormLabel>
+                                <InputGroup>
                                     <Select
-                                        value={selectedPO}
-                                        onChange={(e) => setSelectedPO(e.target.value)}
-                                        placeholder="Select Purchase Order"
-                                        width="100%"
+                                        value={selectedBin}
+                                        onChange={(e) => setSelectedBin(e.target.value)}
+                                        placeholder="Select Bin"
                                         isDisabled={poDataLoading}
                                     >
-                                        {approvedPurchaseOrders?.map(po => (
-                                            <option key={po._id} value={po._id}>
-                                                {po.poNumber} - {po.supplier.name}
-                                                {po.orderedItems && po.orderedItems.length > 0 && (
-                                                    ` (${getItemListForPO(po)})`
-                                                )}
+                                        {availableBins.map(bin => (
+                                            <option key={bin._id} value={bin._id}>
+                                                {bin.name} ({bin.binType})
                                             </option>
                                         ))}
                                     </Select>
-                                </FormControl>
-                                <FormControl isRequired>
-                                    <FormLabel>Receiving Bin</FormLabel>
-                                    <InputGroup>
-                                        <Select
-                                            value={selectedBin}
-                                            onChange={(e) => setSelectedBin(e.target.value)}
-                                            placeholder="Select Bin"
-                                            isDisabled={poDataLoading}
-                                        >
-                                            {availableBins.map(bin => (
-                                                <option key={bin._id} value={bin._id}>
-                                                    {bin.name} ({bin.binType})
-                                                </option>
-                                            ))}
-                                        </Select>
-                                        {poDataLoading && (
-                                            <InputRightElement>
-                                                <Spinner size="sm" />
-                                            </InputRightElement>
-                                        )}
-                                    </InputGroup>
-                                </FormControl>
-                            </HStack>
-                            {selectedOrder && (
-                                <VStack align="stretch" spacing={2} p={4} borderWidth={1} borderColor="gray.200" borderRadius="md" mt={2}>
+                                    {poDataLoading && (
+                                        <InputRightElement>
+                                            <Spinner size="sm" />
+                                        </InputRightElement>
+                                    )}
+                                </InputGroup>
+                            </FormControl>
+                        </HStack>
+
+                        {selectedOrder && (
+                            <Box p={4} borderWidth={1} borderColor="gray.200" borderRadius="md" mt={2}>
+                                <VStack align="stretch" spacing={2}>
+                                    <Text fontWeight="bold" fontSize="lg">Purchase Order Details</Text>
                                     <HStack justifyContent="space-between">
-                                        <Text fontWeight="bold">Purchase Order Details</Text>
-                                    </HStack>
-                                    <HStack>
                                         <Text fontWeight="medium">PO Number:</Text>
                                         <Text>{selectedOrder.poNumber}</Text>
                                     </HStack>
-                                    <HStack>
+                                    <HStack justifyContent="space-between">
                                         <Text fontWeight="medium">Supplier:</Text>
-                                        <Text>{selectedOrder.supplier.name}</Text>
+                                        <Text>{selectedOrder.supplier?.name}</Text>
                                     </HStack>
-                                    <HStack>
+                                    <HStack justifyContent="space-between">
                                         <Text fontWeight="medium">Site:</Text>
-                                        <Text>{selectedOrder.site.name}</Text>
+                                        <Text>{selectedOrder.site?.name}</Text>
                                     </HStack>
                                 </VStack>
-                            )}
+                            </Box>
+                        )}
 
-                            <FormControl>
-                                <FormLabel>Notes</FormLabel>
-                                <Input
-                                    value={notes}
-                                    onChange={(e) => setNotes(e.target.value)}
-                                    placeholder="Additional notes or comments"
-                                    isDisabled={poDataLoading}
-                                />
-                            </FormControl>
+                        <FormControl>
+                            <FormLabel>Notes</FormLabel>
+                            <Input
+                                value={notes}
+                                onChange={(e) => setNotes(e.target.value)}
+                                placeholder="Additional notes or comments"
+                                isDisabled={poDataLoading}
+                            />
+                        </FormControl>
 
-                            {poDataLoading ? (
-                                <Flex justifyContent="center" alignItems="center" height="200px">
-                                    <Spinner size="xl" />
-                                </Flex>
-                            ) : selectedOrder && (
-                                <>
-                                    <HStack justify="space-between">
+                        {poDataLoading ? (
+                            <Flex justifyContent="center" alignItems="center" height="200px">
+                                <Spinner size="xl" />
+                            </Flex>
+                        ) : selectedOrder && (
+                            <>
+                                <Box>
+                                    <HStack justify="space-between" mb={4}>
                                         <Text fontSize="lg" fontWeight="bold">
                                             Received Items from PO: {selectedOrder.poNumber}
                                         </Text>
@@ -586,52 +585,59 @@ export default function GoodsReceiptModal({
                                             </Button>
                                         </HStack>
                                     </HStack>
-                                    <DataTable
-                                        columns={columns}
-                                        data={items}
-                                        loading={false}
-                                        onSelectionChange={handleSelectionChange}
-                                    />
-                                    <Text fontSize="sm" color="gray.500">
+
+                                    <Box overflowX="auto" maxW="100%">
+                                        <DataTable
+                                            columns={columns}
+                                            data={items}
+                                            loading={false}
+                                            onSelectionChange={handleSelectionChange}
+                                        />
+                                    </Box>
+
+                                    <Text fontSize="sm" color="gray.500" mt={2}>
                                         Expiry dates can be added after receiving items.
                                     </Text>
-                                </>
-                            )}
-                        </VStack>
-                    </ModalBody>
+                                </Box>
+                            </>
+                        )}
+                    </VStack>
+                </ModalBody>
 
-                    <ModalFooter
-                        bg={useColorModeValue('gray.50', 'gray.800')}
-                        borderBottomRadius="xl"
+                <ModalFooter
+                    bg={useColorModeValue('gray.50', 'gray.800')}
+                    borderBottomRadius="xl"
+                    position="sticky"
+                    bottom={0}
+                    zIndex={10}
+                >
+                    <Button
+                        colorScheme="gray"
+                        mr={3}
+                        onClick={onClose}
+                        isDisabled={loading || poDataLoading}
+                        variant="outline"
                     >
-                        <Button
-                            colorScheme="gray"
-                            mr={3}
-                            onClick={onClose}
-                            isDisabled={loading || poDataLoading}
-                            variant="outline"
-                        >
-                            Cancel
-                        </Button>
-                        <Button
-                            colorScheme="orange"
-                            mr={3}
-                            onClick={(e) => handleSave(e, true)}
-                            isLoading={loading}
-                            isDisabled={!selectedPO || items.length === 0 || poDataLoading || !selectedBin || isComplete}
-                        >
-                            Save Draft
-                        </Button>
-                        <Button
-                            colorScheme="blue"
-                            type="submit"
-                            isLoading={loading}
-                            isDisabled={!selectedPO || items.length === 0 || poDataLoading || !selectedBin || !isComplete}
-                        >
-                            {receipt ? 'Update Receipt' : 'Create Receipt'}
-                        </Button>
-                    </ModalFooter>
-                </form>
+                        Cancel
+                    </Button>
+                    <Button
+                        colorScheme="orange"
+                        mr={3}
+                        onClick={(e) => handleSave(e, true)}
+                        isLoading={loading}
+                        isDisabled={!selectedPO || items.length === 0 || poDataLoading || !selectedBin || isComplete}
+                    >
+                        Save Draft
+                    </Button>
+                    <Button
+                        colorScheme="blue"
+                        type="submit"
+                        isLoading={loading}
+                        isDisabled={!selectedPO || items.length === 0 || poDataLoading || !selectedBin || !isComplete}
+                    >
+                        {receipt ? 'Update Receipt' : 'Create Receipt'}
+                    </Button>
+                </ModalFooter>
             </ModalContent>
         </Modal>
     );

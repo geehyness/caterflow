@@ -33,9 +33,10 @@ interface LowStockItem extends StockItem {
     selected: boolean;
 }
 
+// Define a compatible interface for the PurchaseOrderModal
 interface PurchaseOrderGroup {
     supplierId: string;
-    items: LowStockItem[];
+    items: StockItem[]; // Changed to match PurchaseOrderModal's expectation
 }
 
 export default function LowStockPage() {
@@ -155,49 +156,57 @@ export default function LowStockPage() {
         onOpen();
     };
 
-    const handleCreateOrders = async (orders: PurchaseOrderGroup[]) => {
+    const handleCreateOrders = (orders: PurchaseOrderGroup[]) => {
         const ordersCreated: string[] = [];
         const failedOrders: string[] = [];
 
-        for (const order of orders) {
-            const totalAmount = order.items.reduce((sum, item) => sum + (item.orderQuantity * item.unitPrice), 0);
+        // Process each order
+        orders.forEach(order => {
+            const totalAmount = order.items.reduce((sum, item) => {
+                // Cast item to LowStockItem to access orderQuantity
+                const lowStockItem = item as unknown as LowStockItem;
+                return sum + (lowStockItem.orderQuantity * (item.unitPrice || 0));
+            }, 0);
 
-            try {
-                const response = await fetch('/api/purchase-orders', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        poNumber: `PO-${Date.now()}-${order.supplierId.substring(0, 4)}`,
-                        orderDate: new Date().toISOString(),
-                        supplier: { _type: 'reference', _ref: order.supplierId },
-                        orderedBy: { _type: 'reference', _ref: user?._id },
-                        orderedItems: order.items.map(item => ({
+            // ✅ CORRECT: Send simple string IDs, not nested objects
+            fetch('/api/purchase-orders', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    poNumber: `PO-${Date.now()}-${order.supplierId.substring(0, 4)}`,
+                    orderDate: new Date().toISOString(),
+                    supplier: order.supplierId, // ✅ Simple string ID
+                    orderedBy: user?._id, // ✅ Simple string ID
+                    orderedItems: order.items.map(item => {
+                        // Cast item to LowStockItem to access orderQuantity
+                        const lowStockItem = item as unknown as LowStockItem;
+                        return {
                             _type: 'OrderedItem',
-                            stockItem: {
-                                _type: 'reference',
-                                _ref: item._id,
-                            },
-                            orderedQuantity: item.orderQuantity,
+                            stockItem: item._id, // ✅ Simple string ID
+                            orderedQuantity: lowStockItem.orderQuantity,
                             unitPrice: item.unitPrice,
-                        })),
-                        totalAmount,
-                        status: 'draft',
-                        site: { _type: 'reference', _ref: selectedSiteId },
+                        };
                     }),
+                    totalAmount,
+                    status: 'draft',
+                    site: selectedSiteId, // ✅ Simple string ID
+                }),
+            })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`Failed to create purchase order for supplier ${order.supplierId}`);
+                    }
+                    ordersCreated.push(suppliers.find(s => s._id === order.supplierId)?.name || 'Unknown Supplier');
+                })
+                .catch(error => {
+                    console.error('Failed to create order:', error);
+                    failedOrders.push(suppliers.find(s => s._id === order.supplierId)?.name || 'Unknown Supplier');
                 });
+        });
 
-                if (!response.ok) {
-                    throw new Error(`Failed to create purchase order for supplier ${order.supplierId}`);
-                }
-                ordersCreated.push(suppliers.find(s => s._id === order.supplierId)?.name || 'Unknown Supplier');
-            } catch (error) {
-                console.error('Failed to create order:', error);
-                failedOrders.push(suppliers.find(s => s._id === order.supplierId)?.name || 'Unknown Supplier');
-            }
-        }
-
+        // Show success toast if any orders were created
         if (ordersCreated.length > 0) {
             toast({
                 title: 'Order(s) created successfully',
@@ -208,6 +217,7 @@ export default function LowStockPage() {
             });
         }
 
+        // Show error toast if any orders failed
         if (failedOrders.length > 0) {
             toast({
                 title: 'Error creating order(s)',
@@ -291,7 +301,7 @@ export default function LowStockPage() {
             ...item,
             selected: updatedItems.some(updated => updated._id === item._id)
         })));
-        setSelectedItems(updatedItems); // This is the crucial fix
+        setSelectedItems(updatedItems);
     };
 
     if (!isAuthReady) {
@@ -389,7 +399,7 @@ export default function LowStockPage() {
             <PurchaseOrderModal
                 isOpen={isOpen}
                 onClose={onClose}
-                selectedItems={selectedItems}
+                selectedItems={selectedItems as unknown as StockItem[]} // Cast to match the expected type
                 suppliers={suppliers}
                 onSave={handleCreateOrders}
             />

@@ -36,7 +36,10 @@ export async function POST(request: Request) {
         });
 
         // Use a transaction to ensure both updates succeed or fail together
-        const transaction = client.transaction([poPatch, stockItemPatch]);
+        const transaction = client.transaction();
+        transaction.patch(poPatch);
+        transaction.patch(stockItemPatch);
+
         await transaction.commit();
 
         return NextResponse.json({ success: true, message: 'Price updated successfully' });

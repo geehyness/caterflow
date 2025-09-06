@@ -28,24 +28,24 @@ import {
     NumberDecrementStepper,
 } from '@chakra-ui/react';
 import { FaBoxes } from 'react-icons/fa';
-import { LowStockItem, Supplier } from '@/lib/sanityTypes';
+import { StockItem, Supplier } from '@/lib/sanityTypes';
 
 interface PurchaseOrderGroup {
     supplierId: string;
-    items: LowStockItem[];
+    items: StockItem[];
 }
 
 interface PurchaseOrderModalProps {
     isOpen: boolean;
     onClose: () => void;
-    selectedItems: LowStockItem[];
+    selectedItems: StockItem[];
     suppliers: Supplier[];
     onSave: (orders: PurchaseOrderGroup[]) => void;
 }
 
 export default function PurchaseOrderModal({ isOpen, onClose, selectedItems, suppliers, onSave }: PurchaseOrderModalProps) {
     const [groupedItems, setGroupedItems] = useState<PurchaseOrderGroup[]>([]);
-    const [ungroupedItems, setUngroupedItems] = useState<LowStockItem[]>([]);
+    const [ungroupedItems, setUngroupedItems] = useState<StockItem[]>([]);
     const toast = useToast();
 
     useEffect(() => {
@@ -75,7 +75,7 @@ export default function PurchaseOrderModal({ isOpen, onClose, selectedItems, sup
         setGroupedItems([...groupedItems, newGroup]);
     };
 
-    const handleMoveItemToGroup = (item: LowStockItem, groupIndex: number) => {
+    const handleMoveItemToGroup = (item: StockItem, groupIndex: number) => {
         const newGroupedItems = [...groupedItems];
         newGroupedItems[groupIndex].items.push(item);
 
@@ -83,7 +83,7 @@ export default function PurchaseOrderModal({ isOpen, onClose, selectedItems, sup
         setUngroupedItems(ungroupedItems.filter(i => i._id !== item._id));
     };
 
-    const handleRemoveItemFromGroup = (item: LowStockItem, groupIndex: number) => {
+    const handleRemoveItemFromGroup = (item: StockItem, groupIndex: number) => {
         const newGroupedItems = [...groupedItems];
         const newGroupItems = newGroupedItems[groupIndex].items.filter(i => i._id !== item._id);
         newGroupedItems[groupIndex].items = newGroupItems;
@@ -99,7 +99,20 @@ export default function PurchaseOrderModal({ isOpen, onClose, selectedItems, sup
             const itemToUpdate = groupToUpdate.items.find(item => item._id === itemId);
 
             if (itemToUpdate) {
-                itemToUpdate.orderQuantity = quantity;
+                // Create a new object to avoid mutation issues
+                return newGroups.map((group, idx) => {
+                    if (idx === groupIndex) {
+                        return {
+                            ...group,
+                            items: group.items.map(item =>
+                                item._id === itemId
+                                    ? { ...item, orderQuantity: quantity }
+                                    : item
+                            )
+                        };
+                    }
+                    return group;
+                });
             }
 
             return newGroups;
@@ -156,7 +169,7 @@ export default function PurchaseOrderModal({ isOpen, onClose, selectedItems, sup
                                         <VStack align="start" spacing={0}>
                                             <Text fontWeight="bold">{item.name}</Text>
                                             <Text fontSize="sm" color="gray.500">
-                                                Order Qty: {item.orderQuantity}
+                                                Order Qty: {(item as any).orderQuantity || 1}
                                             </Text>
                                         </VStack>
                                         <Select
@@ -226,8 +239,11 @@ export default function PurchaseOrderModal({ isOpen, onClose, selectedItems, sup
                                                         </Text>
                                                         <NumberInput
                                                             size="sm"
-                                                            value={item.orderQuantity}
-                                                            onChange={(value) => updateItemQuantityInGroup(groupIndex, item._id, parseInt(value) || 1)}
+                                                            value={String((item as any).orderQuantity || 1)}
+                                                            onChange={(valueString) => {
+                                                                const value = parseInt(valueString, 10) || 1;
+                                                                updateItemQuantityInGroup(groupIndex, item._id, value);
+                                                            }}
                                                             min={1}
                                                             max={1000}
                                                             width="100px"

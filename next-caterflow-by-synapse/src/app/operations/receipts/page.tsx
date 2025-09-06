@@ -23,30 +23,62 @@ import DataTable from '@/components/DataTable';
 import { useAuth } from '@/context/AuthContext';
 import GoodsReceiptModal from '@/app/actions/GoodsReceiptModal';
 
-// Update the interface to match what GoodsReceiptModal expects
+import { PurchaseOrder } from '../../actions/types';
+
+// Define the interface for an item within the goods receipt
 interface ReceivedItem {
     stockItem: string;
+    stockItemName: string;
+    orderedQuantity: number;
     receivedQuantity: number;
     batchNumber?: string;
     expiryDate?: string;
     condition: 'good' | 'damaged' | 'short-shipped' | 'over-shipped';
+    _key: string;
 }
 
+// Define the interface for the goods receipt document
 interface GoodsReceipt {
     _id: string;
     receiptNumber: string;
     receiptDate: string;
-    purchaseOrder: string; // Changed from object to string to match modal expectation
-    receivingBin: string; // Changed from object to string to match modal expectation
-    status: 'draft' | 'completed' | 'cancelled';
+    purchaseOrder: string;
+    purchaseOrderNumber: string;
+    receivingBin: string;
+    receivingBinName: string;
     items: ReceivedItem[];
+    status: 'draft' | 'partial' | 'completed';
+    notes?: string;
 }
+
+/* Define the interface for a purchase order (matching what GoodsReceiptModal expects)
+interface PurchaseOrder {
+    _id: string;
+    poNumber: string;
+    supplier?: {
+        name: string;
+    };
+    site?: {
+        name: string;
+    };
+    orderedItems?: Array<{
+        _key: string;
+        stockItem: {
+            _id: string;
+            name: string;
+        };
+        orderedQuantity: number;
+        unitPrice: number;
+    }>;
+}*/
 
 export default function ReceiptsPage() {
     const [receipts, setReceipts] = useState<GoodsReceipt[]>([]);
     const [filteredReceipts, setFilteredReceipts] = useState<GoodsReceipt[]>([]);
     const [selectedReceipt, setSelectedReceipt] = useState<GoodsReceipt | null>(null);
+    const [approvedPurchaseOrders, setApprovedPurchaseOrders] = useState<PurchaseOrder[]>([]);
     const [loading, setLoading] = useState(true);
+    const [loadingApprovedPOs, setLoadingApprovedPOs] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const { isOpen, onOpen, onClose } = useDisclosure();
     const toast = useToast();
@@ -56,6 +88,7 @@ export default function ReceiptsPage() {
     const borderColor = useColorModeValue('gray.200', 'gray.600');
     const inputBg = useColorModeValue('white', 'gray.800');
 
+    // Replace the current fetchReceipts function with:
     const fetchReceipts = useCallback(async () => {
         try {
             const response = await fetch('/api/goods-receipts');
@@ -64,8 +97,8 @@ export default function ReceiptsPage() {
                 // Transform the data to match the expected structure
                 const transformedData = data.map((receipt: any) => ({
                     ...receipt,
-                    purchaseOrder: receipt.purchaseOrder?.poNumber || receipt.purchaseOrder || '', // Extract poNumber if it's an object
-                    receivingBin: receipt.receivingBin?.name || receipt.receivingBin || '', // Extract name if it's an object
+                    purchaseOrder: receipt.purchaseOrder?.poNumber || receipt.purchaseOrder || '',
+                    receivingBin: receipt.receivingBin?.name || receipt.receivingBin || '',
                 }));
                 setReceipts(transformedData);
             } else {
@@ -85,9 +118,25 @@ export default function ReceiptsPage() {
         }
     }, [toast]);
 
+    const fetchApprovedPurchaseOrders = async () => {
+        try {
+            setLoadingApprovedPOs(true);
+            const response = await fetch('/api/purchase-orders?status=approved');
+            if (response.ok) {
+                const data = await response.json();
+                setApprovedPurchaseOrders(data);
+            }
+        } catch (error) {
+            console.error('Failed to fetch approved purchase orders:', error);
+        } finally {
+            setLoadingApprovedPOs(false);
+        }
+    };
+
     useEffect(() => {
         fetchReceipts();
-    }, [fetchReceipts]);
+        fetchApprovedPurchaseOrders();
+    }, [fetchReceipts]); // Add fetchReceipts to dependencies
 
     useEffect(() => {
         if (searchTerm) {
@@ -115,7 +164,6 @@ export default function ReceiptsPage() {
     };
 
     const handleViewReceipt = (receipt: GoodsReceipt) => {
-        // Navigate to detail page or open a view modal
         console.log('View receipt:', receipt);
     };
 
@@ -159,6 +207,7 @@ export default function ReceiptsPage() {
     const getStatusColor = (status: string) => {
         switch (status) {
             case 'draft': return 'gray';
+            case 'partial': return 'orange';
             case 'completed': return 'green';
             case 'cancelled': return 'red';
             default: return 'gray';
@@ -289,6 +338,7 @@ export default function ReceiptsPage() {
                 onClose={onClose}
                 receipt={selectedReceipt}
                 onSave={handleSaveSuccess}
+                approvedPurchaseOrders={approvedPurchaseOrders}
             />
         </Box>
     );

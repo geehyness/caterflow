@@ -25,7 +25,7 @@ import { PendingAction } from './types';
 
 // Define a flexible column type for better control over rendering
 export interface Column {
-    accessorKey: string;
+    accessorKey: keyof PendingAction | string; // Use keyof PendingAction for type safety
     header: string | React.ReactNode;
     cell?: (row: any) => React.ReactNode;
     isSortable?: boolean;
@@ -33,9 +33,9 @@ export interface Column {
 
 interface DataTableProps {
     columns: Column[];
-    data: PendingAction[];
+    data: any[]; // Change from PendingAction[] to any[]
     loading: boolean;
-    onActionClick: (action: PendingAction) => void;
+    onActionClick?: (action: any) => void; // Make optional and accept any
     hideStatusColumn?: boolean;
     actionType?: string;
 }
@@ -51,7 +51,7 @@ export default function DataTable({
     const [searchTerm, setSearchTerm] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(10);
-    const [sortColumn, setSortColumn] = useState<string | null>(null);
+    const [sortColumn, setSortColumn] = useState<keyof PendingAction | null>(null); // Use keyof PendingAction
     const [sortDirection, setSortDirection] = useState<'asc' | 'desc' | null>(null);
 
     const getStatusColor = (status: string) => {
@@ -67,6 +67,8 @@ export default function DataTable({
 
     // Custom action button renderer based on action type
     const renderActionButton = (row: PendingAction) => {
+        if (!onActionClick) return null; // Return null if onActionClick is not provided
+
         if (actionType === 'GoodsReceipt') {
             return (
                 <Button
@@ -156,6 +158,14 @@ export default function DataTable({
         return false;
     };
 
+    // Safe property access function
+    const getPropertyValue = (obj: PendingAction, key: string): any => {
+        if (key in obj) {
+            return obj[key as keyof PendingAction];
+        }
+        return undefined;
+    };
+
     const processedData = useMemo(() => {
         // 1. Filter Data - search across all available information
         const filtered = data.filter((row) => searchAllData(row, searchTerm));
@@ -163,8 +173,8 @@ export default function DataTable({
         // 2. Sort Data
         if (sortColumn && sortDirection) {
             filtered.sort((a, b) => {
-                const aValue = a[sortColumn];
-                const bValue = b[sortColumn];
+                const aValue = getPropertyValue(a, sortColumn);
+                const bValue = getPropertyValue(b, sortColumn);
 
                 // Handle null/undefined values
                 if (aValue == null) return sortDirection === 'asc' ? 1 : -1;
@@ -205,7 +215,7 @@ export default function DataTable({
         if (sortColumn === column) {
             setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
         } else {
-            setSortColumn(column);
+            setSortColumn(column as keyof PendingAction);
             setSortDirection('asc');
         }
     };
@@ -296,7 +306,7 @@ export default function DataTable({
                                             ) : column.accessorKey === 'description' ? (
                                                 renderDescriptionWithItems(row)
                                             ) : (
-                                                <Text>{row[column.accessorKey]}</Text>
+                                                <Text>{getPropertyValue(row, column.accessorKey)}</Text>
                                             )}
                                         </Td>
                                     ))}

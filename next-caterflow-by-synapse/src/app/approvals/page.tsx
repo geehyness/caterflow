@@ -28,7 +28,6 @@ import {
     Th,
     Td,
     TableContainer,
-    Badge,
     Button,
     HStack,
     VStack,
@@ -38,15 +37,6 @@ import { FiCheckCircle, FiXCircle } from 'react-icons/fi';
 import { FaBoxes } from 'react-icons/fa';
 import { useRouter } from 'next/navigation';
 import DataTable from '../actions/DataTable';
-import {
-    AppUser,
-    PurchaseOrder,
-    GoodsReceipt,
-    DispatchLog,
-    StockAdjustment,
-    InternalTransfer,
-    OrderedItem,
-} from '@/lib/sanityTypes';
 
 // Define the interface for an action to be approved
 interface ApprovalAction {
@@ -67,6 +57,16 @@ interface ApprovalAction {
     transferNumber?: string;
     adjustmentNumber?: string;
     receiptNumber?: string;
+}
+
+interface OrderedItem {
+    _key: string;
+    stockItem: {
+        _ref: string; // This is a reference to a StockItem document
+        name?: string; // This might not be populated in the data
+    };
+    orderedQuantity: number;
+    unitPrice: number;
 }
 
 export default function ApprovalsPage() {
@@ -289,7 +289,7 @@ export default function ApprovalsPage() {
                                                             <Text>{row.description}</Text>
                                                             <Text fontSize="sm" color="gray.600" mt={1}>
                                                                 Items: {row.orderedItems.map((item: any) =>
-                                                                    `${item.stockItem.name} (${item.orderedQuantity})`
+                                                                    `Item #${item._key} (${item.orderedQuantity})`
                                                                 ).join(', ')}
                                                             </Text>
                                                         </Box>
@@ -375,7 +375,7 @@ export default function ApprovalsPage() {
                                             <Tbody>
                                                 {selectedApproval.orderedItems.map((item) => (
                                                     <Tr key={item._key}>
-                                                        <Td>{item.stockItem?.name}</Td>
+                                                        <Td>Item #{item._key}</Td>
                                                         <Td isNumeric>{item.orderedQuantity}</Td>
                                                         <Td isNumeric>E {item.unitPrice?.toFixed(2)}</Td>
                                                         <Td isNumeric>E {(item.unitPrice * item.orderedQuantity).toFixed(2)}</Td>
