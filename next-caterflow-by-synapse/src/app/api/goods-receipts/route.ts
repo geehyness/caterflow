@@ -1,7 +1,9 @@
+// src/app/api/goods-receipts/route.ts
 import { NextResponse } from 'next/server';
 import { client, writeClient } from '@/lib/sanity';
 import { groq } from 'next-sanity';
 import { logSanityInteraction } from '@/lib/sanityLogger';
+import { v4 as uuidv4 } from 'uuid';
 
 export async function GET() {
     try {
@@ -55,6 +57,7 @@ export async function POST(request: Request) {
             notes: body.notes,
             receivedItems: body.items.map((item: any) => ({
                 _type: 'ReceivedItem',
+                _key: item._key || uuidv4(),
                 stockItem: { _ref: item.stockItem, _type: 'reference' },
                 orderedQuantity: item.orderedQuantity,
                 receivedQuantity: item.receivedQuantity,
@@ -103,7 +106,7 @@ export async function PATCH(request: Request) {
                 receivingBin: updateData.receivingBin ? { _ref: updateData.receivingBin, _type: 'reference' } : undefined,
                 receivedItems: updateData.items ? updateData.items.map((item: any) => ({
                     _type: 'ReceivedItem',
-                    _key: item._key,
+                    _key: item._key || uuidv4(),
                     stockItem: { _ref: item.stockItem, _type: 'reference' },
                     orderedQuantity: item.orderedQuantity,
                     receivedQuantity: item.receivedQuantity,

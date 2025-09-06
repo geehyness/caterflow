@@ -156,80 +156,97 @@ export default function LowStockPage() {
         onOpen();
     };
 
-    const handleCreateOrders = (orders: PurchaseOrderGroup[]) => {
+    const handleCreateOrders = async (orders: PurchaseOrderGroup[]) => {
         const ordersCreated: string[] = [];
         const failedOrders: string[] = [];
 
-        // Process each order
-        orders.forEach(order => {
-            const totalAmount = order.items.reduce((sum, item) => {
-                // Cast item to LowStockItem to access orderQuantity
-                const lowStockItem = item as unknown as LowStockItem;
-                return sum + (lowStockItem.orderQuantity * (item.unitPrice || 0));
-            }, 0);
-
-            // ✅ CORRECT: Send simple string IDs, not nested objects
-            fetch('/api/purchase-orders', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    poNumber: `PO-${Date.now()}-${order.supplierId.substring(0, 4)}`,
-                    orderDate: new Date().toISOString(),
-                    supplier: order.supplierId, // ✅ Simple string ID
-                    orderedBy: user?._id, // ✅ Simple string ID
-                    orderedItems: order.items.map(item => {
-                        // Cast item to LowStockItem to access orderQuantity
+        try {
+            // Use Promise.allSettled to wait for all requests to complete
+            const results = await Promise.allSettled(
+                orders.map(order => {
+                    const totalAmount = order.items.reduce((sum, item) => {
                         const lowStockItem = item as unknown as LowStockItem;
-                        return {
-                            _type: 'OrderedItem',
-                            stockItem: item._id, // ✅ Simple string ID
-                            orderedQuantity: lowStockItem.orderQuantity,
-                            unitPrice: item.unitPrice,
-                        };
-                    }),
-                    totalAmount,
-                    status: 'draft',
-                    site: selectedSiteId, // ✅ Simple string ID
-                }),
-            })
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error(`Failed to create purchase order for supplier ${order.supplierId}`);
-                    }
-                    ordersCreated.push(suppliers.find(s => s._id === order.supplierId)?.name || 'Unknown Supplier');
-                })
-                .catch(error => {
-                    console.error('Failed to create order:', error);
-                    failedOrders.push(suppliers.find(s => s._id === order.supplierId)?.name || 'Unknown Supplier');
-                });
-        });
+                        return sum + (lowStockItem.orderQuantity * (item.unitPrice || 0));
+                    }, 0);
 
-        // Show success toast if any orders were created
-        if (ordersCreated.length > 0) {
+                    return fetch('/api/purchase-orders', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            poNumber: `PO-${Date.now()}-${order.supplierId.substring(0, 4)}`,
+                            orderDate: new Date().toISOString(),
+                            supplier: order.supplierId,
+                            orderedBy: user?._id,
+                            orderedItems: order.items.map(item => {
+                                const lowStockItem = item as unknown as LowStockItem;
+                                return {
+                                    _type: 'OrderedItem',
+                                    stockItem: item._id,
+                                    orderedQuantity: lowStockItem.orderQuantity,
+                                    unitPrice: item.unitPrice,
+                                };
+                            }),
+                            totalAmount,
+                            status: 'draft',
+                            site: selectedSiteId,
+                        }),
+                    });
+                })
+            );
+
+            // Process results
+            results.forEach((result, index) => {
+                const supplierName = suppliers.find(s => s._id === orders[index].supplierId)?.name || 'Unknown Supplier';
+
+                if (result.status === 'fulfilled' && result.value.ok) {
+                    ordersCreated.push(supplierName);
+                } else {
+                    failedOrders.push(supplierName);
+                    console.error('Failed to create order for supplier:', supplierName, result.status === 'rejected' ? result.reason : result.value);
+                }
+            });
+
+            // Show success toast if any orders were created
+            if (ordersCreated.length > 0) {
+                toast({
+                    title: 'Order(s) created successfully',
+                    description: `Purchase orders created for: ${ordersCreated.join(', ')}.`,
+                    status: 'success',
+                    duration: 5000,
+                    isClosable: true,
+                });
+            }
+
+            // Show error toast if any orders failed
+            if (failedOrders.length > 0) {
+                toast({
+                    title: 'Error creating order(s)',
+                    description: `Failed to create purchase orders for: ${failedOrders.join(', ')}. Please try again.`,
+                    status: 'error',
+                    duration: 9000,
+                    isClosable: true,
+                });
+            }
+
+            // Reset selection after creating orders
+            setSelectedItems([]);
+            setLowStockItems(prev => prev.map(item => ({ ...item, selected: false })));
+
+            onClose();
+            fetchLowStockItems(selectedSiteId);
+
+        } catch (error) {
+            console.error('Unexpected error in handleCreateOrders:', error);
             toast({
-                title: 'Order(s) created successfully',
-                description: `Purchase orders created for: ${ordersCreated.join(', ')}.`,
-                status: 'success',
+                title: 'Unexpected Error',
+                description: 'An unexpected error occurred while creating orders. Please try again.',
+                status: 'error',
                 duration: 5000,
                 isClosable: true,
             });
         }
-
-        // Show error toast if any orders failed
-        if (failedOrders.length > 0) {
-            toast({
-                title: 'Error creating order(s)',
-                description: `Failed to create purchase orders for: ${failedOrders.join(', ')}. Please try again.`,
-                status: 'error',
-                duration: 9000,
-                isClosable: true,
-            });
-        }
-
-        onClose();
-        fetchLowStockItems(selectedSiteId);
     };
 
     const columns: Column[] = [

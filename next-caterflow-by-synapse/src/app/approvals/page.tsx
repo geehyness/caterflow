@@ -62,8 +62,8 @@ interface ApprovalAction {
 interface OrderedItem {
     _key: string;
     stockItem: {
-        _ref: string; // This is a reference to a StockItem document
-        name?: string; // This might not be populated in the data
+        _ref: string;
+        name?: string;
     };
     orderedQuantity: number;
     unitPrice: number;
@@ -79,6 +79,7 @@ export default function ApprovalsPage() {
     const { isOpen: isModalOpen, onOpen: onModalOpen, onClose: onModalClose } = useDisclosure();
     const toast = useToast();
     const router = useRouter();
+    const [selectedApprovals, setSelectedApprovals] = useState<ApprovalAction[]>([]);
 
     const actionTypes = ['PurchaseOrder', 'GoodsReceipt', 'InternalTransfer', 'StockAdjustment'];
     const actionTypeTitles: { [key: string]: string } = {
@@ -148,6 +149,10 @@ export default function ApprovalsPage() {
         onModalOpen();
     };
 
+    const handleSelectionChange = (selectedItems: ApprovalAction[]) => {
+        setSelectedApprovals(selectedItems);
+    };
+
     const handleApprove = async () => {
         if (!selectedApproval) return;
 
@@ -176,6 +181,7 @@ export default function ApprovalsPage() {
             });
 
             setPendingApprovals(prev => prev.filter(item => item._id !== selectedApproval._id));
+            setSelectedApprovals(prev => prev.filter(item => item._id !== selectedApproval._id));
             onModalClose();
         } catch (err: any) {
             toast({
@@ -216,6 +222,7 @@ export default function ApprovalsPage() {
             });
 
             setPendingApprovals(prev => prev.filter(item => item._id !== selectedApproval._id));
+            setSelectedApprovals(prev => prev.filter(item => item._id !== selectedApproval._id));
             onModalClose();
         } catch (err: any) {
             toast({
@@ -277,6 +284,20 @@ export default function ApprovalsPage() {
                             ) : (
                                 <DataTable
                                     columns={[
+                                        {
+                                            accessorKey: 'actions',
+                                            header: 'Action',
+                                            isSortable: false,
+                                            cell: (row: any) => (
+                                                <Button
+                                                    size="sm"
+                                                    colorScheme="blue"
+                                                    onClick={() => handleOpenReview(row)}
+                                                >
+                                                    Review
+                                                </Button>
+                                            )
+                                        },
                                         { accessorKey: 'title', header: 'Title', isSortable: true },
                                         {
                                             accessorKey: 'description',
@@ -310,6 +331,7 @@ export default function ApprovalsPage() {
                                     data={filteredApprovals}
                                     loading={loading}
                                     onActionClick={handleOpenReview}
+                                    onSelectionChange={handleSelectionChange}
                                 />
                             )}
                         </TabPanel>

@@ -1,3 +1,4 @@
+// src/app/actions/page.tsx
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
@@ -64,14 +65,24 @@ interface SelectedItemData {
     quantity: number;
     price: number;
 }
+
 interface PurchaseOrder {
     _id: string;
     poNumber?: string;
     supplier?: { name: string };
     site?: { name: string };
     orderedItems?: any[];
-    orderedBy?: string; // Add this line
-    // Add other relevant properties from your PurchaseOrder type if needed
+    orderedBy?: string;
+    status?: string;
+    orderDate?: string;
+    totalAmount?: number;
+}
+
+interface GoodsReceipt {
+    _id: string;
+    purchaseOrder?: {
+        _ref: string;
+    };
 }
 
 export default function ActionsPage() {
@@ -88,7 +99,7 @@ export default function ActionsPage() {
     const { isOpen: isApprovalModalOpen, onOpen: onApprovalModalOpen, onClose: onApprovalModalClose } = useDisclosure();
     const { isOpen: isGoodsReceiptModalOpen, onOpen: onGoodsReceiptModalOpen, onClose: onGoodsReceiptModalClose } = useDisclosure();
     const [selectedAction, setSelectedAction] = useState<PendingAction | null>(null);
-    const [selectedApproval, setSelectedApproval] = useState<PurchaseOrder | null>(null);
+    const [selectedApproval, setSelectedApproval] = useState<PendingAction | null>(null);
     const [poDetails, setPoDetails] = useState<PendingAction | null>(null);
     const [editedPrices, setEditedPrices] = useState<{ [key: string]: number | undefined }>({});
     const [editedQuantities, setEditedQuantities] = useState<{ [key: string]: number | undefined }>({});
@@ -98,10 +109,15 @@ export default function ActionsPage() {
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedCategory, setSelectedCategory] = useState<string>('');
     const [loadingItems, setLoadingItems] = useState(false);
-    const [approvedPurchaseOrders, setApprovedPurchaseOrders] = useState<PurchaseOrder[]>([]);
     const [preSelectedPO, setPreSelectedPO] = useState<string | null>(null);
-    const [loadingApprovedPOs, setLoadingApprovedPOs] = useState(false);
+    const [selectedActions, setSelectedActions] = useState<PendingAction[]>([]);
+    const [selectedGoodsReceipt, setSelectedGoodsReceipt] = useState<any>(null);
 
+    // State for purchase orders and receipts
+    const [allPurchaseOrders, setAllPurchaseOrders] = useState<PurchaseOrder[]>([]);
+    const [goodsReceipts, setGoodsReceipts] = useState<GoodsReceipt[]>([]);
+    const [loadingPOs, setLoadingPOs] = useState(false);
+    const [loadingReceipts, setLoadingReceipts] = useState(false);
 
     const fetchActions = useCallback(async () => {
         setLoading(true);
@@ -163,24 +179,102 @@ export default function ActionsPage() {
         }
     };
 
-    const fetchApprovedPurchaseOrders = async () => {
+    const fetchAllPurchaseOrders = async () => {
         try {
-            setLoadingApprovedPOs(true);
-            const response = await fetch('/api/purchase-orders?status=approved');
+            setLoadingPOs(true);
+            const response = await fetch('/api/purchase-orders');
             if (response.ok) {
                 const data = await response.json();
-                setApprovedPurchaseOrders(data);
+                setAllPurchaseOrders(Array.isArray(data) ? data : []);
+            } else {
+                setAllPurchaseOrders([]);
+                console.error('Failed to fetch purchase orders:', response.status);
             }
         } catch (error) {
-            console.error('Failed to fetch approved purchase orders:', error);
+            console.error('Failed to fetch purchase orders:', error);
+            setAllPurchaseOrders([]);
         } finally {
-            setLoadingApprovedPOs(false);
+            setLoadingPOs(false);
         }
     };
 
-    const handleReceiveGoods = (poId: string) => {
-        setPreSelectedPO(poId);
-        onGoodsReceiptModalOpen();
+    const fetchGoodsReceipts = async () => {
+        try {
+            setLoadingReceipts(true);
+            const response = await fetch('/api/goods-receipts');
+            if (response.ok) {
+                const data = await response.json();
+                setGoodsReceipts(Array.isArray(data) ? data : []);
+            } else {
+                setGoodsReceipts([]);
+                console.error('Failed to fetch goods receipts:', response.status);
+            }
+        } catch (error) {
+            console.error('Failed to fetch goods receipts:', error);
+            setGoodsReceipts([]);
+        } finally {
+            setLoadingReceipts(false);
+        }
+    };
+
+    // Filter approved POs without receipts
+    const getApprovedPOsWithoutReceipts = () => {
+        // Get all PO IDs that have receipts
+        const poIdsWithReceipts = new Set(
+            goodsReceipts
+                .filter(receipt => receipt.purchaseOrder?._ref)
+                .map(receipt => receipt.purchaseOrder!._ref)
+        );
+
+        console.log('POs with receipts:', Array.from(poIdsWithReceipts));
+        console.log('All POs:', allPurchaseOrders.map(po => ({ id: po._id, status: po.status, poNumber: po.poNumber })));
+
+        // Filter approved POs that don't have receipts
+        const approvedPOs = allPurchaseOrders.filter(po =>
+            po.status === 'approved' && !poIdsWithReceipts.has(po._id)
+        );
+
+        console.log('Approved POs without receipts:', approvedPOs.map(po => ({ id: po._id, poNumber: po.poNumber })));
+
+        return approvedPOs;
+    };
+
+    const approvedPOsWithoutReceipts = getApprovedPOsWithoutReceipts();
+
+    const handleReceiveGoods = async (action: PendingAction) => {
+        if (action.actionType === 'PurchaseOrder') {
+            // Handle PO receiving
+            setPreSelectedPO(action._id);
+            setSelectedGoodsReceipt(null);
+            onGoodsReceiptModalOpen();
+        } else if (action.actionType === 'GoodsReceipt') {
+            // Handle pending GoodsReceipt action
+            try {
+                // Fetch the full goods receipt details
+                const response = await fetch(`/api/goods-receipts/${action._id}`);
+                if (!response.ok) {
+                    throw new Error('Failed to fetch goods receipt details');
+                }
+                const goodsReceipt = await response.json();
+
+                // Open the modal with the existing goods receipt data
+                setSelectedGoodsReceipt(goodsReceipt);
+                setPreSelectedPO(null);
+                onGoodsReceiptModalOpen();
+            } catch (err: any) {
+                toast({
+                    title: 'Error',
+                    description: 'Failed to fetch goods receipt details. Please try again.',
+                    status: 'error',
+                    duration: 5000,
+                    isClosable: true,
+                });
+            }
+        }
+    };
+
+    const handleSelectionChange = (selectedItems: PendingAction[]) => {
+        setSelectedActions(selectedItems);
     };
 
     useEffect(() => {
@@ -201,8 +295,12 @@ export default function ActionsPage() {
     }, [isAddItemModalOpen]);
 
     useEffect(() => {
-        if (activeTab === 1) {
-            fetchApprovedPurchaseOrders();
+        if (activeTab === 1) { // Goods Receipt tab
+            // Fetch both purchase orders and goods receipts
+            const fetchData = async () => {
+                await Promise.all([fetchAllPurchaseOrders(), fetchGoodsReceipts()]);
+            };
+            fetchData();
         }
     }, [activeTab]);
 
@@ -363,6 +461,7 @@ export default function ActionsPage() {
                 isClosable: true,
             });
             setActions(prevActions => prevActions.filter(a => a._id !== action._id));
+            setSelectedActions(prev => prev.filter(item => item._id !== action._id));
             onModalClose();
         } catch (error: any) {
             toast({
@@ -487,16 +586,21 @@ export default function ActionsPage() {
 
     const actionTypes = ['PurchaseOrder', 'GoodsReceipt', 'InternalTransfer', 'StockAdjustment'];
 
-    // Filter actions for each tab
+    // Filter actions for each tab - FIXED FILTERING
     const filteredActions = actions.filter(action => {
         const type = actionTypes[activeTab];
-        return action.actionType === type && action.status !== 'completed' && action.status !== 'pending-approval';
+        // Only show actions that match the current tab AND are not completed/pending-approval
+        return action.actionType === type &&
+            action.status !== 'completed' &&
+            action.status !== 'pending-approval';
     });
 
-    // Filter pending approval actions for each tab
+    // Filter pending approval actions for each tab - FIXED FILTERING
     const pendingApprovalActions = actions.filter(action => {
         const type = actionTypes[activeTab];
-        return action.actionType === type && action.status === 'pending-approval';
+        // Only show pending approval actions that match the current tab
+        return action.actionType === type &&
+            action.status === 'pending-approval';
     });
 
     const completedActions = actions.filter(action => action.status === 'completed');
@@ -533,7 +637,6 @@ export default function ActionsPage() {
                     {actionTypes.map((type, index) => (
                         <Tab key={type}>{actionTypeTitles[type as keyof typeof actionTypeTitles]}</Tab>
                     ))}
-                    {/*<Tab>Completed</Tab>*/}
                 </TabList>
                 <TabPanels>
                     {actionTypes.map((type, index) => (
@@ -558,6 +661,20 @@ export default function ActionsPage() {
                                         <AccordionPanel pb={4}>
                                             <DataTable
                                                 columns={[
+                                                    {
+                                                        accessorKey: 'approvalAction',
+                                                        header: 'Action',
+                                                        isSortable: false,
+                                                        cell: (row: any) => (
+                                                            <Button
+                                                                size="sm"
+                                                                colorScheme="blue"
+                                                                onClick={() => handleOpenApprovalDetails(row)}
+                                                            >
+                                                                View
+                                                            </Button>
+                                                        )
+                                                    },
                                                     { accessorKey: 'title', header: 'Title', isSortable: true },
                                                     {
                                                         accessorKey: 'description',
@@ -587,24 +704,11 @@ export default function ActionsPage() {
                                                         isSortable: true,
                                                         cell: (row: any) => new Date(row.createdAt).toLocaleDateString()
                                                     },
-                                                    {
-                                                        accessorKey: 'approvalAction',
-                                                        header: 'Action',
-                                                        isSortable: false,
-                                                        cell: (row: any) => (
-                                                            <Button
-                                                                size="sm"
-                                                                colorScheme="blue"
-                                                                onClick={() => handleOpenApprovalDetails(row)}
-                                                            >
-                                                                View
-                                                            </Button>
-                                                        )
-                                                    }
                                                 ]}
                                                 data={pendingApprovalActions}
                                                 loading={loading}
                                                 onActionClick={handleOpenApprovalDetails}
+                                                onSelectionChange={handleSelectionChange}
                                             />
                                         </AccordionPanel>
                                     </AccordionItem>
@@ -617,11 +721,11 @@ export default function ActionsPage() {
                                         Approved Purchase Orders Ready for Receiving
                                     </Heading>
 
-                                    {loadingApprovedPOs ? (
+                                    {loadingPOs || loadingReceipts ? (
                                         <Flex justifyContent="center" alignItems="center" py={10}>
                                             <Spinner size="xl" />
                                         </Flex>
-                                    ) : approvedPurchaseOrders.length === 0 ? (
+                                    ) : approvedPOsWithoutReceipts.length === 0 ? (
                                         <Text fontSize="lg" color="gray.500">
                                             No approved purchase orders available for receiving.
                                         </Text>
@@ -635,7 +739,16 @@ export default function ActionsPage() {
                                                         <Button
                                                             size="sm"
                                                             colorScheme="green"
-                                                            onClick={() => handleReceiveGoods(row._id)}
+                                                            onClick={() => handleReceiveGoods({
+                                                                _id: row._id,
+                                                                actionType: 'PurchaseOrder',
+                                                                title: `Receive PO ${row.poNumber}`,
+                                                                description: `Receive items from ${row.supplier?.name}`,
+                                                                createdAt: new Date().toISOString(),
+                                                                priority: 'medium',
+                                                                siteName: row.site?.name || '',
+                                                                status: 'draft'
+                                                            } as PendingAction)}
                                                             leftIcon={<FiPackage />}
                                                         >
                                                             Receive
@@ -685,16 +798,17 @@ export default function ActionsPage() {
                                                     )
                                                 }
                                             ]}
-                                            data={approvedPurchaseOrders.map(po => ({
+                                            data={approvedPOsWithoutReceipts.map(po => ({
                                                 _id: po._id,
                                                 poNumber: po.poNumber || '',
                                                 supplier: po.supplier || { name: '' },
                                                 site: po.site || { name: '' },
                                                 orderedItems: po.orderedItems || []
                                             }))}
-                                            loading={loadingApprovedPOs}
+                                            loading={loadingPOs || loadingReceipts}
                                             onActionClick={() => { }}
                                             hideStatusColumn={true}
+                                            onSelectionChange={handleSelectionChange}
                                         />
                                     )}
 
@@ -713,6 +827,20 @@ export default function ActionsPage() {
                                     ) : (
                                         <DataTable
                                             columns={[
+                                                {
+                                                    accessorKey: 'receiveAction',
+                                                    header: 'Action',
+                                                    cell: (row: any) => (
+                                                        <Button
+                                                            size="sm"
+                                                            colorScheme="green"
+                                                            onClick={() => handleReceiveGoods(row)}
+                                                            leftIcon={<FiPackage />}
+                                                        >
+                                                            {row.status === 'draft' || row.status === 'partial' ? 'Receive' : 'View'}
+                                                        </Button>
+                                                    )
+                                                },
                                                 { accessorKey: 'title', header: 'Title', isSortable: true },
                                                 { accessorKey: 'status', header: 'Status', isSortable: true },
                                                 {
@@ -729,27 +857,14 @@ export default function ActionsPage() {
                                                     isSortable: true,
                                                     cell: (row: any) => new Date(row.createdAt).toLocaleDateString()
                                                 },
-                                                {
-                                                    accessorKey: 'workflowAction',
-                                                    header: 'Action',
-                                                    isSortable: false,
-                                                    cell: (row: any) => (
-                                                        <Button
-                                                            size="sm"
-                                                            colorScheme="blue"
-                                                            onClick={() => handleOpenWorkflow(row)}
-                                                        >
-                                                            Resolve
-                                                        </Button>
-                                                    )
-                                                }
                                             ]}
                                             data={filteredActions.filter(action =>
                                                 action.actionType === 'GoodsReceipt' &&
                                                 (action.status === 'draft' || action.status === 'partial')
                                             )}
                                             loading={loading}
-                                            onActionClick={handleOpenWorkflow}
+                                            onActionClick={(row) => handleReceiveGoods(row)}
+                                            onSelectionChange={handleSelectionChange}
                                         />
                                     )}
                                 </>
@@ -762,6 +877,20 @@ export default function ActionsPage() {
                                 ) : (
                                     <DataTable
                                         columns={[
+                                            {
+                                                accessorKey: 'workflowAction',
+                                                header: 'Action',
+                                                isSortable: false,
+                                                cell: (row: any) => (
+                                                    <Button
+                                                        size="sm"
+                                                        colorScheme="blue"
+                                                        onClick={() => handleOpenWorkflow(row)}
+                                                    >
+                                                        Resolve
+                                                    </Button>
+                                                )
+                                            },
                                             { accessorKey: 'title', header: 'Title', isSortable: true },
                                             {
                                                 accessorKey: 'description',
@@ -791,87 +920,16 @@ export default function ActionsPage() {
                                                 isSortable: true,
                                                 cell: (row: any) => new Date(row.createdAt).toLocaleDateString()
                                             },
-                                            {
-                                                accessorKey: 'workflowAction',
-                                                header: 'Action',
-                                                isSortable: false,
-                                                cell: (row: any) => (
-                                                    <Button
-                                                        size="sm"
-                                                        colorScheme="blue"
-                                                        onClick={() => handleOpenWorkflow(row)}
-                                                    >
-                                                        Resolve
-                                                    </Button>
-                                                )
-                                            },
                                         ]}
                                         data={filteredActions}
                                         loading={loading}
                                         onActionClick={handleOpenWorkflow}
+                                        onSelectionChange={handleSelectionChange}
                                     />
                                 )
                             )}
                         </TabPanel>
                     ))}
-                    {/*<TabPanel>
-                        {completedActions.length === 0 ? (
-                            <Text fontSize="lg" color="gray.500">
-                                No completed actions at this time.
-                            </Text>
-                        ) : (
-                            <DataTable
-                                columns={[
-                                    { accessorKey: 'title', header: 'Title', isSortable: true },
-                                    {
-                                        accessorKey: 'description',
-                                        header: 'Description',
-                                        isSortable: true,
-                                        cell: (row: any) => {
-                                            if (row.actionType === 'PurchaseOrder' && row.orderedItems && row.orderedItems.length > 0) {
-                                                return (
-                                                    <Box>
-                                                        <Text>{row.description}</Text>
-                                                        <Text fontSize="sm" color="gray.600" mt={1}>
-                                                            Items: {row.orderedItems.map((item: any) =>
-                                                                `${item.stockItem.name} (${item.orderedQuantity})`
-                                                            ).join(', ')}
-                                                        </Text>
-                                                    </Box>
-                                                );
-                                            }
-                                            return <Text>{row.description}</Text>;
-                                        }
-                                    },
-                                    { accessorKey: 'siteName', header: 'Site', isSortable: true },
-                                    { accessorKey: 'priority', header: 'Priority', isSortable: true },
-                                    {
-                                        accessorKey: 'createdAt',
-                                        header: 'Created At',
-                                        isSortable: true,
-                                        cell: (row: any) => new Date(row.createdAt).toLocaleDateString()
-                                    },
-                                    {
-                                        accessorKey: 'action',
-                                        header: 'Action',
-                                        isSortable: false,
-                                        cell: (row: any) => (
-                                            <Button
-                                                size="sm"
-                                                colorScheme="blue"
-                                                onClick={() => handleOpenWorkflow(row)}
-                                            >
-                                                View
-                                            </Button>
-                                        )
-                                    }
-                                ]}
-                                data={completedActions}
-                                loading={loading}
-                                onActionClick={handleOpenWorkflow}
-                            />
-                        )}
-                    </TabPanel>*/}
                 </TabPanels>
             </Tabs>
 
@@ -1000,14 +1058,19 @@ export default function ActionsPage() {
                 onClose={() => {
                     onGoodsReceiptModalClose();
                     setPreSelectedPO(null);
+                    setSelectedGoodsReceipt(null);
                 }}
-                receipt={null}
+                receipt={selectedGoodsReceipt}
                 onSave={() => {
                     onGoodsReceiptModalClose();
                     setPreSelectedPO(null);
+                    setSelectedGoodsReceipt(null);
                     fetchActions();
+                    // Refresh both purchase orders and receipts
+                    fetchAllPurchaseOrders();
+                    fetchGoodsReceipts();
                 }}
-                approvedPurchaseOrders={approvedPurchaseOrders || []}
+                approvedPurchaseOrders={approvedPOsWithoutReceipts}
                 preSelectedPO={preSelectedPO}
             />
         </Box>

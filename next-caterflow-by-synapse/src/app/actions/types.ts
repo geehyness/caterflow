@@ -25,7 +25,7 @@ export interface PendingAction {
     status?: string;
     poNumber?: string;
     supplierName?: string;
-    orderedBy?: string; // Added this line
+    orderedBy?: string;
     orderedItems?: Array<{
         _key: string;
         stockItem: {
@@ -34,6 +34,11 @@ export interface PendingAction {
         orderedQuantity: number;
         unitPrice: number;
     }>;
+    // Add these fields for GoodsReceipt actions
+    receiptNumber?: string;
+    purchaseOrder?: string;
+    receivingBin?: string;
+    receivedItems?: any[];
 }
 
 // Add this to your types.ts file

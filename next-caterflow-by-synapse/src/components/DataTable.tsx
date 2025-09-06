@@ -1,4 +1,3 @@
-// src/components/DataTable.tsx
 'use client';
 import React, { useState, useMemo, ChangeEvent } from 'react';
 import {
@@ -18,9 +17,10 @@ import {
     Select,
     chakra,
     Spinner,
-    Checkbox, // Added Checkbox import
+    Checkbox,
 } from '@chakra-ui/react';
 import { ChevronLeftIcon, ChevronRightIcon, ChevronUpIcon, ChevronDownIcon } from '@chakra-ui/icons';
+import { FiPackage } from 'react-icons/fi';
 
 // Define a flexible column type for better control over rendering
 export interface Column {
@@ -30,27 +30,30 @@ export interface Column {
     isSortable?: boolean;
 }
 
-// Add these props to the DataTable component interface
 interface DataTableProps {
     columns: Column[];
     data: any[];
     loading: boolean;
-    onSelectionChange?: (selectedItems: any[]) => void; // Add selection callback
+    onActionClick?: (action: any) => void;
+    hideStatusColumn?: boolean;
+    actionType?: string;
+    onSelectionChange?: (selectedItems: any[]) => void;
 }
 
 export default function DataTable({
     columns,
     data,
     loading,
-    onSelectionChange, // Add this prop
+    onActionClick,
+    hideStatusColumn = false,
+    actionType = '',
+    onSelectionChange,
 }: DataTableProps) {
     const [searchTerm, setSearchTerm] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(10);
     const [sortColumn, setSortColumn] = useState<string | null>(null);
     const [sortDirection, setSortDirection] = useState<'asc' | 'desc' | null>(null);
-
-    // Add state for selected rows
     const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
 
     // Add checkbox handler
@@ -146,6 +149,34 @@ export default function DataTable({
         );
     };
 
+    // Custom action button renderer based on action type
+    const renderActionButton = (row: any) => {
+        if (!onActionClick) return null;
+
+        if (actionType === 'GoodsReceipt') {
+            return (
+                <Button
+                    size="sm"
+                    colorScheme="green"
+                    onClick={() => onActionClick(row)}
+                    leftIcon={<FiPackage />}
+                >
+                    Receive
+                </Button>
+            );
+        } else {
+            return (
+                <Button
+                    size="sm"
+                    colorScheme="blue"
+                    onClick={() => onActionClick(row)}
+                >
+                    View
+                </Button>
+            );
+        }
+    };
+
     // Add to columns definition for checkbox column
     const checkboxColumn: Column = {
         accessorKey: 'select',
@@ -165,14 +196,26 @@ export default function DataTable({
         isSortable: false,
     };
 
-    // Use checkboxColumn as the first column
-    const allColumns = [checkboxColumn, ...columns];
+    // Action column
+    const actionColumn: Column = {
+        accessorKey: 'actions',
+        header: 'Actions',
+        cell: (row) => renderActionButton(row),
+        isSortable: false,
+    };
+
+    // Build columns in correct order: Action -> Checkbox -> Other columns
+    const allColumns = [
+        ...(onActionClick ? [actionColumn] : []),
+        ...(onSelectionChange ? [checkboxColumn] : []),
+        ...columns
+    ].filter(Boolean);
 
     return (
         <Box p={4} borderRadius="md" borderWidth="1px" overflowX="auto" className="shadow-sm">
             <Flex mb={4} justifyContent="space-between" alignItems="center">
                 <Input
-                    placeholder="Search..."
+                    placeholder="Search across all data..."
                     value={searchTerm}
                     onChange={(e: ChangeEvent<HTMLInputElement>) => {
                         setSearchTerm(e.target.value);
@@ -231,17 +274,11 @@ export default function DataTable({
                     <Tbody>
                         {paginatedData.length > 0 ? (
                             paginatedData.map((row, rowIndex) => (
-                                <Tr key={rowIndex} className="even:bg-gray-50">
+                                <Tr key={row._id || rowIndex}>
                                     {allColumns.map((column) => (
                                         <Td
                                             key={column.accessorKey}
                                             className="px-6 py-4 whitespace-nowrap text-sm text-gray-900"
-                                            onClick={(e) => {
-                                                // Prevent click propagation for action cells
-                                                if (column.accessorKey !== 'actions') {
-                                                    // Handle row click if needed
-                                                }
-                                            }}
                                         >
                                             {column.cell ? (
                                                 column.cell(row)

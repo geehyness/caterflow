@@ -12,6 +12,7 @@ export async function GET(request: Request) {
     try {
         const { searchParams } = new URL(request.url);
         const id = searchParams.get('id');
+        const status = searchParams.get('status');
 
         // If an ID is provided, fetch a specific purchase order
         if (id) {
@@ -34,7 +35,9 @@ export async function GET(request: Request) {
                 },
                 status,
                 orderDate,
-                totalAmount
+                totalAmount,
+                // Check if this PO has any goods receipts
+                "hasReceipts": count(*[_type == "GoodsReceipt" && purchaseOrder._ref == ^._id]) > 0
             }`;
 
             const purchaseOrder = await client.fetch(query, { id });
@@ -49,8 +52,18 @@ export async function GET(request: Request) {
             return NextResponse.json(purchaseOrder[0]);
         }
 
-        // If no ID, fetch all purchase orders
-        const allQuery = groq`*[_type == "PurchaseOrder"] | order(orderDate desc) {
+        // Build the base query - only filter by status if provided
+        let baseQuery = '*[_type == "PurchaseOrder"]';
+        const queryParams: any = {};
+
+        // Add status filter if provided
+        if (status) {
+            baseQuery += ` && status == $status`;
+            queryParams.status = status;
+        }
+
+        // Complete query with ordering and projection
+        const allQuery = groq`${baseQuery} | order(orderDate desc) {
             _id,
             _type,
             poNumber,
@@ -69,10 +82,16 @@ export async function GET(request: Request) {
             },
             status,
             orderDate,
-            totalAmount
+            totalAmount,
+            // Check if this PO has any goods receipts
+            "hasReceipts": count(*[_type == "GoodsReceipt" && purchaseOrder._ref == ^._id]) > 0
         }`;
 
-        const purchaseOrders = await client.fetch(allQuery);
+        let purchaseOrders = await client.fetch(allQuery, queryParams);
+
+        // Ensure purchaseOrders is always an array, even if null/undefined
+        purchaseOrders = purchaseOrders || [];
+
         return NextResponse.json(purchaseOrders);
     } catch (error: any) {
         console.error("Error fetching purchase orders:", error);

@@ -18,6 +18,7 @@ import {
     chakra,
     Spinner,
     Badge,
+    Checkbox,
 } from '@chakra-ui/react';
 import { ChevronLeftIcon, ChevronRightIcon, ChevronUpIcon, ChevronDownIcon } from '@chakra-ui/icons';
 import { FiPackage } from 'react-icons/fi';
@@ -27,7 +28,7 @@ import { PendingAction } from './types';
 export interface Column {
     accessorKey: keyof PendingAction | string; // Use keyof PendingAction for type safety
     header: string | React.ReactNode;
-    cell?: (row: any) => React.ReactNode;
+    cell?: (row: any, index?: number) => React.ReactNode; // Add index parameter
     isSortable?: boolean;
 }
 
@@ -38,6 +39,7 @@ interface DataTableProps {
     onActionClick?: (action: any) => void; // Make optional and accept any
     hideStatusColumn?: boolean;
     actionType?: string;
+    onSelectionChange?: (selectedItems: any[]) => void; // Add selection change handler
 }
 
 export default function DataTable({
@@ -47,12 +49,17 @@ export default function DataTable({
     onActionClick,
     hideStatusColumn = false,
     actionType = '',
+    onSelectionChange,
 }: DataTableProps) {
     const [searchTerm, setSearchTerm] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(10);
     const [sortColumn, setSortColumn] = useState<keyof PendingAction | null>(null); // Use keyof PendingAction
     const [sortDirection, setSortDirection] = useState<'asc' | 'desc' | null>(null);
+    const [selectedRows, setSelectedRows] = useState<any[]>([]);
+
+    // Only show selection for GoodsReceipt action type
+    const showSelection = actionType === 'GoodsReceipt' && onSelectionChange;
 
     const getStatusColor = (status: string) => {
         switch (status) {
@@ -65,9 +72,31 @@ export default function DataTable({
         }
     };
 
+    // Selection handlers
+    const handleSelectAll = (e: ChangeEvent<HTMLInputElement>) => {
+        if (e.target.checked) {
+            setSelectedRows(paginatedData);
+            onSelectionChange?.(paginatedData);
+        } else {
+            setSelectedRows([]);
+            onSelectionChange?.([]);
+        }
+    };
+
+    const handleSelectRow = (row: any) => {
+        let newSelectedRows;
+        if (selectedRows.includes(row)) {
+            newSelectedRows = selectedRows.filter(r => r !== row);
+        } else {
+            newSelectedRows = [...selectedRows, row];
+        }
+        setSelectedRows(newSelectedRows);
+        onSelectionChange?.(newSelectedRows);
+    };
+
     // Custom action button renderer based on action type
     const renderActionButton = (row: PendingAction) => {
-        if (!onActionClick) return null; // Return null if onActionClick is not provided
+        if (!onActionClick) return null;
 
         if (actionType === 'GoodsReceipt') {
             return (
@@ -77,7 +106,7 @@ export default function DataTable({
                     onClick={() => onActionClick(row)}
                     leftIcon={<FiPackage />}
                 >
-                    Receive
+                    {row.status === 'draft' || row.status === 'partial' ? 'Receive' : 'View'}
                 </Button>
             );
         } else {
@@ -125,7 +154,8 @@ export default function DataTable({
             row.status,
             row.poNumber,
             row.supplierName,
-            row.actionType
+            row.actionType,
+            row.receiptNumber
         ];
 
         if (basicProperties.some(prop =>
@@ -149,6 +179,19 @@ export default function DataTable({
                     (item.stockItem.name && item.stockItem.name.toLowerCase().includes(searchTermLower)) ||
                     (item.orderedQuantity && item.orderedQuantity.toString().includes(searchTerm)) ||
                     (item.unitPrice && item.unitPrice.toString().includes(searchTerm))
+                );
+            });
+
+            if (hasMatchingItem) return true;
+        }
+
+        // Check received items for GoodsReceipts
+        if (row.actionType === 'GoodsReceipt' && row.receivedItems) {
+            const hasMatchingItem = row.receivedItems.some((item: any) => {
+                return (
+                    (item.stockItem?.name && item.stockItem.name.toLowerCase().includes(searchTermLower)) ||
+                    (item.receivedQuantity && item.receivedQuantity.toString().includes(searchTerm)) ||
+                    (item.batchNumber && item.batchNumber.toLowerCase().includes(searchTermLower))
                 );
             });
 
@@ -276,6 +319,16 @@ export default function DataTable({
                 <Table variant="simple" size="sm" className="min-w-full divide-y divide-gray-200">
                     <Thead>
                         <Tr className="bg-gray-50">
+                            {/* Selection column - only show for GoodsReceipt action type */}
+                            {showSelection && (
+                                <Th width="50px">
+                                    <Checkbox
+                                        onChange={handleSelectAll}
+                                        isChecked={selectedRows.length === paginatedData.length && paginatedData.length > 0}
+                                        isIndeterminate={selectedRows.length > 0 && selectedRows.length < paginatedData.length}
+                                    />
+                                </Th>
+                            )}
                             {allColumns.map((column) => (
                                 <Th
                                     key={column.accessorKey}
@@ -296,13 +349,22 @@ export default function DataTable({
                         {paginatedData.length > 0 ? (
                             paginatedData.map((row, rowIndex) => (
                                 <Tr key={row._id || rowIndex}>
+                                    {/* Selection checkbox - only show for GoodsReceipt action type */}
+                                    {showSelection && (
+                                        <Td>
+                                            <Checkbox
+                                                onChange={() => handleSelectRow(row)}
+                                                isChecked={selectedRows.includes(row)}
+                                            />
+                                        </Td>
+                                    )}
                                     {allColumns.map((column) => (
                                         <Td
                                             key={column.accessorKey}
                                             className="px-6 py-4 whitespace-nowrap text-sm text-gray-900"
                                         >
                                             {column.cell ? (
-                                                column.cell(row)
+                                                column.cell(row, rowIndex)
                                             ) : column.accessorKey === 'description' ? (
                                                 renderDescriptionWithItems(row)
                                             ) : (
@@ -314,7 +376,11 @@ export default function DataTable({
                             ))
                         ) : (
                             <Tr>
-                                <Td colSpan={allColumns.length} textAlign="center" py={10}>
+                                <Td
+                                    colSpan={allColumns.length + (showSelection ? 1 : 0)}
+                                    textAlign="center"
+                                    py={10}
+                                >
                                     No results found.
                                 </Td>
                             </Tr>

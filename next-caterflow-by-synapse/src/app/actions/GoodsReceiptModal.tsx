@@ -38,11 +38,17 @@ import {
     useColorModeValue,
     Checkbox,
     Box,
+    AlertDialog,
+    AlertDialogBody,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogContent,
+    AlertDialogOverlay,
 } from '@chakra-ui/react';
 import { FiCheck, FiX } from 'react-icons/fi';
 
 import { PurchaseOrder } from './types';
-import DataTable, { Column } from './ReceiptsTable';
+import DataTable, { Column } from './DataTable';
 
 // Define the interface for an item within the goods receipt
 interface ReceivedItem {
@@ -111,6 +117,8 @@ export default function GoodsReceiptModal({
     const [poDataLoading, setPoDataLoading] = useState(false);
     const [availableBins, setAvailableBins] = useState<Bin[]>([]);
     const [selectedItemsKeys, setSelectedItemsKeys] = useState<string[]>([]);
+    const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+    const cancelRef = React.useRef<HTMLButtonElement>(null);
     const toast = useToast();
 
     // Effect to preselect the PO if a value is passed
@@ -189,7 +197,7 @@ export default function GoodsReceiptModal({
                             orderedQuantity: item.orderedQuantity,
                             receivedQuantity: 0, // Initialize received quantity to 0
                             condition: 'good' as const, // Explicitly type as 'good'
-                            _key: item._key
+                            _key: item._key || Math.random().toString(36).substr(2, 9)
                         }));
                         setItems(receiptItems);
                     }
@@ -247,22 +255,39 @@ export default function GoodsReceiptModal({
         setSelectedItemsKeys(selectedData.map(item => item._key));
     };
 
-    const handleSave = async (e: React.FormEvent, isPartial = false) => {
+    // Determine status based on received items
+    const determineStatus = () => {
+        if (items.length === 0) return 'draft';
+
+        const allReceived = items.every(item => item.receivedQuantity === item.orderedQuantity && item.condition === 'good');
+        const someReceived = items.some(item => item.receivedQuantity > 0);
+
+        if (allReceived) return 'completed';
+        if (someReceived) return 'partial';
+        return 'draft';
+    };
+
+    const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
+
+        const finalStatus = determineStatus();
+
+        // Show confirmation if all items are received
+        if (finalStatus === 'completed') {
+            setIsConfirmOpen(true);
+            return;
+        }
+
+        await saveReceipt(finalStatus);
+    };
+
+    const saveReceipt = async (finalStatus: 'draft' | 'partial' | 'completed') => {
         setLoading(true);
         try {
             const url = '/api/goods-receipts';
             const method = receipt ? 'PATCH' : 'POST';
             const selectedOrder = approvedPurchaseOrders?.find(po => po._id === selectedPO);
             const selectedBinObj = availableBins.find(bin => bin._id === selectedBin);
-
-            let finalStatus;
-            if (isPartial) {
-                finalStatus = 'partial';
-            } else {
-                const allReceived = items.every(item => item.receivedQuantity === item.orderedQuantity && item.condition === 'good');
-                finalStatus = allReceived ? 'completed' : 'draft';
-            }
 
             const response = await fetch(url, {
                 method,
@@ -333,6 +358,7 @@ export default function GoodsReceiptModal({
             });
         } finally {
             setLoading(false);
+            setIsConfirmOpen(false);
         }
     };
 
@@ -347,6 +373,7 @@ export default function GoodsReceiptModal({
                 return `${itemNames.slice(0, maxItemsToShow).join(', ')} +${itemNames.length - maxItemsToShow} more`;
             }
         }
+        return '';
     };
 
     // Helper to get a color for the status badge
@@ -440,205 +467,228 @@ export default function GoodsReceiptModal({
     ];
 
     const selectedOrder = approvedPurchaseOrders?.find(po => po._id === selectedPO) || null;
+    const currentStatus = determineStatus();
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} size="6xl" scrollBehavior="inside">
-            <ModalOverlay />
-            <ModalContent maxW="1200px" mx="auto" my={8} borderRadius="xl" boxShadow="xl" height="90vh">
-                <ModalHeader
-                    bg={useColorModeValue('brand.50', 'brand.900')}
-                    borderTopRadius="xl"
-                    py={4}
-                    position="sticky"
-                    top={0}
-                    zIndex={10}
-                >
-                    {receipt ? 'Edit Goods Receipt' : 'Create Goods Receipt'}
-                </ModalHeader>
-                <ModalCloseButton position="absolute" right="12px" top="12px" />
+        <>
+            <Modal isOpen={isOpen} onClose={onClose} size="6xl" scrollBehavior="inside">
+                <ModalOverlay />
+                <ModalContent maxW="1200px" mx="auto" my={8} borderRadius="xl" boxShadow="xl" height="90vh">
+                    <ModalHeader
+                        bg={useColorModeValue('brand.50', 'brand.900')}
+                        borderTopRadius="xl"
+                        py={4}
+                        position="sticky"
+                        top={0}
+                        zIndex={10}
+                    >
+                        {receipt ? 'Edit Goods Receipt' : 'Create Goods Receipt'}
+                    </ModalHeader>
+                    <ModalCloseButton position="absolute" right="12px" top="12px" />
 
-                <ModalBody pb={6} overflowY="auto" maxH="calc(90vh - 140px)">
-                    <VStack spacing={4} align="stretch">
-                        <HStack>
-                            <FormControl isRequired>
-                                <FormLabel>Receipt Number</FormLabel>
-                                <Input
-                                    value={receiptNumber}
-                                    onChange={(e) => setReceiptNumber(e.target.value)}
-                                    placeholder="e.g., GR-001"
-                                />
-                            </FormControl>
-                            <FormControl isRequired>
-                                <FormLabel>Receipt Date</FormLabel>
-                                <Input
-                                    type="date"
-                                    value={receiptDate}
-                                    onChange={(e) => setReceiptDate(e.target.value)}
-                                />
-                            </FormControl>
-                        </HStack>
+                    <ModalBody pb={6} overflowY="auto" maxH="calc(90vh - 140px)">
+                        <VStack spacing={4} align="stretch">
+                            <HStack>
+                                <FormControl isRequired>
+                                    <FormLabel>Receipt Number</FormLabel>
+                                    <Input
+                                        value={receiptNumber}
+                                        onChange={(e) => setReceiptNumber(e.target.value)}
+                                        placeholder="e.g., GR-001"
+                                    />
+                                </FormControl>
+                                <FormControl isRequired>
+                                    <FormLabel>Receipt Date</FormLabel>
+                                    <Input
+                                        type="date"
+                                        value={receiptDate}
+                                        onChange={(e) => setReceiptDate(e.target.value)}
+                                    />
+                                </FormControl>
+                            </HStack>
 
-                        <FormControl>
-                            <FormLabel>Status</FormLabel>
-                            <Badge
-                                colorScheme={getStatusColor(status)}
-                                fontSize="md"
-                                px={3}
-                                py={1}
-                                borderRadius="full"
-                            >
-                                {status.toUpperCase()}
-                            </Badge>
-                        </FormControl>
-
-                        <HStack>
-                            <FormControl isRequired>
-                                <FormLabel>Purchase Order</FormLabel>
-                                <Select
-                                    value={selectedPO}
-                                    onChange={(e) => setSelectedPO(e.target.value)}
-                                    placeholder="Select Purchase Order"
-                                    width="100%"
-                                    isDisabled={poDataLoading}
+                            <FormControl>
+                                <FormLabel>Status</FormLabel>
+                                <Badge
+                                    colorScheme={getStatusColor(currentStatus)}
+                                    fontSize="md"
+                                    px={3}
+                                    py={1}
+                                    borderRadius="full"
                                 >
-                                    {approvedPurchaseOrders?.map(po => (
-                                        <option key={po._id} value={po._id}>
-                                            {po.poNumber} - {po.supplier?.name}
-                                            {po.orderedItems && po.orderedItems.length > 0 && (
-                                                ` (${getItemListForPO(po)})`
-                                            )}
-                                        </option>
-                                    ))}
-                                </Select>
+                                    {currentStatus.toUpperCase()}
+                                </Badge>
                             </FormControl>
-                            <FormControl isRequired>
-                                <FormLabel>Receiving Bin</FormLabel>
-                                <InputGroup>
+
+                            <HStack>
+                                <FormControl isRequired>
+                                    <FormLabel>Purchase Order</FormLabel>
                                     <Select
-                                        value={selectedBin}
-                                        onChange={(e) => setSelectedBin(e.target.value)}
-                                        placeholder="Select Bin"
-                                        isDisabled={poDataLoading}
+                                        value={selectedPO}
+                                        onChange={(e) => setSelectedPO(e.target.value)}
+                                        placeholder="Select Purchase Order"
+                                        width="100%"
+                                        isDisabled={poDataLoading || !!receipt}
                                     >
-                                        {availableBins.map(bin => (
-                                            <option key={bin._id} value={bin._id}>
-                                                {bin.name} ({bin.binType})
+                                        {approvedPurchaseOrders?.map(po => (
+                                            <option key={po._id} value={po._id}>
+                                                {po.poNumber} - {po.supplier?.name}
+                                                {po.orderedItems && po.orderedItems.length > 0 && (
+                                                    ` (${getItemListForPO(po)})`
+                                                )}
                                             </option>
                                         ))}
                                     </Select>
-                                    {poDataLoading && (
-                                        <InputRightElement>
-                                            <Spinner size="sm" />
-                                        </InputRightElement>
-                                    )}
-                                </InputGroup>
-                            </FormControl>
-                        </HStack>
+                                </FormControl>
+                                <FormControl isRequired>
+                                    <FormLabel>Receiving Bin</FormLabel>
+                                    <InputGroup>
+                                        <Select
+                                            value={selectedBin}
+                                            onChange={(e) => setSelectedBin(e.target.value)}
+                                            placeholder="Select Bin"
+                                            isDisabled={poDataLoading}
+                                        >
+                                            {availableBins.map(bin => (
+                                                <option key={bin._id} value={bin._id}>
+                                                    {bin.name} ({bin.binType})
+                                                </option>
+                                            ))}
+                                        </Select>
+                                        {poDataLoading && (
+                                            <InputRightElement>
+                                                <Spinner size="sm" />
+                                            </InputRightElement>
+                                        )}
+                                    </InputGroup>
+                                </FormControl>
+                            </HStack>
 
-                        {selectedOrder && (
-                            <Box p={4} borderWidth={1} borderColor="gray.200" borderRadius="md" mt={2}>
-                                <VStack align="stretch" spacing={2}>
-                                    <Text fontWeight="bold" fontSize="lg">Purchase Order Details</Text>
-                                    <HStack justifyContent="space-between">
-                                        <Text fontWeight="medium">PO Number:</Text>
-                                        <Text>{selectedOrder.poNumber}</Text>
-                                    </HStack>
-                                    <HStack justifyContent="space-between">
-                                        <Text fontWeight="medium">Supplier:</Text>
-                                        <Text>{selectedOrder.supplier?.name}</Text>
-                                    </HStack>
-                                    <HStack justifyContent="space-between">
-                                        <Text fontWeight="medium">Site:</Text>
-                                        <Text>{selectedOrder.site?.name}</Text>
-                                    </HStack>
-                                </VStack>
-                            </Box>
-                        )}
-
-                        <FormControl>
-                            <FormLabel>Notes</FormLabel>
-                            <Input
-                                value={notes}
-                                onChange={(e) => setNotes(e.target.value)}
-                                placeholder="Additional notes or comments"
-                                isDisabled={poDataLoading}
-                            />
-                        </FormControl>
-
-                        {poDataLoading ? (
-                            <Flex justifyContent="center" alignItems="center" height="200px">
-                                <Spinner size="xl" />
-                            </Flex>
-                        ) : selectedOrder && (
-                            <>
-                                <Box>
-                                    <HStack justify="space-between" mb={4}>
-                                        <Text fontSize="lg" fontWeight="bold">
-                                            Received Items from PO: {selectedOrder.poNumber}
-                                        </Text>
-                                        <HStack>
-                                            <Button size="sm" leftIcon={<FiCheck />} onClick={markSelectedAsReceived} isDisabled={selectedItemsKeys.length === 0}>
-                                                Mark Selected
-                                            </Button>
-                                            <Button size="sm" leftIcon={<FiX />} onClick={markSelectedAsNotReceived} isDisabled={selectedItemsKeys.length === 0}>
-                                                Clear Selected
-                                            </Button>
+                            {selectedOrder && (
+                                <Box p={4} borderWidth={1} borderColor="gray.200" borderRadius="md" mt={2}>
+                                    <VStack align="stretch" spacing={2}>
+                                        <Text fontWeight="bold" fontSize="lg">Purchase Order Details</Text>
+                                        <HStack justifyContent="space-between">
+                                            <Text fontWeight="medium">PO Number:</Text>
+                                            <Text>{selectedOrder.poNumber}</Text>
                                         </HStack>
-                                    </HStack>
-
-                                    <Box overflowX="auto" maxW="100%">
-                                        <DataTable
-                                            columns={columns}
-                                            data={items}
-                                            loading={false}
-                                            onSelectionChange={handleSelectionChange}
-                                        />
-                                    </Box>
-
-                                    <Text fontSize="sm" color="gray.500" mt={2}>
-                                        Expiry dates can be added after receiving items.
-                                    </Text>
+                                        <HStack justifyContent="space-between">
+                                            <Text fontWeight="medium">Supplier:</Text>
+                                            <Text>{selectedOrder.supplier?.name}</Text>
+                                        </HStack>
+                                        <HStack justifyContent="space-between">
+                                            <Text fontWeight="medium">Site:</Text>
+                                            <Text>{selectedOrder.site?.name}</Text>
+                                        </HStack>
+                                    </VStack>
                                 </Box>
-                            </>
-                        )}
-                    </VStack>
-                </ModalBody>
+                            )}
 
-                <ModalFooter
-                    bg={useColorModeValue('gray.50', 'gray.800')}
-                    borderBottomRadius="xl"
-                    position="sticky"
-                    bottom={0}
-                    zIndex={10}
-                >
-                    <Button
-                        colorScheme="gray"
-                        mr={3}
-                        onClick={onClose}
-                        isDisabled={loading || poDataLoading}
-                        variant="outline"
+                            <FormControl>
+                                <FormLabel>Notes</FormLabel>
+                                <Input
+                                    value={notes}
+                                    onChange={(e) => setNotes(e.target.value)}
+                                    placeholder="Additional notes or comments"
+                                    isDisabled={poDataLoading}
+                                />
+                            </FormControl>
+
+                            {poDataLoading ? (
+                                <Flex justifyContent="center" alignItems="center" height="200px">
+                                    <Spinner size="xl" />
+                                </Flex>
+                            ) : selectedOrder && (
+                                <>
+                                    <Box>
+                                        <HStack justify="space-between" mb={4}>
+                                            <Text fontSize="lg" fontWeight="bold">
+                                                Received Items from PO: {selectedOrder.poNumber}
+                                            </Text>
+                                            <HStack>
+                                                <Button size="sm" leftIcon={<FiCheck />} onClick={markSelectedAsReceived} isDisabled={selectedItemsKeys.length === 0}>
+                                                    Mark Selected
+                                                </Button>
+                                                <Button size="sm" leftIcon={<FiX />} onClick={markSelectedAsNotReceived} isDisabled={selectedItemsKeys.length === 0}>
+                                                    Clear Selected
+                                                </Button>
+                                            </HStack>
+                                        </HStack>
+
+                                        <Box overflowX="auto" maxW="100%">
+                                            <DataTable
+                                                columns={columns}
+                                                data={items}
+                                                loading={false}
+                                                onSelectionChange={handleSelectionChange}
+                                                actionType='GoodsReceipt'
+                                            />
+                                        </Box>
+
+                                        <Text fontSize="sm" color="gray.500" mt={2}>
+                                            Expiry dates can be added after receiving items.
+                                        </Text>
+                                    </Box>
+                                </>
+                            )}
+                        </VStack>
+                    </ModalBody>
+
+                    <ModalFooter
+                        bg={useColorModeValue('gray.50', 'gray.800')}
+                        borderBottomRadius="xl"
+                        position="sticky"
+                        bottom={0}
+                        zIndex={10}
                     >
-                        Cancel
-                    </Button>
-                    <Button
-                        colorScheme="orange"
-                        mr={3}
-                        onClick={(e) => handleSave(e, true)}
-                        isLoading={loading}
-                        isDisabled={!selectedPO || items.length === 0 || poDataLoading || !selectedBin || isComplete}
-                    >
-                        Save Draft
-                    </Button>
-                    <Button
-                        colorScheme="blue"
-                        type="submit"
-                        isLoading={loading}
-                        isDisabled={!selectedPO || items.length === 0 || poDataLoading || !selectedBin || !isComplete}
-                    >
-                        {receipt ? 'Update Receipt' : 'Create Receipt'}
-                    </Button>
-                </ModalFooter>
-            </ModalContent>
-        </Modal>
+                        <Button
+                            colorScheme="gray"
+                            mr={3}
+                            onClick={onClose}
+                            isDisabled={loading || poDataLoading}
+                            variant="outline"
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            colorScheme="blue"
+                            onClick={handleSave}
+                            isLoading={loading}
+                            isDisabled={!selectedPO || items.length === 0 || poDataLoading || !selectedBin}
+                        >
+                            Save Receipt
+                        </Button>
+                    </ModalFooter>
+                </ModalContent>
+            </Modal>
+
+            {/* Confirmation Dialog */}
+            <AlertDialog
+                isOpen={isConfirmOpen}
+                leastDestructiveRef={cancelRef}
+                onClose={() => setIsConfirmOpen(false)}
+            >
+                <AlertDialogOverlay>
+                    <AlertDialogContent>
+                        <AlertDialogHeader fontSize="lg" fontWeight="bold">
+                            Confirm Complete Receipt
+                        </AlertDialogHeader>
+
+                        <AlertDialogBody>
+                            Are you sure you want to mark this receipt as complete? This will also mark the associated purchase order as completed and cannot be undone.
+                        </AlertDialogBody>
+
+                        <AlertDialogFooter>
+                            <Button ref={cancelRef} onClick={() => setIsConfirmOpen(false)}>
+                                Cancel
+                            </Button>
+                            <Button colorScheme="green" onClick={() => saveReceipt('completed')} ml={3}>
+                                Confirm Complete
+                            </Button>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialogOverlay>
+            </AlertDialog>
+        </>
     );
 }
