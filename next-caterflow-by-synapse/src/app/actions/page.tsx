@@ -958,15 +958,15 @@ export default function ActionsPage() {
                                     <Text fontWeight="bold">Reference Number:</Text>
                                     <Text>{selectedApproval?.poNumber}</Text>
                                 </Box>
-                                {selectedApproval?.supplier?.name && (
+                                {selectedApproval?.supplierName && (
                                     <Box>
                                         <Text fontWeight="bold">Supplier:</Text>
-                                        <Text>{selectedApproval.supplier?.name}</Text>
+                                        <Text>{selectedApproval.supplierName}</Text>
                                     </Box>
                                 )}
                                 <Box>
                                     <Text fontWeight="bold">Site:</Text>
-                                    <Text>{selectedApproval?.site?.name}</Text>
+                                    <Text>{selectedApproval?.siteName}</Text>
                                 </Box>
                                 {selectedApproval?.orderedBy && (
                                     <Box>

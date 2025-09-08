@@ -6,7 +6,7 @@ export interface ActionStep {
     required: boolean;
 }
 
-// Define the interface for a pending action document
+// types.ts
 export interface PendingAction {
     _id: string;
     _type: string;
@@ -25,6 +25,11 @@ export interface PendingAction {
     status?: string;
     poNumber?: string;
     supplierName?: string;
+    // Add the supplier object property
+    supplier?: {
+        name: string;
+        _id?: string;
+    };
     orderedBy?: string;
     orderedItems?: Array<{
         _key: string;
