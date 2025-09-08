@@ -409,12 +409,12 @@ export default function Home() {
             subValue={`+${dashboardStats?.receiptsTrend || 0} vs last month`}
             icon={BsBuildingAdd}
             colorScheme="green"
-            viewAllLink="/goods-receipts"
+            viewAllLink="/operations/receipts"
           />
 
           {/* Card 2: Dispatches This Month */}
           <StatCard
-            title="Dispatches This Month"
+            title="Issues This Month"
             value={dashboardStats?.monthlyDispatchesCount || 0}
             subValue={`${dashboardStats?.todaysDispatchesCount || 0} pending today`}
             icon={BsTruck}
@@ -444,12 +444,12 @@ export default function Home() {
 
           {/* Card 5: Recent Activity */}
           <StatCard
-            title="Recent Activity"
+            title="Current Stock"
             value={dashboardStats?.weeklyActivityCount || 0}
             subValue={`${dashboardStats?.todayActivityCount || 0} today`}
             icon={BsClipboardData}
             colorScheme="blue"
-            viewAllLink="/activity"  // Updated
+            viewAllLink="/current"  // Updated
           />
         </SimpleGrid>
       )}
