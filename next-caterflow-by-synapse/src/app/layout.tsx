@@ -21,7 +21,12 @@ const MainContentLayout = ({ children }: { children: React.ReactNode }) => {
   const pathname = usePathname();
   const [isClient, setIsClient] = useState(false);
   const { isLoading } = useLoading();
-  const { closeSidebar } = useSidebar(); // Add this
+  const { closeSidebar } = useSidebar();
+
+  // Add this useEffect
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   // Close sidebar when route changes on mobile
   useEffect(() => {
