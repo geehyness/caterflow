@@ -1,7 +1,7 @@
 {
-  "name": "Professional Hair Salon",
-  "short_name": "Professional Hair Salon",
-  "description": "Salon booking made easy!",
+  "name": "Caterflow by Synapse",
+  "short_name": "Caterflow",
+  "description": "Stock management made easy!",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",

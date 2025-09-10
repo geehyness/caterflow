@@ -4,8 +4,9 @@
 import React, { useState } from 'react';
 import {
     Box, Flex, Heading, Button, Stack, useColorMode, useColorModeValue, IconButton, Link as ChakraLink, Text, useTheme, Tooltip, Icon, Divider, Spinner, Collapse,
+    Drawer, DrawerOverlay, DrawerContent, DrawerCloseButton, DrawerBody, useBreakpointValue,
 } from '@chakra-ui/react';
-import { MoonIcon, SunIcon } from '@chakra-ui/icons';
+import { MoonIcon, SunIcon, HamburgerIcon } from '@chakra-ui/icons';
 import NextLink from 'next/link';
 import Image from 'next/image';
 import { useRouter, usePathname } from 'next/navigation';
@@ -13,25 +14,27 @@ import { FiLogOut, FiBarChart2, FiBox, FiMapPin, FiTruck, FiUsers, FiSettings, F
 import { useAuth } from '@/context/AuthContext';
 import { useLoading } from '@/context/LoadingContext';
 import { FaCheckCircle } from 'react-icons/fa';
+import { useSidebar } from '@/context/SidebarContext'; // FIXED: Import from correct path
 
 interface SidebarProps {
     appName?: string;
 }
 
-export function Sidebar({ appName = 'Caterflow' }: SidebarProps) {
+// Extract the sidebar content into a separate component
+const SidebarContent = ({ onItemClick }: { onItemClick?: () => void }) => {
     const { colorMode, toggleColorMode } = useColorMode();
     const theme = useTheme();
     const router = useRouter();
     const pathname = usePathname();
     const { isAuthenticated, logout, userRole, isAuthReady } = useAuth();
     const [expandedGroups, setExpandedGroups] = useState<string[]>(['Main', 'Operations', 'Admin']);
+    const { setLoading } = useLoading();
 
     const sidebarBg = useColorModeValue(theme.colors.neutral.light['bg-secondary'], theme.colors.neutral.dark['bg']);
     const activeBg = useColorModeValue(theme.colors.brand['100'], theme.colors.brand['700']);
     const borderColor = useColorModeValue(theme.colors.neutral.light['border-color'], theme.colors.neutral.dark['border-color']);
     const iconColor = useColorModeValue(theme.colors.neutral.light['text-header'], theme.colors.neutral.dark['text-header']);
     const hoverBg = useColorModeValue('gray.100', 'gray.700');
-    const { setLoading } = useLoading();
 
     // Define menu items with roles and groups
     const menuGroups = [
@@ -86,24 +89,21 @@ export function Sidebar({ appName = 'Caterflow' }: SidebarProps) {
         );
     };
 
+    const handleItemClick = (href: string) => {
+        setLoading(true);
+        router.push(href);
+        onItemClick?.();
+    };
+
     if (!isAuthReady) {
         return (
             <Box
-                as="aside"
-                w="250px"
-                bg={sidebarBg}
-                borderRight="1px solid"
-                borderColor={borderColor}
-                position="fixed"
-                left="0"
-                top="0"
-                h="100vh"
                 p={4}
                 pt={6}
-                zIndex="sticky"
-                display={{ base: 'none', md: 'flex' }}
+                display="flex"
                 justifyContent="center"
                 alignItems="center"
+                height="100%"
             >
                 <Spinner size="md" />
             </Box>
@@ -111,46 +111,27 @@ export function Sidebar({ appName = 'Caterflow' }: SidebarProps) {
     }
 
     return (
-        <Box
-            as="aside"
-            w="250px"
-            bg={sidebarBg}
-            borderRight="1px solid"
-            borderColor={borderColor}
-            position="fixed"
-            left="0"
-            top="0"
-            h="100vh"
-            p={4}
-            pt={6}
-            zIndex="sticky"
-            flexDirection="column"
-            justifyContent="space-between"
-            display={{ base: 'none', md: 'flex' }}
-        >
-            {/* Top Fixed Section */}
-            <Box>
-                {/* App Logo and Name */}
-                <Flex alignItems="center" mb={6} pr={2} flexDirection="column">
-                    <Box
-                        bg="white"
-                        p={3}
-                        borderRadius="xl"
-                        boxShadow="md"
-                        display="flex"
-                        alignItems="center"
-                        justifyContent="center"
-                    >
-                        <Image
-                            src="/icons/icon-512x512.png"
-                            alt="Caterflow Logo"
-                            width={120}
-                            height={120}
-                        />
-                    </Box>
-                </Flex>
-                <Divider mb={4} />
-            </Box>
+        <>
+            {/* App Logo and Name */}
+            <Flex alignItems="center" mb={6} pr={2} flexDirection="column">
+                <Box
+                    bg="white"
+                    p={3}
+                    borderRadius="xl"
+                    boxShadow="md"
+                    display="flex"
+                    alignItems="center"
+                    justifyContent="center"
+                >
+                    <Image
+                        src="/icons/icon-512x512.png"
+                        alt="Caterflow Logo"
+                        width={120}
+                        height={120}
+                    />
+                </Box>
+            </Flex>
+            <Divider mb={4} />
 
             {/* Scrollable Menu Items */}
             <Flex direction="column" overflowY="auto" overflowX="hidden" flex="1" pr={2}>
@@ -187,25 +168,19 @@ export function Sidebar({ appName = 'Caterflow' }: SidebarProps) {
                             <Collapse in={expandedGroups.includes(group.heading)} animateOpacity>
                                 <Stack spacing={1} pl={1} mt={1}>
                                     {group.items.map((item) => (
-                                        <NextLink key={item.href} href={item.href} passHref>
-                                            <ChakraLink
-                                                as={Button}
-                                                variant="ghost"
-                                                justifyContent="flex-start"
-                                                w="full"
-                                                leftIcon={<Icon as={item.icon} boxSize={5} />}
-                                                color={pathname === item.href ? theme.colors.brand['500'] : iconColor}
-                                                bg={pathname === item.href ? activeBg : 'transparent'}
-                                                _hover={{ bg: activeBg, color: theme.colors.brand['500'] }}
-                                                onClick={(e: { preventDefault: () => void; }) => {
-                                                    e.preventDefault();
-                                                    setLoading(true);
-                                                    router.push(item.href);
-                                                }}
-                                            >
-                                                {item.label}
-                                            </ChakraLink>
-                                        </NextLink>
+                                        <Button
+                                            key={item.href}
+                                            variant="ghost"
+                                            justifyContent="flex-start"
+                                            w="full"
+                                            leftIcon={<Icon as={item.icon} boxSize={5} />}
+                                            color={pathname === item.href ? theme.colors.brand['500'] : iconColor}
+                                            bg={pathname === item.href ? activeBg : 'transparent'}
+                                            _hover={{ bg: activeBg, color: theme.colors.brand['500'] }}
+                                            onClick={() => handleItemClick(item.href)}
+                                        >
+                                            {item.label}
+                                        </Button>
                                     ))}
                                 </Stack>
                             </Collapse>
@@ -238,6 +213,55 @@ export function Sidebar({ appName = 'Caterflow' }: SidebarProps) {
                     </Button>
                 )}
             </Box>
+        </>
+    );
+};
+
+export function Sidebar({ appName = 'Caterflow' }: SidebarProps) {
+    const isMobile = useBreakpointValue({ base: true, md: false });
+    const { isOpen, closeSidebar } = useSidebar();
+    const sidebarBg = useColorModeValue('white', 'gray.800');
+
+    console.log('Sidebar component - isMobile:', isMobile, 'isOpen:', isOpen); // Debug log
+
+    if (isMobile) {
+        return (
+            <Drawer
+                isOpen={isOpen}
+                placement="left"
+                onClose={closeSidebar}
+                size="full"
+            >
+                <DrawerOverlay />
+                <DrawerContent bg={sidebarBg}>
+                    <DrawerCloseButton />
+                    <DrawerBody p={4} pt={10}>
+                        <SidebarContent onItemClick={closeSidebar} />
+                    </DrawerBody>
+                </DrawerContent>
+            </Drawer>
+        );
+    }
+
+    return (
+        <Box
+            as="aside"
+            w="250px"
+            bg={sidebarBg}
+            borderRight="1px solid"
+            borderColor="gray.200"
+            position="fixed"
+            left="0"
+            top="0"
+            h="100vh"
+            p={4}
+            pt={6}
+            zIndex="sticky"
+            flexDirection="column"
+            justifyContent="space-between"
+            display={{ base: 'none', md: 'flex' }}
+        >
+            <SidebarContent />
         </Box>
     );
 }

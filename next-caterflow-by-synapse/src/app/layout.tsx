@@ -9,8 +9,10 @@ import { Box, Spinner } from '@chakra-ui/react';
 import { useAuth } from '@/context/AuthContext';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { useLoading } from '@/context/LoadingContext'; // Add this import
-import { RouteChangeHandler } from '@/components/RouteChangeHandler'; // Add this import
+import { useLoading } from '@/context/LoadingContext';
+import { RouteChangeHandler } from '@/components/RouteChangeHandler';
+import { MobileTopbar } from '@/components/MobileTopbar'; // Add this import
+import { useSidebar } from '@/context/SidebarContext'; // Add this import
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -18,11 +20,13 @@ const MainContentLayout = ({ children }: { children: React.ReactNode }) => {
   const { isAuthenticated, isAuthReady } = useAuth();
   const pathname = usePathname();
   const [isClient, setIsClient] = useState(false);
-  const { isLoading } = useLoading(); // Add this
+  const { isLoading } = useLoading();
+  const { closeSidebar } = useSidebar(); // Add this
 
+  // Close sidebar when route changes on mobile
   useEffect(() => {
-    setIsClient(true);
-  }, []);
+    closeSidebar();
+  }, [pathname, closeSidebar]);
 
   if (!isAuthReady || !isClient) {
     return (
@@ -40,8 +44,13 @@ const MainContentLayout = ({ children }: { children: React.ReactNode }) => {
   return (
     <Box display="flex" minHeight="100vh" position="relative">
       <Sidebar />
-      <Box ml={{ base: 0, md: '250px' }} flex="1">
-        <RouteChangeHandler /> {/* Add this */}
+      <Box
+        ml={{ base: 0, md: '250px' }}
+        flex="1"
+        pt={{ base: '60px', md: 0 }} // Add padding top for mobile topbar
+      >
+        <MobileTopbar /> {/* Add MobileTopbar */}
+        <RouteChangeHandler />
         {children}
         <Footer appName="Caterflow" />
 
