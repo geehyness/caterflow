@@ -1,3 +1,5 @@
+// types.ts
+
 // Define the interface for an individual action step within a workflow
 export interface ActionStep {
     title: string;
@@ -6,7 +8,21 @@ export interface ActionStep {
     required: boolean;
 }
 
-// types.ts
+// Define the OrderedItem interface with the supplier object
+export interface OrderedItem {
+    _key: string;
+    stockItem: {
+        _id?: string;
+        name: string;
+    };
+    orderedQuantity: number;
+    unitPrice: number;
+    supplier?: {
+        _id?: string;
+        name: string;
+    };
+}
+
 export interface PendingAction {
     _id: string;
     _type: string;
@@ -22,7 +38,8 @@ export interface PendingAction {
     attachments?: any[];
     workflow?: ActionStep[];
     completedSteps?: number;
-    status?: string;
+    // status is now a required property
+    status: string;
     poNumber?: string;
     supplierName?: string;
     // Add the supplier object property
@@ -31,14 +48,7 @@ export interface PendingAction {
         _id?: string;
     };
     orderedBy?: string;
-    orderedItems?: Array<{
-        _key: string;
-        stockItem: {
-            name: string;
-        };
-        orderedQuantity: number;
-        unitPrice: number;
-    }>;
+    orderedItems?: OrderedItem[]; // Using the new OrderedItem interface
     // Add these fields for GoodsReceipt actions
     receiptNumber?: string;
     purchaseOrder?: string;
@@ -46,68 +56,37 @@ export interface PendingAction {
     receivedItems?: any[];
 }
 
-// Add this to your types.ts file
 export interface PurchaseOrder {
     _id: string;
-    poNumber?: string;
-    supplier?: {
-        name: string;
-    };
-    site?: {
-        name: string;
-    };
-    orderedItems?: Array<{
-        _key: string;
-        stockItem: {
-            _id: string;
-            name: string;
-            sku: string;
-            unitOfMeasure: string;
-        };
-        orderedQuantity: number;
-        unitPrice: number;
-    }>;
-    orderedBy?: string;
-}
-
-// Update the interface for the add item modal to match the API response
-export interface StockItem {
-    _id: string;
-    name: string;
-    sku: string;
-    unitPrice: number;
-    unitOfMeasure: string;
-    category?: {
+    _type: string;
+    _createdAt: string;
+    poNumber: string;
+    status: string;
+    site: {
         _id: string;
-        title: string;
+        name: string;
     };
-    itemType?: string;
+    supplier: {
+        _id: string;
+        name: string;
+    };
+    orderedItems: OrderedItem[];
+    orderedBy: string;
+    totalAmount: number;
 }
 
-// Update interface for Category to use 'title'
-export interface Category {
+
+export interface GoodsReceipt {
     _id: string;
-    title: string;
+    purchaseOrder?: {
+        _ref: string;
+    };
 }
 
-// Helper function to generate a specific workflow based on the action type
 export const generateWorkflow = (actionType: string, status: string = 'draft', completedSteps: number = 0): ActionStep[] => {
     switch (actionType) {
         case 'PurchaseOrder':
-            return [
-                {
-                    title: 'Finalize Order Details',
-                    description: 'Review and confirm the items, quantities, and prices before submitting.',
-                    completed: completedSteps > 0,
-                    required: true
-                },
-                {
-                    title: 'Submit for Approval',
-                    description: 'Send the purchase order to a manager for approval.',
-                    completed: completedSteps > 1,
-                    required: true
-                }
-            ];
+            return []; // Remove workflow steps for purchase orders
         case 'GoodsReceipt':
             return [
                 {

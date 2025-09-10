@@ -22,7 +22,7 @@ import {
 import { useAuth } from '@/context/AuthContext';
 import { FiPlusCircle, FiArrowLeft, FiArrowRight } from 'react-icons/fi';
 import DataTable, { Column } from '@/components/DataTable';
-import PurchaseOrderModal from '@/components/PurchaseOrderModal';
+import CreatePurchaseOrderModal from '@/app/actions/CreatePurchaseOrderModal';
 import { Site, Supplier, StockItem } from '@/lib/sanityTypes';
 
 interface LowStockItem extends StockItem {
@@ -33,10 +33,17 @@ interface LowStockItem extends StockItem {
     selected: boolean;
 }
 
+interface OrderItem {
+    stockItem: string;
+    supplier: string;
+    orderedQuantity: number;
+    unitPrice: number;
+}
+
 // Define a compatible interface for the PurchaseOrderModal
 interface PurchaseOrderGroup {
     supplierId: string;
-    items: StockItem[]; // Changed to match PurchaseOrderModal's expectation
+    items: StockItem[];
 }
 
 export default function LowStockPage() {
@@ -58,13 +65,13 @@ export default function LowStockPage() {
         try {
             let response;
             if (siteId) {
-                response = await fetch('/api/low-stock', {
+                response = await fetch('/api/low-stock?includeSuppliers=true', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ siteIds: [siteId] }),
                 });
             } else {
-                response = await fetch('/api/low-stock');
+                response = await fetch('/api/low-stock?includeSuppliers=true');
             }
             if (!response.ok) {
                 throw new Error('Failed to fetch low stock items');
@@ -76,6 +83,7 @@ export default function LowStockPage() {
                 selected: false,
             }));
             setLowStockItems(initialData);
+            setSelectedItems([]);
         } catch (err: any) {
             console.error('Error fetching low stock items:', err);
             setError(err.message);
@@ -156,92 +164,56 @@ export default function LowStockPage() {
         onOpen();
     };
 
-    const handleCreateOrders = async (orders: PurchaseOrderGroup[]) => {
-        const ordersCreated: string[] = [];
-        const failedOrders: string[] = [];
-
+    const handleCreateOrders = async (items: OrderItem[]) => {
         try {
-            // Use Promise.allSettled to wait for all requests to complete
-            const results = await Promise.allSettled(
-                orders.map(order => {
-                    const totalAmount = order.items.reduce((sum, item) => {
-                        const lowStockItem = item as unknown as LowStockItem;
-                        return sum + (lowStockItem.orderQuantity * (item.unitPrice || 0));
-                    }, 0);
+            const totalAmount = items.reduce((sum, item) => {
+                return sum + (item.orderedQuantity * item.unitPrice);
+            }, 0);
 
-                    return fetch('/api/purchase-orders', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            poNumber: `PO-${Date.now()}-${order.supplierId.substring(0, 4)}`,
-                            orderDate: new Date().toISOString(),
-                            supplier: order.supplierId,
-                            orderedBy: user?._id,
-                            orderedItems: order.items.map(item => {
-                                const lowStockItem = item as unknown as LowStockItem;
-                                return {
-                                    _type: 'OrderedItem',
-                                    stockItem: item._id,
-                                    orderedQuantity: lowStockItem.orderQuantity,
-                                    unitPrice: item.unitPrice,
-                                };
-                            }),
-                            totalAmount,
-                            status: 'draft',
-                            site: selectedSiteId,
-                        }),
-                    });
-                })
-            );
-
-            // Process results
-            results.forEach((result, index) => {
-                const supplierName = suppliers.find(s => s._id === orders[index].supplierId)?.name || 'Unknown Supplier';
-
-                if (result.status === 'fulfilled' && result.value.ok) {
-                    ordersCreated.push(supplierName);
-                } else {
-                    failedOrders.push(supplierName);
-                    console.error('Failed to create order for supplier:', supplierName, result.status === 'rejected' ? result.reason : result.value);
-                }
+            const response = await fetch('/api/purchase-orders', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    poNumber: `PO-${Date.now()}`,
+                    orderDate: new Date().toISOString(),
+                    orderedBy: user?._id,
+                    orderedItems: items,
+                    totalAmount,
+                    status: 'draft',
+                    site: selectedSiteId,
+                }),
             });
 
-            // Show success toast if any orders were created
-            if (ordersCreated.length > 0) {
+            if (response.ok) {
                 toast({
-                    title: 'Order(s) created successfully',
-                    description: `Purchase orders created for: ${ordersCreated.join(', ')}.`,
+                    title: 'Purchase order created',
+                    description: 'The purchase order has been created successfully',
                     status: 'success',
                     duration: 5000,
                     isClosable: true,
                 });
+
+                // Get the IDs of the items that were just ordered
+                const orderedItemIds = items.map(item => item.stockItem);
+
+                // Filter out the items that were just ordered from the lowStockItems state
+                setLowStockItems(prev => prev.filter(item => !orderedItemIds.includes(item._id)));
+
+                // Clear the selected items state
+                setSelectedItems([]);
+
+                onClose();
+            } else {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Failed to create purchase order');
             }
-
-            // Show error toast if any orders failed
-            if (failedOrders.length > 0) {
-                toast({
-                    title: 'Error creating order(s)',
-                    description: `Failed to create purchase orders for: ${failedOrders.join(', ')}. Please try again.`,
-                    status: 'error',
-                    duration: 9000,
-                    isClosable: true,
-                });
-            }
-
-            // Reset selection after creating orders
-            setSelectedItems([]);
-            setLowStockItems(prev => prev.map(item => ({ ...item, selected: false })));
-
-            onClose();
-            fetchLowStockItems(selectedSiteId);
-
-        } catch (error) {
-            console.error('Unexpected error in handleCreateOrders:', error);
+        } catch (error: any) {
+            console.error('Error creating purchase order:', error);
             toast({
-                title: 'Unexpected Error',
-                description: 'An unexpected error occurred while creating orders. Please try again.',
+                title: 'Error creating purchase order',
+                description: error.message || 'An unexpected error occurred. Please try again.',
                 status: 'error',
                 duration: 5000,
                 isClosable: true,
@@ -413,10 +385,10 @@ export default function LowStockPage() {
                 />
             )}
 
-            <PurchaseOrderModal
+            <CreatePurchaseOrderModal
                 isOpen={isOpen}
                 onClose={onClose}
-                selectedItems={selectedItems as unknown as StockItem[]} // Cast to match the expected type
+                selectedItems={selectedItems}
                 suppliers={suppliers}
                 onSave={handleCreateOrders}
             />

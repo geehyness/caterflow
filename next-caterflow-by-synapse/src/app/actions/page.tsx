@@ -44,20 +44,19 @@ import { FaBoxes } from 'react-icons/fa';
 import { FiPackage } from 'react-icons/fi';
 import ActionCard from './ActionCard';
 import WorkflowModal from './WorkflowModal';
-import PurchaseOrderModal from './PurchaseOrderModal';
+import PurchaseOrderModal, { PurchaseOrderDetails } from './PurchaseOrderModal';
 import FileUploadModal from '@/components/FileUploadModal';
-import AddItemModal from './AddItemModal';
 
 import {
     PendingAction,
     ActionStep,
-    StockItem,
-    Category,
     generateWorkflow,
     actionTypeTitles,
+    OrderedItem,
 } from './types';
 import DataTable from './DataTable';
 import GoodsReceiptModal from '@/app/actions/GoodsReceiptModal';
+import { Category, StockItem } from '@/lib/sanityTypes';
 
 // Interface for items selected in the modal
 interface SelectedItemData {
@@ -68,14 +67,22 @@ interface SelectedItemData {
 
 interface PurchaseOrder {
     _id: string;
-    poNumber?: string;
-    supplier?: { name: string };
-    site?: { name: string };
-    orderedItems?: any[];
-    orderedBy?: string;
-    status?: string;
-    orderDate?: string;
-    totalAmount?: number;
+    _type: string;
+    _createdAt: string;
+    poNumber: string;
+    status: string;
+    site: {
+        _id: string;
+        name: string;
+    };
+    supplier: {
+        _id: string;
+        name: string;
+    };
+    orderedItems: OrderedItem[];
+    orderedBy: string;
+    totalAmount: number;
+    orderDate: string;
 }
 
 interface GoodsReceipt {
@@ -100,7 +107,7 @@ export default function ActionsPage() {
     const { isOpen: isGoodsReceiptModalOpen, onOpen: onGoodsReceiptModalOpen, onClose: onGoodsReceiptModalClose } = useDisclosure();
     const [selectedAction, setSelectedAction] = useState<PendingAction | null>(null);
     const [selectedApproval, setSelectedApproval] = useState<PendingAction | null>(null);
-    const [poDetails, setPoDetails] = useState<PendingAction | null>(null);
+    const [poDetails, setPoDetails] = useState<PurchaseOrderDetails | null>(null);
     const [editedPrices, setEditedPrices] = useState<{ [key: string]: number | undefined }>({});
     const [editedQuantities, setEditedQuantities] = useState<{ [key: string]: number | undefined }>({});
     const [isSaving, setIsSaving] = useState(false);
@@ -118,6 +125,7 @@ export default function ActionsPage() {
     const [goodsReceipts, setGoodsReceipts] = useState<GoodsReceipt[]>([]);
     const [loadingPOs, setLoadingPOs] = useState(false);
     const [loadingReceipts, setLoadingReceipts] = useState(false);
+
 
     const fetchActions = useCallback(async () => {
         setLoading(true);
@@ -179,7 +187,7 @@ export default function ActionsPage() {
         }
     };
 
-    const fetchAllPurchaseOrders = async () => {
+    const fetchAllPurchaseOrders = useCallback(async () => {
         try {
             setLoadingPOs(true);
             const response = await fetch('/api/purchase-orders');
@@ -196,9 +204,9 @@ export default function ActionsPage() {
         } finally {
             setLoadingPOs(false);
         }
-    };
+    }, []);
 
-    const fetchGoodsReceipts = async () => {
+    const fetchGoodsReceipts = useCallback(async () => {
         try {
             setLoadingReceipts(true);
             const response = await fetch('/api/goods-receipts');
@@ -215,10 +223,17 @@ export default function ActionsPage() {
         } finally {
             setLoadingReceipts(false);
         }
-    };
+    }, []);
+
+    const refreshData = useCallback(async () => {
+        await fetchActions();
+        if (activeTab === 1) { // Goods Receipt tab
+            await Promise.all([fetchAllPurchaseOrders(), fetchGoodsReceipts()]);
+        }
+    }, [fetchActions, fetchAllPurchaseOrders, fetchGoodsReceipts, activeTab]);
 
     // Filter approved POs without receipts
-    const getApprovedPOsWithoutReceipts = () => {
+    const getApprovedPOsWithoutReceipts = (): PurchaseOrder[] => {
         // Get all PO IDs that have receipts
         const poIdsWithReceipts = new Set(
             goodsReceipts
@@ -226,15 +241,27 @@ export default function ActionsPage() {
                 .map(receipt => receipt.purchaseOrder!._ref)
         );
 
-        console.log('POs with receipts:', Array.from(poIdsWithReceipts));
-        console.log('All POs:', allPurchaseOrders.map(po => ({ id: po._id, status: po.status, poNumber: po.poNumber })));
-
-        // Filter approved POs that don't have receipts
-        const approvedPOs = allPurchaseOrders.filter(po =>
-            po.status === 'approved' && !poIdsWithReceipts.has(po._id)
-        );
-
-        console.log('Approved POs without receipts:', approvedPOs.map(po => ({ id: po._id, poNumber: po.poNumber })));
+        // Filter approved POs that don't have receipts and map to the correct structure
+        const approvedPOs = allPurchaseOrders
+            .filter(po => po.status === 'approved' && !poIdsWithReceipts.has(po._id))
+            .map(po => ({
+                _id: po._id,
+                _type: 'purchaseOrder',
+                _createdAt: po.orderDate || new Date().toISOString(),
+                poNumber: po.poNumber || '',
+                status: po.status || 'approved',
+                site: {
+                    _id: po.site?._id || '',
+                    name: po.site?.name || ''
+                },
+                supplier: {
+                    _id: po.supplier?._id || '',
+                    name: po.supplier?.name || ''
+                },
+                orderedItems: po.orderedItems || [],
+                orderedBy: po.orderedBy || '',
+                totalAmount: po.totalAmount || 0
+            } as PurchaseOrder));
 
         return approvedPOs;
     };
@@ -302,26 +329,57 @@ export default function ActionsPage() {
             };
             fetchData();
         }
-    }, [activeTab]);
+    }, [activeTab, fetchAllPurchaseOrders, fetchGoodsReceipts]); // Add the missing dependencies
 
     const handleOpenWorkflow = (action: PendingAction) => {
         setSelectedAction(action);
         onModalOpen();
     };
 
-    const handleOpenApprovalDetails = (action: PendingAction) => {
-        setSelectedApproval(action);
-        onApprovalModalOpen();
-    };
-
-    const handleFinalizeOrderStep = async (action: PendingAction) => {
+    const handleOpenEditPO = async (action: PendingAction) => {
         try {
-            const response = await fetch(`/api/purchase-orders/${action._id}`);
+            const response = await fetch(`/api/purchase-orders?id=${action._id}`);
             if (!response.ok) {
                 throw new Error('Failed to fetch purchase order details');
             }
             const data = await response.json();
-            setPoDetails(data);
+
+            // Transform the data to match PurchaseOrderDetails interface
+            const transformedData: PurchaseOrderDetails = {
+                _id: data._id,
+                _type: data._type || 'purchaseOrder',
+                poNumber: data.poNumber || '',
+                site: data.site || { name: '', _id: '' },
+                orderedBy: data.orderedBy || { name: '' },
+                orderDate: data.orderDate || '',
+                status: data.status || 'draft',
+                orderedItems: data.orderedItems?.map((item: any) => ({
+                    _key: item._key || Math.random().toString(36).substr(2, 9),
+                    stockItem: {
+                        name: item.stockItem?.name || 'Unknown Item',
+                        _id: item.stockItem?._id || ''
+                    },
+                    orderedQuantity: item.orderedQuantity || 0,
+                    unitPrice: item.unitPrice || 0,
+                    supplier: item.supplier || {
+                        name: data.supplierNames || data.supplierName || 'Unknown Supplier',
+                        _id: item.supplier?._id || ''
+                    }
+                })) || [],
+                supplierNames: data.supplierNames || data.supplierName || '',
+                totalAmount: data.totalAmount || 0,
+                // Add the missing required properties
+                title: data.title || `Purchase Order ${data.poNumber || ''}`,
+                description: data.description || `Order from ${data.supplierNames || data.supplierName || 'Unknown Supplier'}`,
+                createdAt: data.createdAt || data.orderDate || new Date().toISOString(),
+                priority: data.priority || 'medium',
+                siteName: data.siteName || data.site?.name || '',
+                actionType: data.actionType || 'PurchaseOrder',
+                evidenceRequired: data.evidenceRequired || false,
+                supplierName: data.supplierName || data.supplierNames || ''
+            };
+
+            setPoDetails(transformedData);
             setEditedPrices({});
             setEditedQuantities({});
             onOrderModalOpen();
@@ -336,78 +394,123 @@ export default function ActionsPage() {
         }
     };
 
-    const handleCompleteStep = async (stepIndex: number) => {
-        if (!selectedAction) return;
-        const currentStep = selectedAction.workflow?.[stepIndex];
+    const handleOpenApprovalDetails = (action: PendingAction) => {
+        setSelectedApproval(action);
+        onApprovalModalOpen();
+    };
 
-        if (selectedAction.actionType === 'PurchaseOrder' && currentStep?.title === 'Finalize Order Details' && !currentStep.completed) {
-            handleFinalizeOrderStep(selectedAction);
-            return;
-        }
-
-        const newCompletedSteps = stepIndex + 1;
-        const newWorkflow = selectedAction.workflow?.map((step: any, index: number) => ({
-            ...step,
-            completed: index < newCompletedSteps,
-        }));
-
+    {/*const handleFinalizeOrderStep = async (action: PendingAction) => {
         try {
-            const response = await fetch('/api/actions/update', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    id: selectedAction._id,
-                    completedSteps: newCompletedSteps,
-                }),
-            });
-
+            const response = await fetch(`/api/purchase-orders?id=${action._id}`);
             if (!response.ok) {
-                throw new Error('Failed to update action');
+                throw new Error('Failed to fetch purchase order details');
             }
+            const data = await response.json();
 
-            if (selectedAction.actionType === 'PurchaseOrder' && currentStep?.title === 'Submit for Approval') {
-                await handleSubmitForApproval(selectedAction);
-                return;
-            }
-
-            const updatedAction = {
-                ...selectedAction,
-                workflow: newWorkflow,
-                completedSteps: newCompletedSteps,
+            // Transform the data to match PurchaseOrderDetails interface
+            const transformedData: PurchaseOrderDetails = {
+                _id: data._id,
+                _type: data._type || 'purchaseOrder', // Add this line
+                poNumber: data.poNumber || '',
+                site: data.site || { name: '', _id: '' },
+                orderedBy: data.orderedBy || { name: '' },
+                orderDate: data.orderDate || '',
+                status: data.status || 'draft',
+                orderedItems: data.orderedItems?.map((item: any) => ({
+                    _key: item._key || Math.random().toString(36).substr(2, 9),
+                    stockItem: {
+                        name: item.stockItem?.name || 'Unknown Item',
+                        _id: item.stockItem?._id || ''
+                    },
+                    orderedQuantity: item.orderedQuantity || 0,
+                    unitPrice: item.unitPrice || 0,
+                    supplier: item.supplier || {
+                        name: data.supplierNames || data.supplierName || 'Unknown Supplier',
+                        _id: item.supplier?._id || ''
+                    }
+                })) || [],
+                supplierNames: data.supplierNames || data.supplierName || '',
+                totalAmount: data.totalAmount || 0
             };
-            setActions(prevActions =>
-                prevActions.map(action =>
-                    action._id === updatedAction._id ? updatedAction : action
-                )
-            );
-            setSelectedAction(updatedAction);
 
-            toast({
-                title: 'Step Completed',
-                description: `Workflow step "${selectedAction.workflow?.[stepIndex].title}" has been marked as complete.`,
-                status: 'success',
-                duration: 3000,
-                isClosable: true,
-            });
-
-            const isEvidenceComplete = !selectedAction.evidenceRequired || selectedAction.evidenceStatus === 'complete';
-            const allRequiredStepsCompleted = newWorkflow?.every((step: { required: any; completed: any; }, index: any) => !step.required || step.completed);
-
-            if (isEvidenceComplete && allRequiredStepsCompleted) {
-                await onCompleteAction(selectedAction);
-            }
-        } catch (error: any) {
+            setPoDetails(transformedData);
+            setEditedPrices({});
+            setEditedQuantities({});
+            onOrderModalOpen();
+        } catch (err: any) {
             toast({
                 title: 'Error',
-                description: 'Failed to update action. Please try again.',
+                description: 'Failed to fetch purchase order details. Please try again.',
                 status: 'error',
-                duration: 3000,
+                duration: 5000,
                 isClosable: true,
             });
+        }
+    };*/}
+
+    const handleCompleteStep = async (stepIndex: number) => {
+        // Only handle non-PO actions
+        if (selectedAction && selectedAction.actionType !== 'PurchaseOrder') {
+            const newCompletedSteps = stepIndex + 1;
+            const newWorkflow = selectedAction.workflow?.map((step: any, index: number) => ({
+                ...step,
+                completed: index < newCompletedSteps,
+            }));
+
+            try {
+                const response = await fetch('/api/actions/update', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        id: selectedAction._id,
+                        completedSteps: newCompletedSteps,
+                    }),
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to update action');
+                }
+
+                // Update local state
+                const updatedAction = {
+                    ...selectedAction,
+                    workflow: newWorkflow,
+                    completedSteps: newCompletedSteps,
+                };
+                setActions(prevActions =>
+                    prevActions.map(action =>
+                        action._id === updatedAction._id ? updatedAction : action
+                    )
+                );
+                setSelectedAction(updatedAction);
+
+                toast({
+                    title: 'Step Completed',
+                    description: `Workflow step "${selectedAction.workflow?.[stepIndex].title}" has been marked as complete.`,
+                    status: 'success',
+                    duration: 3000,
+                    isClosable: true,
+                });
+
+                const isEvidenceComplete = !selectedAction.evidenceRequired || selectedAction.evidenceStatus === 'complete';
+                const allRequiredStepsCompleted = newWorkflow?.every((step: { required: any; completed: any; }, index: any) => !step.required || step.completed);
+
+                if (isEvidenceComplete && allRequiredStepsCompleted) {
+                    await onCompleteAction(selectedAction);
+                }
+            } catch (error: any) {
+                toast({
+                    title: 'Error',
+                    description: 'Failed to update action. Please try again.',
+                    status: 'error',
+                    duration: 3000,
+                    isClosable: true,
+                });
+            }
         }
     };
 
-    const handleSubmitForApproval = async (action: PendingAction) => {
+    const handleApprovePO = async (action: PendingAction) => {
         try {
             const response = await fetch('/api/actions/update', {
                 method: 'POST',
@@ -417,9 +520,11 @@ export default function ActionsPage() {
                     status: 'pending-approval',
                 }),
             });
+
             if (!response.ok) {
                 throw new Error('Failed to submit for approval');
             }
+
             toast({
                 title: 'Order Submitted',
                 description: `The purchase order has been submitted for approval.`,
@@ -427,8 +532,9 @@ export default function ActionsPage() {
                 duration: 5000,
                 isClosable: true,
             });
-            setActions(prevActions => prevActions.filter(a => a._id !== action._id));
-            onModalClose();
+
+            await refreshData();
+
         } catch (error: any) {
             toast({
                 title: 'Error',
@@ -460,8 +566,7 @@ export default function ActionsPage() {
                 duration: 5000,
                 isClosable: true,
             });
-            setActions(prevActions => prevActions.filter(a => a._id !== action._id));
-            setSelectedActions(prev => prev.filter(item => item._id !== action._id));
+            await refreshData();
             onModalClose();
         } catch (error: any) {
             toast({
@@ -489,9 +594,11 @@ export default function ActionsPage() {
     const handleConfirmOrderUpdate = async () => {
         setIsSaving(true);
         try {
-            const updates = poDetails?.orderedItems?.map((item: { _key: string | number; }) => {
+            // Update individual items with price/quantity changes
+            const updates = poDetails?.orderedItems?.map((item: any) => {
                 const newPrice = editedPrices[item._key];
                 const newQuantity = editedQuantities[item._key];
+
                 if (newPrice !== undefined || newQuantity !== undefined) {
                     return fetch('/api/purchase-orders/update-item', {
                         method: 'POST',
@@ -507,10 +614,11 @@ export default function ActionsPage() {
                 return Promise.resolve();
             });
 
-            if (updates) {
+            if (updates && updates.length > 0) {
                 await Promise.all(updates);
             }
 
+            // Update the step completion status
             const stepUpdateResponse = await fetch('/api/actions/update', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -524,26 +632,16 @@ export default function ActionsPage() {
                 throw new Error('Failed to update step completion');
             }
 
-            if (selectedAction) {
-                const updatedAction = {
-                    ...selectedAction,
-                    completedSteps: 1,
-                    workflow: selectedAction.workflow?.map((step: any, index: number) => ({
-                        ...step,
-                        completed: index < 1,
-                    })),
-                };
-                setActions(prevActions => prevActions.map(action => action._id === updatedAction._id ? updatedAction : action));
-                setSelectedAction(updatedAction);
-            }
-
             toast({
                 title: 'Order Updated',
-                description: 'The purchase order has been saved successfully. Please submit it for approval.',
+                description: 'The purchase order has been saved successfully. You can now submit it for approval.',
                 status: 'success',
                 duration: 5000,
                 isClosable: true,
             });
+
+            await fetchLatestPOData(poDetails?._id); await refreshData();
+
             onOrderModalClose();
         } catch (error) {
             toast({
@@ -555,6 +653,51 @@ export default function ActionsPage() {
             });
         } finally {
             setIsSaving(false);
+        }
+    };
+
+    // Add this helper function
+    const fetchLatestPOData = async (poId: string | undefined) => {
+        try {
+            const response = await fetch(`/api/purchase-orders?id=${poId}`);
+            if (response.ok) {
+                const data = await response.json();
+                setPoDetails({
+                    _id: data._id,
+                    _type: data._type || 'purchaseOrder',
+                    poNumber: data.poNumber || '',
+                    site: data.site || { name: '', _id: '' },
+                    orderedBy: data.orderedBy || { name: '' },
+                    orderDate: data.orderDate || '',
+                    status: data.status || 'draft',
+                    orderedItems: data.orderedItems?.map((item: any) => ({
+                        _key: item._key || Math.random().toString(36).substr(2, 9),
+                        stockItem: {
+                            name: item.stockItem?.name || 'Unknown Item',
+                            _id: item.stockItem?._id || ''
+                        },
+                        orderedQuantity: item.orderedQuantity || 0,
+                        unitPrice: item.unitPrice || 0,
+                        supplier: item.supplier || {
+                            name: data.supplierNames || data.supplierName || 'Unknown Supplier',
+                            _id: item.supplier?._id || ''
+                        }
+                    })) || [],
+                    supplierNames: data.supplierNames || data.supplierName || '',
+                    totalAmount: data.totalAmount || 0,
+                    // Add the missing required properties
+                    title: data.title || `Purchase Order ${data.poNumber || ''}`,
+                    description: data.description || `Order from ${data.supplierNames || data.supplierName || 'Unknown Supplier'}`,
+                    createdAt: data.createdAt || data.orderDate || new Date().toISOString(),
+                    priority: data.priority || 'medium',
+                    siteName: data.siteName || data.site?.name || '',
+                    actionType: data.actionType || 'PurchaseOrder',
+                    evidenceRequired: data.evidenceRequired || false,
+                    supplierName: data.supplierName || data.supplierNames || ''
+                });
+            }
+        } catch (error) {
+            console.error('Failed to fetch latest PO data:', error);
         }
     };
 
@@ -878,18 +1021,42 @@ export default function ActionsPage() {
                                     <DataTable
                                         columns={[
                                             {
-                                                accessorKey: 'workflowAction',
+                                                accessorKey: 'action',
                                                 header: 'Action',
                                                 isSortable: false,
-                                                cell: (row: any) => (
-                                                    <Button
-                                                        size="sm"
-                                                        colorScheme="blue"
-                                                        onClick={() => handleOpenWorkflow(row)}
-                                                    >
-                                                        Resolve
-                                                    </Button>
-                                                )
+                                                cell: (row: any) => {
+                                                    if (row.actionType === 'PurchaseOrder' && row.status === 'draft') {
+                                                        return (
+                                                            <HStack spacing={2}>
+                                                                <Button
+                                                                    size="sm"
+                                                                    colorScheme="blue"
+                                                                    onClick={() => handleOpenEditPO(row)}
+                                                                >
+                                                                    Edit
+                                                                </Button>
+                                                                <Button
+                                                                    size="sm"
+                                                                    colorScheme="green"
+                                                                    onClick={() => handleApprovePO(row)}
+                                                                    isDisabled={!row.orderedItems || row.orderedItems.length === 0}
+                                                                >
+                                                                    Confirm PO
+                                                                </Button>
+                                                            </HStack>
+                                                        );
+                                                    } else {
+                                                        return (
+                                                            <Button
+                                                                size="sm"
+                                                                colorScheme="blue"
+                                                                onClick={() => handleOpenWorkflow(row)}
+                                                            >
+                                                                Resolve
+                                                            </Button>
+                                                        );
+                                                    }
+                                                },
                                             },
                                             { accessorKey: 'title', header: 'Title', isSortable: true },
                                             {
@@ -923,7 +1090,13 @@ export default function ActionsPage() {
                                         ]}
                                         data={filteredActions}
                                         loading={loading}
-                                        onActionClick={handleOpenWorkflow}
+                                        onActionClick={(row) => {
+                                            if (row.actionType === 'PurchaseOrder' && row.status === 'draft') {
+                                                handleOpenEditPO(row);
+                                            } else {
+                                                handleOpenWorkflow(row);
+                                            }
+                                        }}
                                         onSelectionChange={handleSelectionChange}
                                     />
                                 )
@@ -1035,22 +1208,15 @@ export default function ActionsPage() {
                 editedQuantities={editedQuantities}
                 setEditedQuantities={setEditedQuantities}
                 isSaving={isSaving}
-                onConfirmOrderUpdate={handleConfirmOrderUpdate}
-                onAddItemModalOpen={onAddItemModalOpen}
+                onSave={handleConfirmOrderUpdate}
+                onApprove={() => {
+                    handleConfirmOrderUpdate();
+                    if (selectedAction) {
+                        handleApprovePO(selectedAction);
+                    }
+                }}
                 onRemoveItem={handleRemoveItemFromPO}
-            />
-
-            <AddItemModal
-                isOpen={isAddItemModalOpen}
-                onClose={onAddItemModalClose}
-                availableItems={availableItems}
-                categories={categories}
-                onAddItems={handleAddSelectedItemsToPO}
-                searchTerm={searchTerm}
-                setSearchTerm={setSearchTerm}
-                selectedCategory={selectedCategory}
-                setSelectedCategory={setSelectedCategory}
-                loadingItems={loadingItems}
+                onAddItem={handleAddSelectedItemsToPO}
             />
 
             <GoodsReceiptModal

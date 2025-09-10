@@ -190,17 +190,22 @@ export default function GoodsReceiptModal({
                     }
 
                     // Populate items for the goods receipt based on the selected PO
+                    // Update the mapping to ensure stockItem is always a string
                     if (selectedOrder.orderedItems) {
-                        const receiptItems: ReceivedItem[] = selectedOrder.orderedItems.map(item => ({
-                            stockItem: item.stockItem._id,
-                            stockItemName: item.stockItem.name,
-                            orderedQuantity: item.orderedQuantity,
-                            receivedQuantity: 0, // Initialize received quantity to 0
-                            condition: 'good' as const, // Explicitly type as 'good'
-                            _key: item._key || Math.random().toString(36).substr(2, 9)
-                        }));
+
+                        const receiptItems: ReceivedItem[] = selectedOrder.orderedItems
+                            .filter(item => item.stockItem && item.stockItem._id) // Filter out items without stockItem._id
+                            .map(item => ({
+                                stockItem: item.stockItem!._id as string, // Use non-null assertion since we filtered
+                                stockItemName: item.stockItem.name,
+                                orderedQuantity: item.orderedQuantity,
+                                receivedQuantity: 0,
+                                condition: 'good' as const,
+                                _key: item._key || Math.random().toString(36).substr(2, 9)
+                            }));
                         setItems(receiptItems);
                     }
+
                 }
                 setPoDataLoading(false);
             }
@@ -300,7 +305,7 @@ export default function GoodsReceiptModal({
                     receiptDate,
                     purchaseOrder: selectedPO,
                     purchaseOrderNumber: selectedOrder?.poNumber || '',
-                    supplierName: selectedOrder?.supplier?.name || '',
+                    supplierName: selectedOrder?.supplier?.name || '', // Fixed this line
                     siteName: selectedOrder?.site?.name || '',
                     receivingBin: selectedBin,
                     receivingBinName: selectedBinObj?.name || '',

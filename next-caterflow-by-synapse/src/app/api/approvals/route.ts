@@ -1,9 +1,8 @@
-// src/app/api/approvals/route.ts
 import { NextResponse } from 'next/server';
 import { client } from '@/lib/sanity';
 import { groq } from 'next-sanity';
 
-// Define a separate GROQ query for Purchase Orders that require approval
+// Corrected GROQ query to fix the syntax error
 const purchaseOrderApprovalQuery = groq`
   *[_type == "PurchaseOrder" && status == "pending-approval"] {
     _id,
@@ -11,17 +10,17 @@ const purchaseOrderApprovalQuery = groq`
     _createdAt,
     "createdAt": _createdAt,
     "title": "Approve Purchase Order",
-    "description": "Purchase order for " + coalesce(supplier->name, "Unknown Supplier"),
+    "description": "Purchase order for items",
     "priority": "high",
-    "site": site->{name, _id},
+    "site": site->{name, _id}, // Get the full site object for filtering
     "poNumber": poNumber,
-    "supplierName": supplier->name,
-    "orderedBy": orderedBy->name,
-    "orderedItems": orderedItems[]{
+    "orderedByName": orderedBy->name, // Explicitly name the key for orderedBy
+    orderedItems[]{
         _key,
         orderedQuantity,
         unitPrice,
-        "stockItem": stockItem->{name}
+        "stockItem": stockItem->{name},
+        "supplier": supplier->{name}
     }
   }
 `;
@@ -50,22 +49,29 @@ export async function GET(request: Request) {
         console.log("➡️ /api/approvals: Request received.");
         console.log("➡️ /api/approvals: Fetching approvals for:", { userRole, userSite });
 
-        // Execute all approval queries concurrently
         const [purchaseOrders, internalTransfers] = await Promise.all([
             client.fetch(purchaseOrderApprovalQuery),
             client.fetch(internalTransferApprovalQuery),
         ]);
 
-        // Combine the results into a single array
         let approvals = [...purchaseOrders, ...internalTransfers];
         console.log(`✅ /api/approvals: Raw approvals from Sanity fetched. Count: ${approvals.length}`);
 
-        // Filter approvals based on user role and site, similar to the actions route
+        // Use a more generic description for POs since suppliers are item-specific
+        approvals = approvals.map(approval => {
+            if (approval._type === 'PurchaseOrder') {
+                const supplierNames = [...new Set(approval.orderedItems.map((item: any) => item.supplier?.name))].filter(Boolean);
+                return {
+                    ...approval,
+                    description: ``,
+                };
+            }
+            return approval;
+        });
+
         if (userRole === "admin" || userRole === "auditor") {
-            // Admin and Auditor can see all approvals
             console.log("👤 User Role: Admin/Auditor. No filtering applied.");
         } else if (userRole === "siteManager" && userSite) {
-            // Site Manager can only see approvals for their site
             approvals = approvals.filter((approval: any) => {
                 const isPurchaseOrderForSite = approval._type === 'PurchaseOrder' && approval.site?._id === userSite;
                 const isInternalTransferForSite = approval._type === 'InternalTransfer' && (approval.fromSite?._id === userSite || approval.toSite?._id === userSite);
@@ -73,12 +79,10 @@ export async function GET(request: Request) {
             });
             console.log(`👤 Site Manager. Filtered approvals for site ${userSite}: ${approvals.length}`);
         } else {
-            // Other roles have no approvals to view
             approvals = [];
             console.log("⚠️ Unknown role or insufficient permissions. No approvals returned.");
         }
 
-        // Sort by creation date, newest first
         approvals.sort((a: any, b: any) => new Date(b._createdAt).getTime() - new Date(a._createdAt).getTime());
         console.log(`✅ /api/approvals: Sorting complete. Returning ${approvals.length} approvals.`);
 

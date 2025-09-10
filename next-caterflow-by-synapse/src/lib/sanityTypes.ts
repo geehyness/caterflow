@@ -5,16 +5,17 @@ import type { SanityDocument, ImageAsset, SlugValue, FileValue, Reference } from
 export type { Reference };
 
 // Interfaces for nested object schemas
+
+// Update OrderedItem interface
 export interface OrderedItem {
     _type: 'OrderedItem';
     _key: string;
     stockItem: Reference;
+    supplier: Reference; // Add this
     orderedQuantity: number;
     unitPrice: number;
-    // Add this field to track if price was manually updated
     priceManuallyUpdated?: boolean;
 }
-
 export interface ReceivedItem {
     _type: 'ReceivedItem';
     _key: string;
@@ -124,7 +125,6 @@ export interface Supplier extends SanityDocument {
 export interface PurchaseOrder extends SanityDocument {
     _type: 'PurchaseOrder';
     poNumber: string;
-    supplier: Reference;
     orderDate: string;
     orderedItems: OrderedItem[];
     status: 'draft' | 'pending-approval' | 'approved' | 'processing' | 'partially-received' | 'complete' | 'cancelled';

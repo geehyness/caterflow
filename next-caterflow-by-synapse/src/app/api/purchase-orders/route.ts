@@ -5,6 +5,7 @@ import { groq } from 'next-sanity';
 import { logSanityInteraction } from '@/lib/sanityLogger';
 import { nanoid } from 'nanoid';
 
+
 /**
  * GET handler to fetch all purchase orders or a specific one by query parameter
  */
@@ -14,32 +15,41 @@ export async function GET(request: Request) {
         const id = searchParams.get('id');
         const status = searchParams.get('status');
 
+        // GROQ query projection for purchase order details
+        // ADDED -> to dereference the site and orderedBy fields
+        const purchaseOrderProjection = `{
+            _id,
+            _type,
+            poNumber,
+            site->{name, _id},
+            orderedItems[] {
+                _key,
+                orderedQuantity,
+                unitPrice,
+                stockItem->{
+                    _id,
+                    name,
+                    sku,
+                    unitOfMeasure
+                },
+                // ADDED -> to dereference the supplier field
+                supplier->{
+                    _id,
+                    name
+                }
+            },
+            status,
+            orderDate,
+            _createdAt,
+            // ADDED -> to dereference the orderedBy field
+            orderedBy->{ name },
+            totalAmount,
+            "hasReceipts": count(*[_type == "GoodsReceipt" && purchaseOrder._ref == ^._id]) > 0
+        }`;
+
         // If an ID is provided, fetch a specific purchase order
         if (id) {
-            const query = groq`*[_type == "PurchaseOrder" && _id == $id] {
-                _id,
-                _type,
-                poNumber,
-                supplier->{name},
-                site->{name},
-                orderedItems[] {
-                    _key,
-                    orderedQuantity,
-                    unitPrice,
-                    stockItem->{
-                        _id,
-                        name,
-                        sku,
-                        unitOfMeasure
-                    }
-                },
-                status,
-                orderDate,
-                totalAmount,
-                // Check if this PO has any goods receipts
-                "hasReceipts": count(*[_type == "GoodsReceipt" && purchaseOrder._ref == ^._id]) > 0
-            }`;
-
+            const query = groq`*[_type == "PurchaseOrder" && _id == $id] ${purchaseOrderProjection}`;
             const purchaseOrder = await client.fetch(query, { id });
 
             if (!purchaseOrder || purchaseOrder.length === 0) {
@@ -49,7 +59,14 @@ export async function GET(request: Request) {
                 );
             }
 
-            return NextResponse.json(purchaseOrder[0]);
+            // Manually get unique supplier names from the fetched data
+            const suppliers = purchaseOrder[0].orderedItems.map((item: any) => item.supplier?.name).filter(Boolean);
+            const uniqueSupplierNames = [...new Set(suppliers)].join(', ');
+
+            return NextResponse.json({
+                ...purchaseOrder[0],
+                supplierNames: uniqueSupplierNames
+            });
         }
 
         // Build the base query - only filter by status if provided
@@ -63,36 +80,20 @@ export async function GET(request: Request) {
         }
 
         // Complete query with ordering and projection
-        const allQuery = groq`${baseQuery} | order(orderDate desc) {
-            _id,
-            _type,
-            poNumber,
-            supplier->{name},
-            site->{name},
-            orderedItems[] {
-                _key,
-                orderedQuantity,
-                unitPrice,
-                stockItem->{
-                    _id,
-                    name,
-                    sku,
-                    unitOfMeasure
-                }
-            },
-            status,
-            orderDate,
-            totalAmount,
-            // Check if this PO has any goods receipts
-            "hasReceipts": count(*[_type == "GoodsReceipt" && purchaseOrder._ref == ^._id]) > 0
-        }`;
-
+        const allQuery = groq`${baseQuery} | order(orderDate desc) ${purchaseOrderProjection}`;
         let purchaseOrders = await client.fetch(allQuery, queryParams);
 
-        // Ensure purchaseOrders is always an array, even if null/undefined
-        purchaseOrders = purchaseOrders || [];
+        // Manually process all purchase orders to add the unique supplier names
+        const processedOrders = (purchaseOrders || []).map((order: any) => {
+            const suppliers = order.orderedItems.map((item: any) => item.supplier?.name).filter(Boolean);
+            const uniqueSupplierNames = [...new Set(suppliers)].join(', ');
+            return {
+                ...order,
+                supplierNames: uniqueSupplierNames
+            };
+        });
 
-        return NextResponse.json(purchaseOrders);
+        return NextResponse.json(processedOrders);
     } catch (error: any) {
         console.error("Error fetching purchase orders:", error);
         return NextResponse.json(
@@ -104,98 +105,69 @@ export async function GET(request: Request) {
 
 /**
  * POST handler to create a new purchase order.
- * It also fetches current stock item prices to ensure data integrity.
+ * It also fetches current stock item prices and ensures suppliers are properly associated.
  */
 export async function POST(request: Request) {
     try {
         const {
             poNumber,
             orderDate,
-            supplier, // This should be a string ID, not an object
-            orderedBy, // This should be a string ID, not an object
+            orderedBy,
             orderedItems,
             totalAmount,
             status,
-            site // This should be a string ID, not an object
+            site
         } = await request.json();
 
-        // Validate required fields
-        if (!supplier || !orderedBy || !site || !orderedItems || orderedItems.length === 0) {
+        // --- 1. Basic Payload Validation ---
+        if (!orderedBy || !site || !orderedItems || orderedItems.length === 0) {
             return NextResponse.json(
-                { error: 'Missing required fields: supplier, orderedBy, site, or orderedItems' },
+                { error: 'Missing required fields: orderedBy, site, or orderedItems' },
                 { status: 400 }
             );
         }
 
-        // Validate that reference fields are strings, not objects
-        if (typeof supplier !== 'string') {
-            return NextResponse.json(
-                { error: 'Supplier must be a string ID, not an object' },
-                { status: 400 }
+        // --- 2. Iterate and Validate Each Item ---
+        for (const item of orderedItems) {
+            // Check if supplier exists in the system
+            const supplierExists = await client.fetch(
+                groq`count(*[_type == "Supplier" && _id == $supplierId]) > 0`,
+                { supplierId: item.supplier }
             );
+
+            if (!supplierExists) {
+                // This is the correct way to handle a validation error
+                return NextResponse.json(
+                    { error: `Supplier ${item.supplier} does not exist. Please try again.` },
+                    { status: 400 }
+                );
+            }
         }
 
-        if (typeof orderedBy !== 'string') {
-            return NextResponse.json(
-                { error: 'OrderedBy must be a string ID, not an object' },
-                { status: 400 }
-            );
-        }
-
-        if (typeof site !== 'string') {
-            return NextResponse.json(
-                { error: 'Site must be a string ID, not an object' },
-                { status: 400 }
-            );
-        }
-
-        // Validate orderedItems structure
-        const invalidItems = orderedItems.filter((item: any) =>
-            !item.stockItem || typeof item.stockItem !== 'string'
-        );
-
-        if (invalidItems.length > 0) {
-            return NextResponse.json(
-                { error: 'Stock items must be string IDs in orderedItems' },
-                { status: 400 }
-            );
-        }
-
-        // Fetch current prices for stock items
-        const stockItemIds = orderedItems.map((item: any) => item.stockItem);
-        let currentStockPrices = [];
-
-        if (stockItemIds.length > 0) {
-            const stockItemsQuery = groq`*[_type == "StockItem" && _id in $stockItemIds] {
-                _id,
-                unitPrice
-            }`;
-            currentStockPrices = await client.fetch(stockItemsQuery, { stockItemIds });
-        }
-
+        // --- 3. Construct Sanity Document (only after all validation passes) ---
         const poDocument = {
             _type: 'PurchaseOrder',
             poNumber: poNumber || `PO-${nanoid(8)}`,
             orderDate: orderDate || new Date().toISOString(),
-            supplier: {
-                _type: 'reference',
-                _ref: supplier // Direct string ID
-            },
             orderedBy: {
                 _type: 'reference',
-                _ref: orderedBy // Direct string ID
+                _ref: orderedBy
             },
             site: {
                 _type: 'reference',
-                _ref: site // Direct string ID
+                _ref: site
             },
             orderedItems: orderedItems.map((item: any) => ({
                 _key: item._key || nanoid(),
                 orderedQuantity: item.orderedQuantity || 1,
-                unitPrice: currentStockPrices.find((price: any) => price._id === item.stockItem)?.unitPrice || item.unitPrice || 0,
+                unitPrice: item.unitPrice || 0,
                 stockItem: {
                     _type: 'reference',
-                    _ref: item.stockItem // Direct string ID
+                    _ref: item.stockItem
+                },
+                supplier: {
+                    _type: 'reference',
+                    _ref: item.supplier
                 }
             })),
             totalAmount: totalAmount || 0,
@@ -203,6 +175,7 @@ export async function POST(request: Request) {
             _id: nanoid()
         };
 
+        // --- 4. Create document and return success response ---
         const result = await writeClient.create(poDocument);
 
         await logSanityInteraction(
@@ -216,6 +189,7 @@ export async function POST(request: Request) {
 
         return NextResponse.json(result);
     } catch (error: any) {
+        // --- 5. Catch-all for unexpected errors ---
         console.error('Failed to create purchase order:', error);
         return NextResponse.json(
             {
@@ -236,57 +210,54 @@ export async function PATCH(request: Request) {
         const body = await request.json();
         const { _id, updateData } = body;
 
-        if (!_id) {
+        if (!_id || !updateData) {
             return NextResponse.json(
-                { error: 'Purchase order ID is required' },
+                { error: 'Purchase order ID and update data are required' },
                 { status: 400 }
             );
         }
 
-        // Clean up any nested reference objects that might be sent
-        const cleanUpdateData = { ...updateData };
+        const transaction = writeClient.transaction();
 
-        // Ensure reference fields are properly formatted
-        if (cleanUpdateData.supplier && typeof cleanUpdateData.supplier === 'object') {
-            cleanUpdateData.supplier = {
-                _type: 'reference',
-                _ref: cleanUpdateData.supplier._ref || cleanUpdateData.supplier
-            };
+        // Handle general top-level updates
+        if (Object.keys(updateData).some(key => key !== 'orderedItems')) {
+            const cleanUpdateData = { ...updateData };
+            delete cleanUpdateData.orderedItems;
+
+            // Correct way to patch within a transaction
+            transaction.patch(_id, (patch) =>
+                patch.set(cleanUpdateData)
+            );
         }
 
-        if (cleanUpdateData.orderedBy && typeof cleanUpdateData.orderedBy === 'object') {
-            cleanUpdateData.orderedBy = {
-                _type: 'reference',
-                _ref: cleanUpdateData.orderedBy._ref || cleanUpdateData.orderedBy
-            };
-        }
+        // Handle orderedItems updates
+        if (updateData.orderedItems && Array.isArray(updateData.orderedItems)) {
+            updateData.orderedItems.forEach((item: any) => {
+                if (item._key) {
+                    const patchObject: { [key: string]: any } = {};
 
-        if (cleanUpdateData.site && typeof cleanUpdateData.site === 'object') {
-            cleanUpdateData.site = {
-                _type: 'reference',
-                _ref: cleanUpdateData.site._ref || cleanUpdateData.site
-            };
-        }
+                    if (item.orderedQuantity !== undefined) {
+                        patchObject[`orderedItems[_key=="${item._key}"].orderedQuantity`] = item.orderedQuantity;
+                    }
+                    if (item.unitPrice !== undefined) {
+                        patchObject[`orderedItems[_key=="${item._key}"].unitPrice`] = item.unitPrice;
+                    }
 
-        // Clean orderedItems if present
-        if (cleanUpdateData.orderedItems && Array.isArray(cleanUpdateData.orderedItems)) {
-            cleanUpdateData.orderedItems = cleanUpdateData.orderedItems.map((item: any) => ({
-                ...item,
-                stockItem: {
-                    _type: 'reference',
-                    _ref: item.stockItem._ref || item.stockItem
+                    // Only apply the patch if there's something to update
+                    if (Object.keys(patchObject).length > 0) {
+                        transaction.patch(_id, (patch) =>
+                            patch.set(patchObject)
+                        );
+                    }
                 }
-            }));
+            });
         }
 
-        const purchaseOrder = await writeClient
-            .patch(_id)
-            .set(cleanUpdateData)
-            .commit();
+        const purchaseOrder = await transaction.commit();
 
         await logSanityInteraction(
             'update',
-            `Updated purchase order: ${updateData.poNumber || _id}`,
+            `Updated purchase order: ${purchaseOrder.documentIds || _id}`,
             'PurchaseOrder',
             _id,
             'system',

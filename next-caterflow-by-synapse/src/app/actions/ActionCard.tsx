@@ -14,7 +14,7 @@ import { PendingAction } from './types';
 
 interface ActionCardProps {
     action: PendingAction;
-    onOpenWorkflow: () => void;
+    onOpenReview: () => void;
     onOpenUploadModal: () => void;
 }
 
@@ -24,7 +24,7 @@ const priorityColors = {
     low: 'blue',
 };
 
-export default function ActionCard({ action, onOpenWorkflow, onOpenUploadModal }: ActionCardProps) {
+export default function ActionCard({ action, onOpenReview, onOpenUploadModal }: ActionCardProps) {
     const cardBg = useColorModeValue('neutral.light.bg-card', 'neutral.dark.bg-card');
 
     return (
@@ -53,7 +53,7 @@ export default function ActionCard({ action, onOpenWorkflow, onOpenUploadModal }
                     <Button
                         size="sm"
                         colorScheme="blue"
-                        onClick={onOpenWorkflow}
+                        onClick={onOpenReview}
                         leftIcon={<FiCheckCircle />}
                         flexGrow={1}
                     >

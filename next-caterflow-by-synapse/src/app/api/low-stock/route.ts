@@ -1,3 +1,5 @@
+// src/app/api/low-stock/route.ts
+
 import { NextRequest, NextResponse } from 'next/server';
 import { calculateBulkStock } from '@/lib/stockCalculations';
 import { client } from '@/lib/sanity';
@@ -5,14 +7,23 @@ import { groq } from 'next-sanity';
 import Decimal from 'decimal.js';
 
 // GET handler to fetch all low stock items without filtering by site
-export async function GET() {
+export async function GET(request: NextRequest) {
     try {
+        const { searchParams } = new URL(request.url);
+        const includeSuppliers = searchParams.get('includeSuppliers');
+
         const query = groq`
             *[_type == "stockItem" && quantity <= minimumStockLevel] {
                 ...,
                 "siteName": bin->site->name,
                 "binName": bin->name,
-                "currentStock": quantity
+                "currentStock": quantity,
+                // Make sure to include unitPrice here
+                unitPrice,
+                ${includeSuppliers ? `
+                "suppliers": suppliers[]->{_id, name},
+                "primarySupplier": primarySupplier->{_id, name}
+                ` : ''}
             }
         `;
         const lowStockItems = await client.fetch(query);
@@ -56,14 +67,17 @@ export async function POST(request: NextRequest) {
     }
 }
 
-async function fetchStockItems() {
+async function fetchStockItems(includeSuppliers: boolean = false) {
     const query = groq`*[_type == "StockItem"] {
         _id,
         name,
         sku,
         minimumStockLevel,
         unitOfMeasure,
+        // Make sure unitPrice is fetched here too
+        unitPrice,
         "category": category->title
+        ${includeSuppliers ? ',"suppliers": suppliers[]->{_id, name}, "primarySupplier": primarySupplier->{_id, name}' : ''}
     }`;
     return await client.fetch(query);
 }
@@ -120,7 +134,9 @@ async function calculateLowStockItems(stockItems: any[], bins: any[], siteIds: s
                 siteId: primaryBin.siteId,
                 siteName: primaryBin.siteName,
                 binId: primaryBin._id,
-                binName: primaryBin.name
+                binName: primaryBin.name,
+                // Ensure unitPrice is included here
+                unitPrice: item.unitPrice,
             });
         }
     });

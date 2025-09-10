@@ -1,3 +1,5 @@
+// src/app/approvals/page.tsx
+
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
@@ -38,7 +40,22 @@ import { FaBoxes } from 'react-icons/fa';
 import { useRouter } from 'next/navigation';
 import DataTable from '../actions/DataTable';
 
-// Define the interface for an action to be approved
+// Update the interface to match the expanded data from the API route
+interface OrderedItem {
+    _key: string;
+    stockItem: {
+        _id: string;
+        name: string;
+    };
+    supplier: {
+        _id: string;
+        name: string;
+    };
+    orderedQuantity: number;
+    unitPrice: number;
+}
+
+// Update the interface for an approval action
 interface ApprovalAction {
     _id: string;
     _type: string;
@@ -48,25 +65,12 @@ interface ApprovalAction {
     priority: 'high' | 'medium' | 'low';
     siteName: string;
     status: 'pending-approval';
-    // Add purchase order specific fields for the modal
     poNumber?: string;
-    supplierName?: string;
     orderedItems?: OrderedItem[];
     orderedBy?: string;
-    // Add fields for other types
     transferNumber?: string;
     adjustmentNumber?: string;
     receiptNumber?: string;
-}
-
-interface OrderedItem {
-    _key: string;
-    stockItem: {
-        _ref: string;
-        name?: string;
-    };
-    orderedQuantity: number;
-    unitPrice: number;
 }
 
 export default function ApprovalsPage() {
@@ -241,6 +245,17 @@ export default function ApprovalsPage() {
         return action._type === type;
     });
 
+    // Helper function to get unique supplier names
+    const getSupplierNames = (orderedItems: OrderedItem[] | undefined) => {
+        if (!orderedItems || orderedItems.length === 0) {
+            return 'N/A';
+        }
+        // Safely access the supplier name using optional chaining
+        const suppliers = orderedItems.map(item => item.supplier?.name).filter(Boolean);
+        const uniqueSuppliers = [...new Set(suppliers)];
+        return uniqueSuppliers.join(', ');
+    };
+
     if (!isAuthReady || loading) {
         return (
             <Flex justifyContent="center" alignItems="center" minH="100vh">
@@ -298,19 +313,30 @@ export default function ApprovalsPage() {
                                                 </Button>
                                             )
                                         },
-                                        { accessorKey: 'title', header: 'Title', isSortable: true },
+                                        { accessorKey: 'poNumber', header: 'PO Number', isSortable: true },
                                         {
-                                            accessorKey: 'description',
-                                            header: 'Description',
-                                            isSortable: true,
-                                            cell: (row) => {
-                                                if (row._type === 'PurchaseOrder' && row.orderedItems && row.orderedItems.length > 0) {
+                                            accessorKey: 'suppliers',
+                                            header: 'Suppliers',
+                                            isSortable: false,
+                                            cell: (row: any) => {
+                                                if (row._type === 'PurchaseOrder') {
+                                                    return getSupplierNames(row.orderedItems);
+                                                }
+                                                return 'N/A';
+                                            }
+                                        },
+                                        {
+                                            accessorKey: 'orderedItems',
+                                            header: 'Items',
+                                            isSortable: false,
+                                            cell: (row: any) => {
+                                                if (row._type === 'PurchaseOrder' && row.orderedItems) {
                                                     return (
                                                         <Box>
                                                             <Text>{row.description}</Text>
                                                             <Text fontSize="sm" color="gray.600" mt={1}>
                                                                 Items: {row.orderedItems.map((item: any) =>
-                                                                    `Item #${item._key} (${item.orderedQuantity})`
+                                                                    `${item.stockItem.name} (${item.orderedQuantity})`
                                                                 ).join(', ')}
                                                             </Text>
                                                         </Box>
@@ -361,10 +387,10 @@ export default function ApprovalsPage() {
                                             selectedApproval?.receiptNumber}
                                     </Text>
                                 </Box>
-                                {selectedApproval?.supplierName && (
+                                {selectedApproval?.orderedItems && (
                                     <Box>
-                                        <Text fontWeight="bold">Supplier:</Text>
-                                        <Text>{selectedApproval.supplierName}</Text>
+                                        <Text fontWeight="bold">Suppliers:</Text>
+                                        <Text>{getSupplierNames(selectedApproval.orderedItems)}</Text>
                                     </Box>
                                 )}
                                 <Box>
@@ -391,15 +417,17 @@ export default function ApprovalsPage() {
                                                     <Th>Item</Th>
                                                     <Th isNumeric>Quantity</Th>
                                                     <Th isNumeric>Unit Price</Th>
+                                                    <Th>Supplier</Th>
                                                     <Th isNumeric>Total</Th>
                                                 </Tr>
                                             </Thead>
                                             <Tbody>
                                                 {selectedApproval.orderedItems.map((item) => (
                                                     <Tr key={item._key}>
-                                                        <Td>Item #{item._key}</Td>
+                                                        <Td>{item.stockItem.name}</Td>
                                                         <Td isNumeric>{item.orderedQuantity}</Td>
                                                         <Td isNumeric>E {item.unitPrice?.toFixed(2)}</Td>
+                                                        <Td>{item.supplier.name}</Td>
                                                         <Td isNumeric>E {(item.unitPrice * item.orderedQuantity).toFixed(2)}</Td>
                                                     </Tr>
                                                 ))}

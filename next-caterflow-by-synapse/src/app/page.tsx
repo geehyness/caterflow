@@ -1,7 +1,7 @@
 // src/app/page.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Box,
   Heading,
@@ -24,12 +24,12 @@ import {
   StatLabel,
   StatNumber,
   Skeleton,
+  useBreakpointValue,
 } from '@chakra-ui/react';
 import { FiArrowLeft, FiArrowRight } from 'react-icons/fi';
 import { useAuth } from '@/context/AuthContext';
 import { BsBoxSeam, BsArrowRight, BsTruck, BsBuildingAdd, BsExclamationTriangle, BsClipboardData, BsClock } from 'react-icons/bs';
 import Link from 'next/link';
-
 
 interface Site {
   _id: string;
@@ -45,24 +45,15 @@ interface Transaction {
 }
 
 interface DashboardStats {
-  // Card 1: Receipts This Month
   monthlyReceiptsCount: number;
   receiptsTrend: number;
-
-  // Card 2: Dispatches This Month
   monthlyDispatchesCount: number;
   todaysDispatchesCount: number;
-
-  // Card 3: Pending Actions
   pendingActionsCount: number;
   pendingTransfersCount: number;
   draftOrdersCount: number;
-
-  // Card 4: Low Stock Items
   lowStockItemsCount: number;
   outOfStockItemsCount: number;
-
-  // Card 5: Recent Activity
   weeklyActivityCount: number;
   todayActivityCount: number;
 }
@@ -89,32 +80,51 @@ const StatCard = ({
   const iconBg = useColorModeValue(`${colorScheme}.50`, `${colorScheme}.900`);
   const iconColor = useColorModeValue(`${colorScheme}.500`, `${colorScheme}.300`);
   const borderTopColor = useColorModeValue('gray.100', 'gray.600');
+  const isMobile = useBreakpointValue({ base: true, md: false });
 
   return (
-    <Card bg={cardBg} boxShadow="sm" p={4} borderRadius="md" textAlign="left" height="100%">
-      <HStack spacing={4} align="stretch" mb={viewAllLink ? 3 : 0}>
+    <Card
+      bg={cardBg}
+      boxShadow="sm"
+      p={3}
+      borderRadius="md"
+      textAlign="left"
+      height="100%"
+      minH="120px"
+    >
+      <HStack spacing={3} align="stretch" mb={viewAllLink ? 2 : 0}>
         <Flex
           align="center"
           justify="center"
-          w={12}
-          h={12}
+          w={10}
+          h={10}
           bg={iconBg}
           borderRadius="full"
           flexShrink={0}
         >
-          <Icon as={icon} w={6} h={6} color={iconColor} />
+          <Icon as={icon} w={5} h={5} color={iconColor} />
         </Flex>
 
-        <VStack align="flex-start" spacing={0} flex="1">
+        <VStack align="flex-start" spacing={0} flex="1" overflow="hidden">
           <Stat>
-            <StatLabel fontWeight="medium" isTruncated color="gray.500">
+            <StatLabel
+              fontWeight="medium"
+              fontSize={{ base: 'xs', sm: 'sm' }}
+              isTruncated
+              color="gray.500"
+            >
               {title}
             </StatLabel>
-            <StatNumber fontSize="xl" fontWeight="bold">
-              {isLoading ? <Skeleton height="24px" width="60px" /> : value}
+            <StatNumber fontSize={{ base: 'lg', sm: 'xl' }} fontWeight="bold">
+              {isLoading ? <Skeleton height="20px" width="50px" /> : value}
             </StatNumber>
             {subValue && (
-              <Text fontSize="sm" color={subValueColor} fontWeight="medium">
+              <Text
+                fontSize={{ base: 'xs', sm: 'sm' }}
+                color={subValueColor}
+                fontWeight="medium"
+                noOfLines={1}
+              >
                 {subValue}
               </Text>
             )}
@@ -123,15 +133,16 @@ const StatCard = ({
       </HStack>
 
       {viewAllLink && (
-        <Box borderTopWidth="1px" borderTopColor={borderTopColor} pt={3}>
+        <Box borderTopWidth="1px" borderTopColor={borderTopColor} pt={2}>
           <Link href={viewAllLink} passHref>
             <Button
-              size="sm"
+              size="xs"
               variant="ghost"
               width="full"
               colorScheme={colorScheme}
               justifyContent="space-between"
               rightIcon={<Icon as={FiArrowRight} />}
+              py={1}
             >
               View All
             </Button>
@@ -153,6 +164,8 @@ export default function Home() {
 
   const toast = useToast();
   const cardBg = useColorModeValue('gray.50', 'gray.700');
+  const isMobile = useBreakpointValue({ base: true, md: false });
+  const sitesContainerRef = useRef<HTMLDivElement>(null);
 
   // Fetch sites based on user role
   useEffect(() => {
@@ -284,15 +297,15 @@ export default function Home() {
   const TransactionIcon = ({ type }: { type: string }) => {
     switch (type) {
       case 'GoodsReceipt':
-        return <Icon as={BsBuildingAdd} color="green.500" />;
+        return <Icon as={BsBuildingAdd} color="green.500" boxSize={4} />;
       case 'DispatchLog':
-        return <Icon as={BsTruck} color="red.500" />;
+        return <Icon as={BsTruck} color="red.500" boxSize={4} />;
       case 'InternalTransfer':
-        return <Icon as={BsArrowRight} color="yellow.500" />;
+        return <Icon as={BsArrowRight} color="yellow.500" boxSize={4} />;
       case 'StockAdjustment':
-        return <Icon as={BsBoxSeam} color="purple.500" />;
+        return <Icon as={BsBoxSeam} color="purple.500" boxSize={4} />;
       case 'InventoryCount':
-        return <Icon as={BsBoxSeam} color="blue.500" />;
+        return <Icon as={BsBoxSeam} color="blue.500" boxSize={4} />;
       default:
         return null;
     }
@@ -303,13 +316,12 @@ export default function Home() {
   };
 
   const handleScroll = (direction: 'left' | 'right') => {
-    const container = document.getElementById('sites-container');
-    if (container) {
+    if (sitesContainerRef.current) {
       const scrollAmount = 200;
       if (direction === 'left') {
-        container.scrollLeft -= scrollAmount;
+        sitesContainerRef.current.scrollLeft -= scrollAmount;
       } else {
-        container.scrollLeft += scrollAmount;
+        sitesContainerRef.current.scrollLeft += scrollAmount;
       }
     }
   };
@@ -323,36 +335,40 @@ export default function Home() {
   }
 
   return (
-    <Box p={4}>
-      <Heading as="h1" size="lg" mb={4}>
+    <Box p={{ base: 3, md: 4 }} overflowX="hidden">
+      <Heading as="h1" size={{ base: 'md', md: 'lg' }} mb={4}>
         Dashboard
       </Heading>
 
       {/* Sites Section */}
       {(user?.role === 'admin' || user?.role === 'auditor') && (
         <>
-          <Flex justify="space-between" align="center" mb={4}>
-            <Heading as="h2" size="md">Sites</Heading>
-            <HStack>
-              <IconButton
-                aria-label="Scroll left"
-                icon={<FiArrowLeft />}
-                onClick={() => handleScroll('left')}
-              />
-              <IconButton
-                aria-label="Scroll right"
-                icon={<FiArrowRight />}
-                onClick={() => handleScroll('right')}
-              />
-            </HStack>
+          <Flex justify="space-between" align="center" mb={3}>
+            <Heading as="h2" size={{ base: 'sm', md: 'md' }}>Sites</Heading>
+            {sites.length > 3 && (
+              <HStack>
+                <IconButton
+                  aria-label="Scroll left"
+                  icon={<FiArrowLeft />}
+                  onClick={() => handleScroll('left')}
+                  size="xs"
+                />
+                <IconButton
+                  aria-label="Scroll right"
+                  icon={<FiArrowRight />}
+                  onClick={() => handleScroll('right')}
+                  size="xs"
+                />
+              </HStack>
+            )}
           </Flex>
 
           {sites.length > 0 ? (
             <Flex
-              id="sites-container"
+              ref={sitesContainerRef}
               overflowX="auto"
               whiteSpace="nowrap"
-              pb={4}
+              pb={3}
               sx={{
                 '::-webkit-scrollbar': { display: 'none' },
                 msOverflowStyle: 'none',
@@ -363,33 +379,36 @@ export default function Home() {
                 <Button
                   key={site._id}
                   onClick={() => handleSiteClick(site._id)}
-                  mx={2}
+                  mx={1}
+                  size="sm"
                   variant={selectedSiteId === site._id ? 'solid' : 'outline'}
                   colorScheme={selectedSiteId === site._id ? 'blue' : 'gray'}
-                  minW="120px"
+                  minW="100px"
+                  fontSize={{ base: 'xs', sm: 'sm' }}
+                  flexShrink={0}
                 >
                   {site.name}
                 </Button>
               ))}
             </Flex>
           ) : (
-            <Text color="gray.500" mb={6}>No sites found for your account.</Text>
+            <Text color="gray.500" mb={4} fontSize="sm">No sites found for your account.</Text>
           )}
         </>
       )}
 
       {/* Stats Section */}
-      <Heading as="h2" size="md" mt={8} mb={4}>
+      <Heading as="h2" size={{ base: 'sm', md: 'md' }} mt={6} mb={3}>
         Site Statistics
         {selectedSiteId && (
-          <Badge ml={2} colorScheme="blue">
+          <Badge ml={2} colorScheme="blue" fontSize={{ base: 'xs', md: 'sm' }}>
             {sites.find(s => s._id === selectedSiteId)?.name}
           </Badge>
         )}
       </Heading>
 
       {isLoading ? (
-        <SimpleGrid columns={{ base: 1, md: 2, lg: 3, xl: 5 }} spacing={4} mb={8}>
+        <SimpleGrid columns={{ base: 1, sm: 2, md: 3, lg: 4, xl: 5 }} spacing={3} mb={6}>
           {[1, 2, 3, 4, 5].map(i => (
             <StatCard
               key={i}
@@ -401,7 +420,7 @@ export default function Home() {
           ))}
         </SimpleGrid>
       ) : (
-        <SimpleGrid columns={{ base: 1, md: 2, lg: 3, xl: 5 }} spacing={4} mb={8}>
+        <SimpleGrid columns={{ base: 1, sm: 2, md: 3, lg: 4, xl: 5 }} spacing={3} mb={6}>
           {/* Card 1: Receipts This Month */}
           <StatCard
             title="Receipts This Month"
@@ -449,61 +468,69 @@ export default function Home() {
             subValue={`${dashboardStats?.todayActivityCount || 0} today`}
             icon={BsClipboardData}
             colorScheme="blue"
-            viewAllLink="/current"  // Updated
+            viewAllLink="/current"
           />
         </SimpleGrid>
       )}
 
-      <Divider mb={8} />
+      <Divider mb={6} />
 
       {/* Transaction History Section */}
-      <Heading as="h2" size="md" mb={4}>
+      <Heading as="h2" size={{ base: 'sm', md: 'md' }} mb={3}>
         Recent Transactions
         {selectedSiteId && (
-          <Badge ml={2} colorScheme="blue">
+          <Badge ml={2} colorScheme="blue" fontSize={{ base: 'xs', md: 'sm' }}>
             {sites.find(s => s._id === selectedSiteId)?.name}
           </Badge>
         )}
         {!selectedSiteId && (user?.role === 'admin' || user?.role === 'auditor') && (
-          <Badge ml={2} colorScheme="green">All Sites</Badge>
+          <Badge ml={2} colorScheme="green" fontSize={{ base: 'xs', md: 'sm' }}>All Sites</Badge>
         )}
       </Heading>
 
       {isLoading ? (
-        <Flex justifyContent="center" alignItems="center" minHeight="200px">
+        <Flex justifyContent="center" alignItems="center" minHeight="150px">
           <Spinner size="lg" />
         </Flex>
       ) : transactions.length > 0 ? (
-        <VStack spacing={4} align="stretch">
-          {transactions.map(transaction => (
-            <Card key={transaction._id} bg={cardBg} boxShadow="sm">
-              <CardBody>
-                <HStack spacing={4} alignItems="center">
-                  <Box flexShrink={0}>
+        <VStack spacing={3} align="stretch">
+          {transactions.slice(0, isMobile ? 3 : 5).map(transaction => (
+            <Card key={transaction._id} bg={cardBg} boxShadow="sm" size="sm">
+              <CardBody py={3} px={4}>
+                <Flex direction={{ base: 'column', sm: 'row' }} alignItems={{ base: 'flex-start', sm: 'center' }}>
+                  <Box flexShrink={0} mb={{ base: 2, sm: 0 }}>
                     <TransactionIcon type={transaction._type} />
                   </Box>
-                  <VStack align="flex-start" spacing={0} flex="1">
-                    <Text fontWeight="medium" isTruncated>{transaction.description}</Text>
-                    <HStack>
-                      <Text fontSize="sm" color="gray.500">
-                        {new Date(transaction.createdAt).toLocaleDateString()}
-                      </Text>
-                      <Text fontSize="sm" color="gray.500">•</Text>
-                      <Text fontSize="sm" color="gray.500">
-                        {transaction.siteName}
-                      </Text>
-                    </HStack>
-                  </VStack>
-                </HStack>
+                  <Box flex="1" ml={{ base: 0, sm: 3 }}>
+                    <Text fontWeight="medium" fontSize="sm" noOfLines={1}>
+                      {transaction.description}
+                    </Text>
+                    <Flex direction={{ base: 'column', xs: 'row' }} fontSize="xs" color="gray.500" mt={1}>
+                      <Text>{new Date(transaction.createdAt).toLocaleDateString()}</Text>
+                      <Text display={{ base: 'none', xs: 'block' }} mx={2}>•</Text>
+                      <Text noOfLines={1}>{transaction.siteName}</Text>
+                    </Flex>
+                  </Box>
+                </Flex>
               </CardBody>
             </Card>
           ))}
         </VStack>
       ) : (
-        <Box textAlign="center" py={10}>
-          <Text fontSize="lg" color="gray.500">
+        <Box textAlign="center" py={6}>
+          <Text fontSize="sm" color="gray.500">
             No transaction history found for {selectedSiteId ? "this site." : "your account."}
           </Text>
+        </Box>
+      )}
+
+      {transactions.length > 0 && (
+        <Box textAlign="center" mt={4}>
+          <Link href="/transactions" passHref>
+            <Button size="sm" variant="ghost" colorScheme="blue">
+              View All Transactions
+            </Button>
+          </Link>
         </Box>
       )}
     </Box>

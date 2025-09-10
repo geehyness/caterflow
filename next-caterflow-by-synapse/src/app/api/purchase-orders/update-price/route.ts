@@ -1,18 +1,22 @@
+// api/purchase-orders/update-price/route.tsx
 import { NextResponse } from 'next/server';
 import { client } from '@/lib/sanity';
 import { groq } from 'next-sanity';
 
 export async function POST(request: Request) {
     try {
-        const { poId, itemKey, newPrice } = await request.json();
+        // Correctly destructure both newPrice and newQuantity
+        const { poId, itemKey, newPrice, newQuantity } = await request.json();
 
-        if (!poId || !itemKey || newPrice === undefined) {
+        // Validate both newPrice and newQuantity
+        if (!poId || !itemKey || newPrice === undefined || newQuantity === undefined) {
             return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
         }
 
-        // 1. Update the price on the Purchase Order document
+        // 1. Update the price and quantity on the Purchase Order document
         const poPatch = client.patch(poId).set({
             [`orderedItems[_key=="${itemKey}"].unitPrice`]: newPrice,
+            [`orderedItems[_key=="${itemKey}"].orderedQuantity`]: newQuantity,
         });
 
         // 2. Fetch the stock item reference to update its price
@@ -26,6 +30,8 @@ export async function POST(request: Request) {
         const poData = await client.fetch(poQuery, { poId, itemKey });
         const stockItemId = poData?.orderedItems?.stockItemId;
 
+        // Note: It's good practice to only update the StockItem's unitPrice
+        // as the ordered quantity is specific to the purchase order.
         if (!stockItemId) {
             return NextResponse.json({ error: 'Stock item not found' }, { status: 404 });
         }
@@ -42,7 +48,7 @@ export async function POST(request: Request) {
 
         await transaction.commit();
 
-        return NextResponse.json({ success: true, message: 'Price updated successfully' });
+        return NextResponse.json({ success: true, message: 'Price and quantity updated successfully' });
     } catch (error) {
         console.error('Failed to update price:', error);
         return NextResponse.json(

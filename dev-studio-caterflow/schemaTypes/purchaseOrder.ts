@@ -86,13 +86,6 @@ export default defineType({
             validation: (Rule) => Rule.required(),
         }),
         defineField({
-            name: 'supplier',
-            title: 'Supplier',
-            type: 'reference',
-            to: [{ type: 'Supplier' }],
-            validation: (Rule) => Rule.required(),
-        }),
-        defineField({
             name: 'status',
             title: 'Status',
             type: 'string',
@@ -180,17 +173,20 @@ export default defineType({
             rows: 3,
         }),
     ],
+    // Update the preview section:
     preview: {
         select: {
             title: 'poNumber',
-            subtitle: 'supplier.name',
             date: 'orderDate',
             status: 'status',
+            firstSupplier: 'orderedItems[0].supplier.name',
+            itemCount: 'orderedItems.length'
         },
-        prepare({ title, subtitle, date, status }) {
+        prepare({ title, date, status, firstSupplier, itemCount }) {
+            const suppliersText = itemCount > 1 ? `${firstSupplier} + ${itemCount - 1} more` : firstSupplier;
             return {
                 title: `PO: ${title}`,
-                subtitle: `${subtitle} | ${new Date(date).toLocaleDateString()} | Status: ${status}`,
+                subtitle: `${suppliersText} | ${new Date(date).toLocaleDateString()} | Status: ${status}`,
             };
         },
     },

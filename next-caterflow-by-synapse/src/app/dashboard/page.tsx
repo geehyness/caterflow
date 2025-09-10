@@ -71,7 +71,7 @@ export default async function DashboardPage() {
                                     </span>
                                 </div>
                                 <div className="text-sm text-gray-500">
-                                    {order.supplier.name} • {new Date(order.orderDate).toLocaleDateString()}
+                                    {order.supplier?.name || 'No Supplier'} • {new Date(order.orderDate).toLocaleDateString()}
                                 </div>
                             </li>
                         ))}
