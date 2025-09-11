@@ -1,3 +1,4 @@
+//api/actions/update/route.ts
 import { NextResponse, NextRequest } from 'next/server';
 import { writeClient } from '@/lib/sanity';
 
@@ -12,6 +13,15 @@ export async function POST(request: NextRequest) {
             );
         }
 
+        // Validate the document exists first
+        const existingDoc = await writeClient.getDocument(id);
+        if (!existingDoc) {
+            return NextResponse.json(
+                { error: 'Document not found' },
+                { status: 404 }
+            );
+        }
+
         const patch = writeClient.patch(id);
 
         if (typeof completedSteps === 'number') {
@@ -19,6 +29,17 @@ export async function POST(request: NextRequest) {
         }
 
         if (status) {
+            // Validate status for PurchaseOrder documents
+            if (existingDoc._type === 'PurchaseOrder') {
+                const validStatuses = ['draft', 'pending-approval', 'approved', 'processing', 'partially-received', 'complete', 'cancelled'];
+                if (!validStatuses.includes(status)) {
+                    return NextResponse.json(
+                        { error: `Invalid status for PurchaseOrder: ${status}` },
+                        { status: 400 }
+                    );
+                }
+            }
+
             patch.set({ status });
 
             // If approving a purchase order, set approvedBy and approvedAt
@@ -33,10 +54,13 @@ export async function POST(request: NextRequest) {
         const result = await patch.commit();
 
         return NextResponse.json({ success: true, result });
-    } catch (error) {
+    } catch (error: any) {
         console.error('Failed to update action:', error);
         return NextResponse.json(
-            { error: 'Failed to update action' },
+            {
+                error: 'Failed to update action',
+                details: error.message
+            },
             { status: 500 }
         );
     }

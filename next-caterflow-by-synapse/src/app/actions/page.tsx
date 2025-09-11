@@ -512,6 +512,11 @@ export default function ActionsPage() {
 
     const handleApprovePO = async (action: PendingAction) => {
         try {
+            // First save any changes if this is a PO being edited
+            if (action.actionType === 'PurchaseOrder' && poDetails) {
+                await handleConfirmOrderUpdate();
+            }
+
             const response = await fetch('/api/actions/update', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -534,6 +539,7 @@ export default function ActionsPage() {
             });
 
             await refreshData();
+            onOrderModalClose();
 
         } catch (error: any) {
             toast({

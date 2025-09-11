@@ -350,10 +350,26 @@ export default function PurchaseOrderModal({
                             <Button variant="ghost" onClick={onClose}>Cancel</Button>
                             {isEditable && (
                                 <>
-                                    <Button colorScheme="brand" variant="outline" onClick={onSave} isLoading={isSaving} leftIcon={<FaSave />}>
+                                    <Button
+                                        colorScheme="brand"
+                                        variant="outline"
+                                        onClick={onSave}
+                                        isLoading={isSaving}
+                                        leftIcon={<FaSave />}
+                                    >
                                         Save Draft
                                     </Button>
-                                    <Button colorScheme="green" onClick={handleApproveWithValidation} isLoading={isSaving} isDisabled={hasIncompleteItems} leftIcon={<FaCheck />}>
+                                    <Button
+                                        colorScheme="green"
+                                        onClick={() => {
+                                            // Save first, then call onApprove
+                                            onSave();
+                                            onApprove();
+                                        }}
+                                        isLoading={isSaving}
+                                        isDisabled={hasIncompleteItems}
+                                        leftIcon={<FaCheck />}
+                                    >
                                         Confirm PO
                                     </Button>
                                 </>

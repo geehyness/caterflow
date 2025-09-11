@@ -1,16 +1,18 @@
+// /api/purchase-orders/update-item/route.ts
 import { NextResponse } from 'next/server';
 import { writeClient } from '@/lib/sanity';
+import { groq } from 'next-sanity';
 
 export async function POST(request: Request) {
     try {
         const { poId, itemKey, newPrice, newQuantity } = await request.json();
 
         if (!poId || !itemKey) {
-            return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+            return NextResponse.json({ error: 'Missing required fields: poId and itemKey are required' }, { status: 400 });
         }
 
         // First, get the stock item reference from the purchase order
-        const poQuery = `*[_type == "PurchaseOrder" && _id == $poId][0] {
+        const poQuery = groq`*[_type == "PurchaseOrder" && _id == $poId][0] {
             orderedItems[_key == $itemKey][0] {
                 "stockItemId": stockItem._ref
             }
@@ -20,15 +22,13 @@ export async function POST(request: Request) {
         const stockItemId = poData?.orderedItems?.stockItemId;
 
         if (!stockItemId) {
-            return NextResponse.json({ error: 'Stock item not found' }, { status: 404 });
+            return NextResponse.json({ error: 'Stock item not found in purchase order' }, { status: 404 });
         }
 
-        // Create a transaction with all the patches
         const transaction = writeClient.transaction();
 
-        // If a new price is provided, update both PO and stock item
+        // Update price in purchase order if provided
         if (newPrice !== undefined && newPrice !== null) {
-            // Update price in purchase order
             transaction.patch(poId, (patch) =>
                 patch.set({
                     [`orderedItems[_key=="${itemKey}"].unitPrice`]: newPrice,
@@ -44,7 +44,7 @@ export async function POST(request: Request) {
             );
         }
 
-        // If a new quantity is provided, update only the PO
+        // Update quantity in purchase order if provided
         if (newQuantity !== undefined && newQuantity !== null) {
             transaction.patch(poId, (patch) =>
                 patch.set({
@@ -53,14 +53,23 @@ export async function POST(request: Request) {
             );
         }
 
-        // Execute the transaction
         await transaction.commit();
 
-        return NextResponse.json({ success: true, message: 'Item updated successfully' });
-    } catch (error) {
+        return NextResponse.json({
+            success: true,
+            message: 'Item updated successfully',
+            updatedFields: {
+                ...(newPrice !== undefined && { price: newPrice }),
+                ...(newQuantity !== undefined && { quantity: newQuantity })
+            }
+        });
+    } catch (error: any) {
         console.error('Failed to update item:', error);
         return NextResponse.json(
-            { error: 'Failed to update item' },
+            {
+                error: 'Failed to update item',
+                details: error.message
+            },
             { status: 500 }
         );
     }

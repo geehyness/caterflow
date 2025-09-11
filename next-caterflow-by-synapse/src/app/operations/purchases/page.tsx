@@ -302,7 +302,10 @@ export default function PurchasesPage() {
                 }),
             });
 
-            if (!response.ok) throw new Error('Failed to submit for approval');
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Failed to submit for approval');
+            }
 
             toast({
                 title: 'Order Submitted',
@@ -311,11 +314,14 @@ export default function PurchasesPage() {
                 duration: 5000,
                 isClosable: true,
             });
+
             fetchPurchaseOrders();
+            onOrderModalClose();
+
         } catch (error: any) {
             toast({
                 title: 'Error',
-                description: 'Failed to submit order for approval. Please try again.',
+                description: error.message || 'Failed to submit order for approval. Please try again.',
                 status: 'error',
                 duration: 5000,
                 isClosable: true,
