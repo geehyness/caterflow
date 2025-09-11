@@ -9,15 +9,27 @@ import Image from 'next/image';
 import { usePWAInstall } from '@/hooks/usePWAInstall';
 import { Button, Icon } from '@chakra-ui/react';
 import { FiDownload } from 'react-icons/fi';
+import { useLoading } from '@/context/LoadingContext';
+import { useRouter, usePathname } from 'next/navigation';
 
-export const MobileTopbar = () => {
+export const MobileTopbar = ({ onItemClick }: { onItemClick?: () => void }) => {
     const { toggleSidebar } = useSidebar();
     const { isInstallable, installApp } = usePWAInstall();
+
+    const { setLoading } = useLoading();
+    const router = useRouter();
+
 
     // 1. Define theme-aware colors using tokens from your theme.ts
     const bg = useColorModeValue('neutral.light.bg-header', 'neutral.dark.bg-header');
     const borderColor = useColorModeValue('neutral.light.border-color', 'neutral.dark.border-color');
     const headingColor = useColorModeValue('brand.500', 'brand.300'); // Use a lighter brand color in dark mode for contrast
+
+    const handleItemClick = (href: string) => {
+        setLoading(true);
+        router.push(href);
+        onItemClick?.();
+    };
 
     return (
         <Flex
@@ -54,6 +66,7 @@ export const MobileTopbar = () => {
                     alignItems="center"
                     justifyContent="center"
                     overflow="hidden"
+                    onClick={() => handleItemClick('/')}
                 >
                     <Image
                         src="/icons/icon-512x512.png"
@@ -63,7 +76,9 @@ export const MobileTopbar = () => {
                         style={{ objectFit: 'cover' }}
                     />
                 </Box>
-                <Heading size="md" color={headingColor}>
+                <Heading size="md" color={headingColor}
+                    onClick={() => handleItemClick('/')}
+                >
                     Caterflow
                 </Heading>
                 {isInstallable && (

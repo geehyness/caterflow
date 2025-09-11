@@ -131,6 +131,7 @@ const SidebarContent = ({ onItemClick }: { onItemClick?: () => void }) => {
                     display="flex"
                     alignItems="center"
                     justifyContent="center"
+                    onClick={() => handleItemClick('/')}
                 >
                     <Image
                         src="/icons/icon-512x512.png"
