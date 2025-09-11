@@ -6,8 +6,13 @@ import { HamburgerIcon } from '@chakra-ui/icons';
 import { useSidebar } from '@/context/SidebarContext';
 import Image from 'next/image';
 
+import { usePWAInstall } from '@/hooks/usePWAInstall';
+import { Button, Icon } from '@chakra-ui/react';
+import { FiDownload } from 'react-icons/fi';
+
 export const MobileTopbar = () => {
     const { toggleSidebar } = useSidebar();
+    const { isInstallable, installApp } = usePWAInstall();
 
     // 1. Define theme-aware colors using tokens from your theme.ts
     const bg = useColorModeValue('neutral.light.bg-header', 'neutral.dark.bg-header');
@@ -61,6 +66,12 @@ export const MobileTopbar = () => {
                 <Heading size="md" color={headingColor}>
                     Caterflow
                 </Heading>
+                {isInstallable && (
+                    <Button onClick={installApp} size="sm" colorScheme="blue">
+                        <Icon as={FiDownload} mr={2} />
+                        Install App
+                    </Button>
+                )}
             </Flex>
         </Flex>
     );
