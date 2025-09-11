@@ -1,13 +1,6 @@
 // schemas/dispatchLog.ts
 import { defineType, defineField } from 'sanity';
-import { createClient } from '@sanity/client';
-
-const client = createClient({
-    projectId: 'v3sfsmld',
-    dataset: 'production',
-    apiVersion: '2025-08-20',
-    useCdn: true,
-});
+import client from '../lib/client';
 
 const isUniqueDispatchNumber = async (dispatchNumber, context) => {
     const { document, getClient } = context;
@@ -153,7 +146,7 @@ export default defineType({
             const statusText = evidenceStatus ? ` | Evidence: ${evidenceStatus}` : '';
             return {
                 title: `Dispatch: ${title}`,
-                subtitle: `${new Date(date).toLocaleDateString()} | From: ${source} To: ${destination}${statusText}`,
+                subtitle: `${date ? new Date(date).toLocaleDateString() : 'No date'} | From: ${source || 'No source'} To: ${destination || 'No destination'}${statusText}`,
             };
         },
     },

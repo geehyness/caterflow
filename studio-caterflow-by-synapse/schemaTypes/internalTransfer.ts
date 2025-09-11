@@ -1,16 +1,7 @@
-// schemas/internalTransfer.js
+// schemas/internalTransfer.ts
 import { defineType, defineField } from 'sanity';
-import { createClient } from '@sanity/client';
+import client from '../lib/client';
 
-// NOTE: You will need to replace the placeholders below with your actual project details.
-const client = createClient({
-    projectId: 'v3sfsmld', // Replace with your Sanity Project ID
-    dataset: 'production', // Replace with your dataset (e.g., 'production')
-    apiVersion: '2025-08-20', // Use a recent date, like today's date
-    useCdn: true,
-});
-
-// Async helper function to check for unique transfer numbers
 const isUniqueTransferNumber = async (transferNumber, context) => {
     const { document, getClient } = context;
     if (!transferNumber) {
@@ -140,34 +131,35 @@ export default defineType({
             date: 'transferDate',
             from: 'fromBin.name',
             to: 'toBin.name',
+            status: 'status',
         },
-        prepare({ title, date, from, to }) {
+        prepare({ title, date, from, to, status }) {
             return {
                 title: `Transfer: ${title}`,
-                subtitle: `${new Date(date).toLocaleDateString()} | ${from} -> ${to}`,
+                subtitle: `${date ? new Date(date).toLocaleDateString() : 'No date'} | ${from || 'No source'} -> ${to || 'No destination'} | Status: ${status || 'No status'}`,
             };
         },
-        orderings: [
-            {
-                name: 'newest',
-                title: 'Newest First',
-                by: [{ field: 'transferDate', direction: 'desc' }],
-            },
-            {
-                name: 'oldest',
-                title: 'Oldest First',
-                by: [{ field: 'transferDate', direction: 'asc' }],
-            },
-            {
-                name: 'transferNumberAsc',
-                title: 'Transfer Number (Ascending)',
-                by: [{ field: 'transferNumber', direction: 'asc' }],
-            },
-            {
-                name: 'status',
-                title: 'Status',
-                by: [{ field: 'status', direction: 'asc' }],
-            },
-        ],
     },
+    orderings: [
+        {
+            name: 'newest',
+            title: 'Newest First',
+            by: [{ field: 'transferDate', direction: 'desc' }],
+        },
+        {
+            name: 'oldest',
+            title: 'Oldest First',
+            by: [{ field: 'transferDate', direction: 'asc' }],
+        },
+        {
+            name: 'transferNumberAsc',
+            title: 'Transfer Number (Ascending)',
+            by: [{ field: 'transferNumber', direction: 'asc' }],
+        },
+        {
+            name: 'status',
+            title: 'Status',
+            by: [{ field: 'status', direction: 'asc' }],
+        },
+    ],
 });

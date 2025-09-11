@@ -1,4 +1,4 @@
-// src/components/PurchaseOrderModal.tsx
+// src/components/CreatePurchaseOrderModal.tsx
 import React, { useState, useEffect } from 'react';
 import {
     Modal,
@@ -20,15 +20,14 @@ import {
     Input,
     Flex,
     Spinner,
-    Divider,
     NumberInput,
     NumberInputField,
     NumberInputStepper,
     NumberIncrementStepper,
     NumberDecrementStepper,
 } from '@chakra-ui/react';
-import { FiPlus } from 'react-icons/fi';
-import { StockItem, Supplier } from '@/lib/sanityTypes';
+import { FiPlus, FiX } from 'react-icons/fi';
+import { StockItem, Supplier, Site } from '@/lib/sanityTypes';
 import { client } from '@/lib/sanity';
 import { groq } from 'next-sanity';
 
@@ -38,6 +37,7 @@ interface OrderItem {
     supplier: string;
     orderedQuantity: number;
     unitPrice: number;
+    _key?: string;
 }
 
 // In CreatePurchaseOrderModal.tsx
@@ -57,7 +57,10 @@ interface PurchaseOrderModalProps {
     onClose: () => void;
     selectedItems: StockItem[];
     suppliers: Supplier[];
-    onSave: (items: OrderItem[]) => void;
+    onSave: (items: OrderItem[], siteId?: string) => void;
+    // New props for site selection
+    selectedSiteId?: string | null;
+    sites?: Site[];
 }
 
 interface Category {
@@ -65,16 +68,23 @@ interface Category {
     title: string;
 }
 
-export default function CreatePurchaseOrderModal({ isOpen, onClose, selectedItems, suppliers, onSave }: PurchaseOrderModalProps) {
+export default function CreatePurchaseOrderModal({
+    isOpen,
+    onClose,
+    selectedItems,
+    suppliers,
+    onSave,
+    selectedSiteId,
+    sites = []
+}: PurchaseOrderModalProps) {
     const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
     const [isAddItemModalOpen, setIsAddItemModalOpen] = useState(false);
-    //const [availableItems, setAvailableItems] = useState<StockItem[]>([]);
-    // Then update your state
     const [availableItems, setAvailableItems] = useState<StockItemWithExpandedCategory[]>([]);
     const [categories, setCategories] = useState<Category[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedCategory, setSelectedCategory] = useState('');
     const [loadingItems, setLoadingItems] = useState(false);
+    const [selectedSite, setSelectedSite] = useState<string>(selectedSiteId || '');
     const toast = useToast();
 
     useEffect(() => {
@@ -85,11 +95,17 @@ export default function CreatePurchaseOrderModal({ isOpen, onClose, selectedItem
                 supplier: item.primarySupplier?._ref ||
                     (item.suppliers && item.suppliers.length > 0 ? item.suppliers[0]._ref : ''),
                 orderedQuantity: (item as any).orderQuantity || 1,
-                unitPrice: item.unitPrice || 0
+                unitPrice: item.unitPrice || 0,
+                _key: Math.random().toString(36).substr(2, 9)
             }));
             setOrderItems(initialItems);
         }
-    }, [isOpen, selectedItems]);
+
+        // Reset selected site when modal opens if no site was preselected
+        if (isOpen && !selectedSiteId) {
+            setSelectedSite('');
+        }
+    }, [isOpen, selectedItems, selectedSiteId]);
 
     const fetchAvailableItems = async () => {
         setLoadingItems(true);
@@ -141,7 +157,8 @@ export default function CreatePurchaseOrderModal({ isOpen, onClose, selectedItem
             supplier: item.item.primarySupplier?._ref ||
                 (item.item.suppliers && item.item.suppliers.length > 0 ? item.item.suppliers[0]._ref : ''),
             orderedQuantity: item.quantity,
-            unitPrice: item.price
+            unitPrice: item.price,
+            _key: Math.random().toString(36).substr(2, 9)
         }));
 
         setOrderItems(prev => [...prev, ...newOrderItems]);
@@ -157,6 +174,12 @@ export default function CreatePurchaseOrderModal({ isOpen, onClose, selectedItem
     const updateItemQuantity = (index: number, quantity: number) => {
         setOrderItems(prev => prev.map((item, i) =>
             i === index ? { ...item, orderedQuantity: quantity } : item
+        ));
+    };
+
+    const updateItemPrice = (index: number, price: number) => {
+        setOrderItems(prev => prev.map((item, i) =>
+            i === index ? { ...item, unitPrice: price } : item
         ));
     };
 
@@ -180,7 +203,21 @@ export default function CreatePurchaseOrderModal({ isOpen, onClose, selectedItem
             return;
         }
 
-        onSave(orderItems);
+        // If site selection is required but not provided
+        if (!selectedSiteId && !selectedSite) {
+            toast({
+                title: 'Site required',
+                description: 'Please select a site for this purchase order',
+                status: 'error',
+                duration: 3000,
+                isClosable: true,
+            });
+            return;
+        }
+
+        // Pass the site ID to the onSave callback
+        const siteIdToUse = selectedSiteId || selectedSite;
+        onSave(orderItems, siteIdToUse);
     };
 
     return (
@@ -191,12 +228,32 @@ export default function CreatePurchaseOrderModal({ isOpen, onClose, selectedItem
                     <ModalHeader>Create Purchase Order</ModalHeader>
                     <ModalCloseButton />
                     <ModalBody>
+                        {/* Site Selection (only show if no preselected site) */}
+                        {!selectedSiteId && (
+                            <Box mb={4}>
+                                <Text fontWeight="medium" mb={2}>Select Site</Text>
+                                <Select
+                                    placeholder="Select a site"
+                                    value={selectedSite}
+                                    onChange={(e) => setSelectedSite(e.target.value)}
+                                    isRequired
+                                >
+                                    {sites.map(site => (
+                                        <option key={site._id} value={site._id}>
+                                            {site.name}
+                                        </option>
+                                    ))}
+                                </Select>
+                            </Box>
+                        )}
+
                         <Button
                             leftIcon={<FiPlus />}
                             onClick={handleOpenAddItemModal}
                             mb={4}
                             colorScheme="blue"
                             variant="outline"
+                            isDisabled={!selectedSiteId && !selectedSite} // Disable if site not selected
                         >
                             Add More Items
                         </Button>
@@ -205,51 +262,72 @@ export default function CreatePurchaseOrderModal({ isOpen, onClose, selectedItem
                             {orderItems.map((item, index) => {
                                 const stockItem = [...selectedItems, ...availableItems].find(si => si._id === item.stockItem);
                                 return (
-                                    <Card key={index} p={4} variant="outline" position="relative">
+                                    <Card key={item._key || index} p={4} variant="outline" position="relative">
                                         <IconButton
                                             aria-label="Remove item"
-                                            icon={<FiPlus style={{ transform: 'rotate(45deg)' }} />}
+                                            icon={<FiX />}
                                             size="sm"
                                             position="absolute"
                                             top={2}
                                             right={2}
                                             onClick={() => removeItem(index)}
+                                            variant="ghost"
                                         />
-                                        <HStack justify="space-between">
-                                            <VStack align="start" spacing={1}>
-                                                <Text fontWeight="bold">{stockItem?.name}</Text>
+                                        <VStack align="stretch" spacing={2}>
+                                            <HStack justifyContent="space-between" alignItems="center">
+                                                <Text fontWeight="bold" fontSize="lg">{stockItem?.name}</Text>
                                                 <Text fontSize="sm" color="gray.600">SKU: {stockItem?.sku}</Text>
-                                                <Text fontSize="sm">Current Price: ${item.unitPrice}</Text>
-                                            </VStack>
-                                            <HStack spacing={3}>
-                                                <NumberInput
-                                                    value={item.orderedQuantity}
-                                                    onChange={(value) => updateItemQuantity(index, parseInt(value) || 1)}
-                                                    min={1}
-                                                    width="80px"
-                                                    size="sm"
-                                                >
-                                                    <NumberInputField />
-                                                    <NumberInputStepper>
-                                                        <NumberIncrementStepper />
-                                                        <NumberDecrementStepper />
-                                                    </NumberInputStepper>
-                                                </NumberInput>
-                                                <Select
-                                                    value={item.supplier}
-                                                    onChange={(e) => updateItemSupplier(index, e.target.value)}
-                                                    width="200px"
-                                                    size="sm"
-                                                >
-                                                    <option value="">Select Supplier</option>
-                                                    {suppliers.map(supplier => (
-                                                        <option key={supplier._id} value={supplier._id}>
-                                                            {supplier.name}
-                                                        </option>
-                                                    ))}
-                                                </Select>
                                             </HStack>
-                                        </HStack>
+                                            <Flex direction={{ base: 'column', md: 'row' }} justify="space-between" align={{ base: 'flex-start', md: 'center' }} gap={4} flexWrap="wrap">
+                                                <Box flex="1 1 200px">
+                                                    <Text fontWeight="medium" mb={1}>Supplier</Text>
+                                                    <Select
+                                                        value={item.supplier}
+                                                        onChange={(e) => updateItemSupplier(index, e.target.value)}
+                                                        size="sm"
+                                                    >
+                                                        <option value="">Select Supplier</option>
+                                                        {suppliers.map(supplier => (
+                                                            <option key={supplier._id} value={supplier._id}>
+                                                                {supplier.name}
+                                                            </option>
+                                                        ))}
+                                                    </Select>
+                                                </Box>
+                                                <Box flex="1 1 80px">
+                                                    <Text fontWeight="medium" mb={1}>Quantity</Text>
+                                                    <NumberInput
+                                                        value={item.orderedQuantity}
+                                                        onChange={(value) => updateItemQuantity(index, parseInt(value) || 1)}
+                                                        min={1}
+                                                        size="sm"
+                                                    >
+                                                        <NumberInputField />
+                                                        <NumberInputStepper>
+                                                            <NumberIncrementStepper />
+                                                            <NumberDecrementStepper />
+                                                        </NumberInputStepper>
+                                                    </NumberInput>
+                                                </Box>
+                                                <Box flex="1 1 100px">
+                                                    <Text fontWeight="medium" mb={1}>Unit Price</Text>
+                                                    <NumberInput
+                                                        value={item.unitPrice}
+                                                        onChange={(value) => updateItemPrice(index, parseFloat(value) || 0)}
+                                                        min={0}
+                                                        precision={2}
+                                                        step={0.01}
+                                                        size="sm"
+                                                    >
+                                                        <NumberInputField />
+                                                        <NumberInputStepper>
+                                                            <NumberIncrementStepper />
+                                                            <NumberDecrementStepper />
+                                                        </NumberInputStepper>
+                                                    </NumberInput>
+                                                </Box>
+                                            </Flex>
+                                        </VStack>
                                     </Card>
                                 );
                             })}
@@ -259,7 +337,11 @@ export default function CreatePurchaseOrderModal({ isOpen, onClose, selectedItem
                         <Button variant="ghost" mr={3} onClick={onClose}>
                             Cancel
                         </Button>
-                        <Button onClick={handleSave} colorScheme="blue">
+                        <Button
+                            onClick={handleSave}
+                            colorScheme="blue"
+                            isDisabled={!selectedSiteId && !selectedSite} // Disable if site not selected
+                        >
                             Create Purchase Order
                         </Button>
                     </ModalFooter>
@@ -271,6 +353,7 @@ export default function CreatePurchaseOrderModal({ isOpen, onClose, selectedItem
                 <ModalOverlay />
                 <ModalContent>
                     <ModalHeader>Add Items to Purchase Order</ModalHeader>
+                    <ModalCloseButton />
                     <ModalBody>
                         <VStack spacing={4} align="stretch">
                             <HStack>

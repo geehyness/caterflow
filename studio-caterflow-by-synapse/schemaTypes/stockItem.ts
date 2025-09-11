@@ -1,18 +1,7 @@
-// schemas/stockItem.js
+// schemas/stockItem.ts
 import { defineType, defineField } from 'sanity';
-import { createClient } from '@sanity/client';
+import client from '../lib/client';
 
-// NOTE: For Sanity Studio v3, it is recommended to create a separate client instance.
-// For example, in a file like 'sanityClient.js'
-// You will need to replace the placeholders below with your actual project details.
-const client = createClient({
-    projectId: 'v3sfsmld', // Replace with your Sanity Project ID
-    dataset: 'production', // Replace with your dataset (e.g., 'production')
-    apiVersion: '2025-08-20', // Use a recent date, like today's date
-    useCdn: true,
-});
-
-// Async helper function to check for SKU uniqueness
 const isUniqueSku = async (sku, context) => {
     const { document, getClient } = context;
     if (!sku) {
@@ -60,7 +49,7 @@ export default defineType({
                     }
                     return true;
                 }),
-            readOnly: ({ document }) => !!document.sku, // Makes the field read-only after the initial creation
+            readOnly: ({ document }) => !!document.sku,
             description: 'A unique identifier for this stock item.',
             initialValue: async () => {
                 const query = `
@@ -190,61 +179,57 @@ export default defineType({
             title: 'name',
             subtitle: 'sku',
             media: 'imageUrl',
-            // 'suppliers' is not a field in the document, it's an array of references
-            // The correct way to select properties from referenced documents is to dot-walk
-            // e.g., 'suppliers.0.name' to get the name of the first supplier.
-            // However, it's not possible to select a list of properties directly like `suppliers[].name` in the select clause.
-            // You'd need to fetch them in a separate query if you want them.
-            // The following will select the reference to suppliers
-            suppliers: 'suppliers',
+            minStock: 'minimumStockLevel',
+            unit: 'unitOfMeasure',
         },
-        prepare(selection) {
-            const { title, subtitle, media, suppliers } = selection;
-            const supplierNames = suppliers?.map(supplier => supplier.name).join(', ') || 'No suppliers';
-            const supplierList = `Suppliers: ${supplierNames}`;
-
+        prepare({ title, subtitle, media, minStock, unit }) {
             return {
                 title: title,
-                subtitle: `${subtitle} | ${supplierList}`,
+                subtitle: `${subtitle || 'No SKU'} | Min: ${minStock || 0} ${unit || ''}`,
                 media: media,
             };
         },
-        orderings: [
-            {
-                name: 'nameAsc',
-                title: 'Name (A-Z)',
-                by: [{ field: 'name', direction: 'asc' }],
-            },
-            {
-                name: 'nameDesc',
-                title: 'Name (Z-A)',
-                by: [{ field: 'name', direction: 'desc' }],
-            },
-            {
-                name: 'skuAsc',
-                title: 'SKU (Ascending)',
-                by: [{ field: 'sku', direction: 'asc' }],
-            },
-            {
-                name: 'minStockLevelAsc',
-                title: 'Min Stock Level (Low to High)',
-                by: [{ field: 'minimumStockLevel', direction: 'asc' }],
-            },
-            {
-                name: 'minStockLevelDesc',
-                title: 'Min Stock Level (High to Low)',
-                by: [{ field: 'minimumStockLevel', direction: 'desc' }],
-            },
-            {
-                name: 'createdAt',
-                title: 'Newest First',
-                by: [{ field: '_createdAt', direction: 'desc' }],
-            },
-            {
-                name: 'updatedAt',
-                title: 'Recently Updated',
-                by: [{ field: '_updatedAt', direction: 'desc' }],
-            },
-        ],
     },
+    orderings: [
+        {
+            name: 'nameAsc',
+            title: 'Name (A-Z)',
+            by: [{ field: 'name', direction: 'asc' }],
+        },
+        {
+            name: 'nameDesc',
+            title: 'Name (Z-A)',
+            by: [{ field: 'name', direction: 'desc' }],
+        },
+        {
+            name: 'skuAsc',
+            title: 'SKU (Ascending)',
+            by: [{ field: 'sku', direction: 'asc' }],
+        },
+        {
+            name: 'minStockLevelAsc',
+            title: 'Min Stock Level (Low to High)',
+            by: [{ field: 'minimumStockLevel', direction: 'asc' }],
+        },
+        {
+            name: 'minStockLevelAsc',
+            title: 'Min Stock Level (Low to High)',
+            by: [{ field: 'minimumStockLevel', direction: 'asc' }],
+        },
+        {
+            name: 'minStockLevelDesc',
+            title: 'Min Stock Level (High to Low)',
+            by: [{ field: 'minimumStockLevel', direction: 'desc' }],
+        },
+        {
+            name: 'createdAt',
+            title: 'Newest First',
+            by: [{ field: '_createdAt', direction: 'desc' }],
+        },
+        {
+            name: 'updatedAt',
+            title: 'Recently Updated',
+            by: [{ field: '_updatedAt', direction: 'desc' }],
+        },
+    ],
 });

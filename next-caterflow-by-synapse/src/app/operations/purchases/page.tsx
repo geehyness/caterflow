@@ -32,7 +32,7 @@ import { useAuth } from '@/context/AuthContext';
 import CreatePurchaseOrderModal from '@/app/actions/CreatePurchaseOrderModal';
 import PurchaseOrderModal from '@/app/actions/PurchaseOrderModal';
 import { PendingAction } from '@/app/actions/types';
-import { StockItem, Category } from '@/lib/sanityTypes';
+import { StockItem, Category, Site } from '@/lib/sanityTypes';
 import { PurchaseOrderDetails } from '@/app/actions/PurchaseOrderModal';
 
 interface PurchaseOrderItem {
@@ -75,6 +75,13 @@ export interface PurchaseOrder {
     supplierNames?: string;
 }
 
+interface OrderItem {
+    stockItem: string;
+    supplier: string;
+    orderedQuantity: number;
+    unitPrice: number;
+}
+
 
 export default function PurchasesPage() {
     const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
@@ -94,9 +101,10 @@ export default function PurchasesPage() {
     //const [selectedAction, setSelectedAction] = useState<PendingAction | null>(null);
 
 
-    // Add state for selectedItems and suppliers
+    // Add state for selectedItems, suppliers and sites
     const [selectedItems, setSelectedItems] = useState<any[]>([]);
     const [suppliers, setSuppliers] = useState<any[]>([]);
+    const [sites, setSites] = useState<Site[]>([]);
 
 
     const cancelRef = useRef<HTMLButtonElement>(null);
@@ -132,6 +140,22 @@ export default function PurchasesPage() {
             }
         };
         fetchSuppliers();
+    }, []);
+
+    // Add new useEffect for fetching sites
+    useEffect(() => {
+        const fetchSites = async () => {
+            try {
+                const response = await fetch('/api/sites');
+                if (response.ok) {
+                    const data = await response.json();
+                    setSites(data);
+                }
+            } catch (error) {
+                console.error('Failed to fetch sites:', error);
+            }
+        };
+        fetchSites();
     }, []);
 
 
@@ -195,6 +219,56 @@ export default function PurchasesPage() {
     const handleAddOrder = () => {
         onOpen();
     };
+
+    const handleCreateOrders = async (items: OrderItem[], siteId?: string) => {
+        try {
+            const totalAmount = items.reduce((sum, item) => {
+                return sum + (item.orderedQuantity * item.unitPrice);
+            }, 0);
+
+            const response = await fetch('/api/purchase-orders', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    poNumber: `PO-${Date.now()}`,
+                    orderDate: new Date().toISOString(),
+                    orderedBy: user?._id,
+                    orderedItems: items,
+                    totalAmount,
+                    status: 'draft',
+                    site: siteId,
+                }),
+            });
+
+            if (response.ok) {
+                toast({
+                    title: 'Purchase order created',
+                    description: 'The purchase order has been created successfully',
+                    status: 'success',
+                    duration: 5000,
+                    isClosable: true,
+                });
+
+
+                onClose();
+            } else {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Failed to create purchase order');
+            }
+        } catch (error: any) {
+            console.error('Error creating purchase order:', error);
+            toast({
+                title: 'Error creating purchase order',
+                description: error.message || 'An unexpected error occurred. Please try again.',
+                status: 'error',
+                duration: 5000,
+                isClosable: true,
+            });
+        }
+    };
+
 
     const handleSaveOrder = async () => {
         if (!poDetails) return;
@@ -665,9 +739,10 @@ export default function PurchasesPage() {
             <CreatePurchaseOrderModal
                 isOpen={isOpen}
                 onClose={onClose}
-                onSave={handleSaveSuccess}
+                onSave={handleCreateOrders}
                 selectedItems={selectedItems}
                 suppliers={suppliers}
+                sites={sites}
             />
 
             <PurchaseOrderModal

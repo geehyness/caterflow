@@ -75,6 +75,46 @@ export interface PurchaseOrder {
     totalAmount: number;
 }
 
+// Site Types
+export interface Site {
+    _id: string;
+    _type: 'Site';
+    name: string;
+    code: {
+        _type: 'slug';
+        current: string;
+    };
+    location?: string;
+    manager?: {
+        _type: 'reference';
+        _ref: string;
+    };
+    contactNumber?: string;
+    email?: string;
+    patientCount?: number;
+    _createdAt?: string;
+    _updatedAt?: string;
+}
+
+// Expanded Site with manager details
+export interface SiteWithManager extends Omit<Site, 'manager'> {
+    manager?: {
+        _id: string;
+        name: string;
+    };
+}
+
+// AppUser Type (referenced by Site.manager)
+export interface AppUser {
+    _id: string;
+    _type: 'AppUser';
+    name: string;
+    email: string;
+    role: string;
+    isActive: boolean;
+    _createdAt?: string;
+    _updatedAt?: string;
+}
 
 export interface GoodsReceipt {
     _id: string;

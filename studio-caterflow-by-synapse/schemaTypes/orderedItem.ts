@@ -1,8 +1,8 @@
-// schemas/orderedItem.js
+// schemas/orderedItem.ts
 import { defineType, defineField } from 'sanity';
 
 export default defineType({
-    name: 'OrderedItem', // Capitalized for consistency
+    name: 'OrderedItem',
     title: 'Ordered Item',
     type: 'object',
     fields: [
@@ -10,7 +10,14 @@ export default defineType({
             name: 'stockItem',
             title: 'Stock Item',
             type: 'reference',
-            to: [{ type: 'StockItem' }], // Consistent capitalization
+            to: [{ type: 'StockItem' }],
+            validation: (Rule) => Rule.required(),
+        }),
+        defineField({
+            name: 'supplier',
+            title: 'Supplier',
+            type: 'reference',
+            to: [{ type: 'Supplier' }],
             validation: (Rule) => Rule.required(),
         }),
         defineField({
@@ -32,11 +39,12 @@ export default defineType({
             title: 'stockItem.name',
             subtitle: 'orderedQuantity',
             unit: 'stockItem.unitOfMeasure',
+            supplier: 'supplier.name'
         },
-        prepare({ title, subtitle, unit }) {
+        prepare({ title, subtitle, unit, supplier }) {
             return {
                 title: title,
-                subtitle: `${subtitle} ${unit}`,
+                subtitle: `${subtitle} ${unit} from ${supplier}`,
             };
         },
     },

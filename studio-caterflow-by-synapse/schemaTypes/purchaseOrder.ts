@@ -1,14 +1,5 @@
 // schemas/purchaseOrder.ts
 import { defineType, defineField } from 'sanity';
-import { createClient } from '@sanity/client';
-
-// NOTE: You will need to replace the placeholders below with your actual project details.
-const client = createClient({
-    projectId: 'v3sfsmld',
-    dataset: 'production',
-    apiVersion: '2025-08-20',
-    useCdn: true,
-});
 
 // Async helper function to check for unique PO numbers
 const isUniquePoNumber = async (poNumber, context) => {
@@ -51,45 +42,51 @@ export default defineType({
                     }
                     return true;
                 }),
-            readOnly: ({ document }) => !!document.poNumber,
+            readOnly: ({ document }) => !!document?.poNumber,
             description: 'Unique Purchase Order identifier.',
-            initialValue: async () => {
-                const today = new Date().toISOString().slice(0, 10);
-                const query = `
-                    *[_type == "PurchaseOrder" && _createdAt >= "${today}T00:00:00Z" && _createdAt < "${today}T23:59:59Z"] | order(_createdAt desc)[0] {
-                        poNumber
-                    }
-                `;
-                const lastPO = await client.fetch(query);
+            initialValue: async (_, context) => {
+                const { getClient } = context;
+                const client = getClient({ apiVersion: '2025-08-20' });
 
-                let nextNumber = 1;
-                if (lastPO && lastPO.poNumber) {
-                    const lastNumber = parseInt(lastPO.poNumber.split('-').pop());
-                    if (!isNaN(lastNumber)) {
-                        nextNumber = lastNumber + 1;
+                try {
+                    const today = new Date().toISOString().slice(0, 10);
+                    const query = `
+                        *[_type == "purchaseOrder" && _createdAt >= "${today}T00:00:00Z" && _createdAt < "${today}T23:59:59Z"] | order(_createdAt desc)[0] {
+                            poNumber
+                        }
+                    `;
+                    const lastPO = await client.fetch(query);
+
+                    let nextNumber = 1;
+                    if (lastPO && lastPO.poNumber) {
+                        // Extract the number part from formats like "PO-2025-01-20-001"
+                        const parts = lastPO.poNumber.split('-');
+                        const lastNumberStr = parts[parts.length - 1];
+                        const lastNumber = parseInt(lastNumberStr);
+                        if (!isNaN(lastNumber)) {
+                            nextNumber = lastNumber + 1;
+                        }
                     }
+
+                    const paddedNumber = String(nextNumber).padStart(3, '0');
+                    return `PO-${today}-${paddedNumber}`;
+                } catch (error) {
+                    console.error('Error generating PO number:', error);
+                    // Fallback to simple timestamp-based number
+                    const timestamp = Date.now().toString().slice(-6);
+                    return `PO-${timestamp}`;
                 }
-
-                const paddedNumber = String(nextNumber).padStart(3, '0');
-                return `PO-${today}-${paddedNumber}`;
             },
         }),
         defineField({
             name: 'orderDate',
             title: 'Order Date',
             type: 'datetime',
-            initialValue: new Date().toISOString(),
+            initialValue: () => new Date().toISOString(),
             options: {
                 dateFormat: 'YYYY-MM-DD',
                 calendarTodayLabel: 'Today',
             },
-            validation: (Rule) => Rule.required(),
-        }),
-        defineField({
-            name: 'supplier',
-            title: 'Supplier',
-            type: 'reference',
-            to: [{ type: 'Supplier' }],
             validation: (Rule) => Rule.required(),
         }),
         defineField({
@@ -153,6 +150,13 @@ export default defineType({
             hidden: ({ document }) => document?.status !== 'approved' && document?.status !== 'complete',
         }),
         defineField({
+            name: 'site',
+            title: 'Site',
+            type: 'reference',
+            to: [{ type: 'Site' }],
+            description: 'The site this purchase order is for.',
+        }),
+        defineField({
             name: 'attachments',
             title: 'Attachments',
             type: 'array',
@@ -180,20 +184,38 @@ export default defineType({
             rows: 3,
         }),
     ],
+    /**
+     * preview: {
+    select: {
+        title: 'poNumber',
+        date: 'orderDate',
+        status: 'status',
+        by: 'orderedBy',
+    },
+    prepare({ title, date, status, by }) {
+
+        return {
+            title: title || 'New Purchase Order',
+            subtitle: "By: " + by + "(" + status + ") - " + date
+        };
+    },},
+     */
     preview: {
         select: {
             title: 'poNumber',
-            subtitle: 'supplier.name',
             date: 'orderDate',
             status: 'status',
+            itemCount: 'orderedItems.length'
         },
-        prepare({ title, subtitle, date, status }) {
+        prepare({ title, date, status, itemCount }) {
+
             return {
-                title: `PO: ${title}`,
-                subtitle: `${subtitle} | ${new Date(date).toLocaleDateString()} | Status: ${status}`,
+                title: title || 'New Purchase Order',
+                subtitle: `${date ? new Date(date).toLocaleDateString() : 'No date'} | Status: ${status || 'draft'}`,
             };
         },
     },
+
     orderings: [
         {
             name: 'newest',

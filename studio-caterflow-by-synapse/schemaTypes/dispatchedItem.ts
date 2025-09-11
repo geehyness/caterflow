@@ -1,4 +1,4 @@
-// schemas/dispatchedItem.js
+// schemas/dispatchedItem.ts
 import { defineType, defineField } from 'sanity';
 
 export default defineType({
@@ -17,14 +17,14 @@ export default defineType({
             name: 'dispatchedQuantity',
             title: 'Dispatched Quantity',
             type: 'number',
-            validation: (Rule) => Rule.required().min(0), // Removed .integer()
+            validation: (Rule) => Rule.required().min(0),
         }),
         defineField({
             name: 'totalCost',
             title: 'Total Cost',
             type: 'number',
             description: 'This value is calculated automatically and cannot be edited.',
-            readOnly: true, // Prevents manual editing
+            readOnly: true,
         }),
     ],
     preview: {
@@ -32,11 +32,12 @@ export default defineType({
             title: 'stockItem.name',
             subtitle: 'dispatchedQuantity',
             unit: 'stockItem.unitOfMeasure',
+            totalCost: 'totalCost',
         },
-        prepare({ title, subtitle, unit }) {
+        prepare({ title, subtitle, unit, totalCost }) {
             return {
                 title: title,
-                subtitle: `${subtitle} ${unit}`,
+                subtitle: `${subtitle} ${unit} | Cost: E${totalCost || 0}`,
             };
         },
     },

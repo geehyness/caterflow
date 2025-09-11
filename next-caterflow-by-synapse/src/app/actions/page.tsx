@@ -1035,14 +1035,6 @@ export default function ActionsPage() {
                                                                 >
                                                                     Edit
                                                                 </Button>
-                                                                <Button
-                                                                    size="sm"
-                                                                    colorScheme="green"
-                                                                    onClick={() => handleApprovePO(row)}
-                                                                    isDisabled={!row.orderedItems || row.orderedItems.length === 0}
-                                                                >
-                                                                    Confirm PO
-                                                                </Button>
                                                             </HStack>
                                                         );
                                                     } else {

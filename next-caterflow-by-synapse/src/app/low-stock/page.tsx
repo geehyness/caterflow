@@ -164,7 +164,7 @@ export default function LowStockPage() {
         onOpen();
     };
 
-    const handleCreateOrders = async (items: OrderItem[]) => {
+    const handleCreateOrders = async (items: OrderItem[], siteId?: string) => {
         try {
             const totalAmount = items.reduce((sum, item) => {
                 return sum + (item.orderedQuantity * item.unitPrice);
@@ -182,7 +182,7 @@ export default function LowStockPage() {
                     orderedItems: items,
                     totalAmount,
                     status: 'draft',
-                    site: selectedSiteId,
+                    site: siteId || selectedSiteId, // Use the provided siteId or fallback to selectedSiteId
                 }),
             });
 
@@ -391,6 +391,8 @@ export default function LowStockPage() {
                 selectedItems={selectedItems}
                 suppliers={suppliers}
                 onSave={handleCreateOrders}
+                selectedSiteId={selectedSiteId}
+                sites={sites} // Pass the sites data to the modal
             />
         </Box>
     );
