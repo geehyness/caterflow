@@ -29,11 +29,23 @@ export function Footer({ appName = 'Caterflow' }: FooterProps) {
       <br />
       <Container maxW="container.xl">
         <Flex direction={{ base: 'column', md: 'row' }} justify="space-between" align="center">
-          <Text>&copy; {new Date().getFullYear()} {appName} by Synapse Digital. All rights reserved.</Text>
+          <Text>
+            &copy; {new Date().getFullYear()} {appName} by{' '}
+            <Link href="https://synapse-digital.vercel.app" isExternal>
+              Synapse Digital
+            </Link>
+            . All rights reserved.
+          </Text>
           <Flex mt={{ base: 4, md: 0 }} gap={4}>
-            <Link href="/privacy" fontSize="sm">Privacy Policy</Link>
-            <Link href="/terms" fontSize="sm">Terms of Service</Link>
-            <Link href="https://caterflow-docs.vercel.app/" fontSize="sm">Support</Link>
+            <Link href="/privacy" fontSize="sm">
+              Privacy Policy
+            </Link>
+            <Link href="/terms" fontSize="sm">
+              Terms of Service
+            </Link>
+            <Link href="https://caterflow-docs.vercel.app/" fontSize="sm" isExternal>
+              Support
+            </Link>
           </Flex>
         </Flex>
       </Container>

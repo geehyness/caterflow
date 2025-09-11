@@ -4,72 +4,187 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Caterflow by Synapse - Docs Portal</title>
+    <title>Caterflow by Synapse - Documentation Portal</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <script src="js/scripts.js" defer></script>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            line-height: 1.6;
-            margin: 0;
-            padding: 0;
-            background-color: #f4f4f4;
-            color: #333;
+        /* Additional styles specific to the portal page */
+        .portal-container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .portal-header {
             text-align: center;
+            margin-bottom: 3rem;
         }
 
-        .container {
-            max-width: 800px;
-            margin: 50px auto;
-            padding: 20px;
-            background: #fff;
-            border-radius: 8px;
-            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        .portal-description {
+            color: var(--text-secondary);
+            font-size: 1.2rem;
+            max-width: 700px;
+            margin: 0 auto 2.5rem;
+            line-height: 1.6;
         }
 
-        h1 {
-            color: #2563eb;
-            margin-bottom: 20px;
+        .card-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 2rem;
+            margin-top: 2rem;
         }
 
-        .link-list {
-            list-style: none;
-            padding: 0;
+        .portal-card {
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            border-radius: 12px;
+            overflow: hidden;
         }
 
-        .link-list li {
-            margin-bottom: 10px;
+        .portal-card:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 12px 20px rgba(0, 0, 0, 0.15);
         }
 
-        .link-list a {
-            display: inline-block;
-            padding: 12px 25px;
-            background-color: #2563eb;
-            color: #fff;
+        .card-icon {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+            color: var(--primary);
+            display: flex;
+            justify-content: center;
+        }
+
+        .card-content {
+            padding: 1.5rem;
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .card-title {
+            font-size: 1.4rem;
+            margin-bottom: 0.75rem;
+            color: var(--primary-dark);
+        }
+
+        .card-description {
+            color: var(--text-secondary);
+            margin-bottom: 1.5rem;
+            flex-grow: 1;
+        }
+
+        .card-button {
+            margin-top: auto;
+            text-align: center;
+            padding: 0.8rem;
+            background-color: var(--primary);
+            color: white;
+            border-radius: 6px;
+            font-weight: 600;
+            transition: background-color 0.2s ease;
+        }
+
+        .card-button:hover {
+            background-color: var(--primary-dark);
             text-decoration: none;
-            border-radius: 5px;
-            transition: background-color 0.3s ease;
         }
 
-        .link-list a:hover {
-            background-color: #1d4ed8;
+        .external-indicator {
+            margin-left: 5px;
+            font-size: 0.9rem;
+        }
+
+        @media (max-width: 768px) {
+            .card-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .portal-description {
+                font-size: 1.1rem;
+            }
         }
     </style>
 </head>
 
 <body>
-    <div class="container">
-        <br>
-        <img src="logo.png" width="240px" height=auto alt="Caterflow by Synapse Logo" class="logo">
-        <hr width="50%">
-        <h1>Caterflow by Synapse</h1>
-        <p>Welcome to the Caterflow admin portal. Please select a page to navigate to the system or view the user guide.
-        </p>
-        <br>
-        <ul class="link-list">
-            <li><a href="https://caterflow.sanity.studio/" target="_blank">Go to Caterflow Sanity Dashboard</a></li>
-            <li><a href="sanity-user-guide.html" target="_self">Open Sanity Studio User Guide</a></li>
-        </ul>
-        <br>
+
+    <div class="portal-container">
+        <div class="portal-header">
+            <img src="logo.png" width="200" height="auto" alt="Caterflow by Synapse Logo" class="logo">
+            <h1>Welcome to Caterflow</h1>
+            <p class="portal-description">
+                Access all Caterflow resources from this central portal. Find user guides,
+                system documentation, and direct links to the application and content management system.
+            </p>
+        </div>
+
+        <div class="card-grid">
+            <div class="card portal-card">
+                <div class="card-content">
+                    <div class="card-icon">📱</div>
+                    <h3 class="card-title">Caterflow Application</h3>
+                    <p class="card-description">
+                        Access the main Caterflow web application to manage inventory,
+                        track orders, and oversee your operations.
+                    </p>
+                    <a href="https://caterflow.vercel.app/" target="_blank" class="card-button">
+                        Launch App <span class="external-indicator">↗</span>
+                    </a>
+                </div>
+            </div>
+
+            <div class="card portal-card">
+                <div class="card-content">
+                    <div class="card-icon">📖</div>
+                    <h3 class="card-title">User Guide</h3>
+                    <p class="card-description">
+                        Comprehensive guide to using Caterflow, with step-by-step instructions
+                        for all features and functionalities.
+                    </p>
+                    <a href="caterflow.html" class="card-button">
+                        View Guide
+                    </a>
+                </div>
+            </div>
+
+            <div class="card portal-card">
+                <div class="card-content">
+                    <div class="card-icon">⚙️</div>
+                    <h3 class="card-title">Sanity Dashboard</h3>
+                    <p class="card-description">
+                        Access the content management system to manage product data,
+                        categories, and other content for your Caterflow installation.
+                    </p>
+                    <a href="https://caterflow.sanity.studio/" target="_blank" class="card-button">
+                        Open Dashboard <span class="external-indicator">↗</span>
+                    </a>
+                </div>
+            </div>
+
+            <div class="card portal-card">
+                <div class="card-content">
+                    <div class="card-icon">❓</div>
+                    <h3 class="card-title">Sanity Studio Guide</h3>
+                    <p class="card-description">
+                        Learn how to use Sanity Studio to manage your content,
+                        with specific instructions tailored for Caterflow users.
+                    </p>
+                    <a href="sanity-user-guide.html" class="card-button">
+                        Read Guide
+                    </a>
+                </div>
+            </div>
+        </div>
     </div>
+
+    <footer>
+        <p>Caterflow by <a href="https://synapse-digital.vercel.app" target="_blank">Synapse</a> | Inventory Management
+            System</p>
+        <p>© 2023 Synapse. All rights reserved.</p>
+    </footer>
 </body>
 
 </html>

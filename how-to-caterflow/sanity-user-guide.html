@@ -5,218 +5,16 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>How to Use Caterflow by Synapse</title>
-    <style>
-        :root {
-            --primary: #2563eb;
-            --primary-dark: #1d4ed8;
-            --secondary: #64748b;
-            --light: #f8fafc;
-            --dark: #0f172a;
-            --success: #10b981;
-            --warning: #f59e0b;
-            --danger: #ef4444;
-            --card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-        }
-
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-        }
-
-        body {
-            background-color: #f1f5f9;
-            color: #334155;
-            line-height: 1.6;
-            font-size: 16px;
-        }
-
-        header {
-            background: linear-gradient(120deg, var(--primary), var(--primary-dark));
-            color: white;
-            padding: 3rem 1.5rem;
-            text-align: center;
-            box-shadow: var(--card-shadow);
-        }
-
-        h1 {
-            font-size: clamp(2rem, 5vw, 3rem);
-            margin-bottom: 0.75rem;
-        }
-
-        .subtitle {
-            font-size: clamp(1rem, 2vw, 1.25rem);
-            opacity: 0.9;
-        }
-
-        .container {
-            max-width: 1200px;
-            margin: 2rem auto;
-            padding: 0 1.5rem;
-        }
-
-        .card {
-            background: white;
-            border-radius: 12px;
-            padding: 2.5rem;
-            margin-bottom: 2rem;
-            box-shadow: var(--card-shadow);
-            border: 1px solid #e2e8f0;
-        }
-
-        .card-title {
-            font-size: 1.8rem;
-            color: var(--primary);
-            margin-bottom: 1.5rem;
-            padding-bottom: 0.75rem;
-            border-bottom: 2px solid #e2e8f0;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .card-title svg {
-            width: 24px;
-            height: 24px;
-        }
-
-        .step {
-            margin-bottom: 2rem;
-            padding-left: 3rem;
-            position: relative;
-        }
-
-        .step-number {
-            position: absolute;
-            left: 0;
-            top: 0;
-            background: var(--primary);
-            color: white;
-            width: 32px;
-            height: 32px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: bold;
-            font-size: 1.1rem;
-            flex-shrink: 0;
-        }
-
-        .step-title {
-            font-weight: 700;
-            margin-bottom: 0.5rem;
-            color: var(--dark);
-            font-size: 1.2rem;
-        }
-
-        .step-content {
-            color: var(--secondary);
-            font-size: 1rem;
-        }
-
-        .step-content ul {
-            margin-top: 0.5rem;
-            padding-left: 1.5rem;
-        }
-
-        .screenshot {
-            width: 100%;
-            border: 1px solid #e2e8f0;
-            border-radius: 8px;
-            margin: 1.5rem 0;
-            box-shadow: var(--card-shadow);
-        }
-
-        .tip,
-        .warning {
-            padding: 1rem 1.5rem;
-            margin: 1.5rem 0;
-            border-radius: 8px;
-            display: flex;
-            gap: 1rem;
-            align-items: flex-start;
-        }
-
-        .tip {
-            background: #eff6ff;
-            border: 1px solid #93c5fd;
-            color: #1e40af;
-        }
-
-        .warning {
-            background: #fffbeb;
-            border: 1px solid #fcd34d;
-            color: #92400e;
-        }
-
-        .tip strong,
-        .warning strong {
-            display: block;
-            margin-bottom: 0.5rem;
-        }
-
-        .grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-            gap: 1.5rem;
-            margin: 1.5rem 0;
-        }
-
-        .feature-card {
-            background: white;
-            border-radius: 12px;
-            padding: 1.5rem;
-            box-shadow: var(--card-shadow);
-            transition: transform 0.3s ease, box-shadow 0.3s ease;
-            border-top: 4px solid var(--primary);
-        }
-
-        .feature-card:hover {
-            transform: translateY(-8px);
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-        }
-
-        .feature-card h3 {
-            color: var(--primary);
-            margin-bottom: 0.75rem;
-            font-size: 1.25rem;
-        }
-
-        .feature-card ul {
-            margin-top: 0.5rem;
-            padding-left: 1.25rem;
-        }
-
-        .feature-card p {
-            font-size: 0.95rem;
-        }
-
-        footer {
-            text-align: center;
-            padding: 2rem;
-            margin-top: 2rem;
-            color: var(--secondary);
-            border-top: 1px solid #e2e8f0;
-        }
-
-        @media (max-width: 768px) {
-            .grid {
-                grid-template-columns: 1fr;
-            }
-
-            .step {
-                padding-left: 2.5rem;
-            }
-        }
-    </style>
+    <link rel="stylesheet" href="css/styles.css">
+    <script src="js/scripts.js" defer></script>
 </head>
 
 <body>
     <header>
-        <h1>How to Use Caterflow by Synapse</h1>
-        <p class="subtitle">A simple guide to managing your inventory with Sanity</p>
+        <div class="container">
+            <h1>How to Use Caterflow by Synapse</h1>
+            <p>A brief guide for users of the Caterflow system.</p>
+        </div>
     </header>
 
     <div class="container">
@@ -225,241 +23,28 @@
             <p>Welcome to Caterflow by Synapse! This system helps you manage inventory across multiple sites, track
                 orders, and streamline your operations.</p>
 
-            <div class="step">
+            <div class="step-card">
                 <div class="step-number">1</div>
                 <div class="step-content">
-                    <div class="step-title">Log in to the system</div>
+                    <h3>Log in to the system</h3>
                     <p>Use the option to log in with Google account. You can only access the dashboard with a
                         pre-approved Google email address.</p>
                 </div>
             </div>
 
-            <div class="step">
+            <div class="step-card">
                 <div class="step-number">2</div>
                 <div class="step-content">
-                    <div class="step-title">Familiarize yourself with the sidebar</div>
+                    <h3>Familiarize yourself with the sidebar</h3>
                     <p>The left sidebar is organized into three main sections: Master Data, Inventory Transactions, and
-                        System Administration.</p>
+                        Reporting.</p>
                 </div>
             </div>
 
-            <div class="step">
+            <div class="step-card">
                 <div class="step-number">3</div>
                 <div class="step-content">
-                    <div class="step-title">Start with Master Data</div>
-                    <p>Before adding transactions, set up your core data: Sites, Storage Bins, Categories, Stock Items,
-                        and Suppliers.</p>
-                </div>
-            </div>
-        </div>
-
-        <div class="card">
-            <h2 class="card-title">Setting Up Your Master Data</h2>
-            <p>Master data forms the foundation of your inventory system. Follow these steps in order:</p>
-
-            <div class="step">
-                <div class="step-number">1</div>
-                <div class="step-content">
-                    <div class="step-title">Add Your Sites</div>
-                    <p>Sites are physical locations (e.g., "Main Kitchen", "Cafe", "Warehouse").</p>
-                    <ul>
-                        <li>Go to <strong>Master Data → Sites</strong></li>
-                        <li>Click <strong>"Create new"</strong></li>
-                        <li>Add a name, code, and location description</li>
-                        <li>Save your site</li>
-                    </ul>
-                </div>
-            </div>
-
-            <div class="step">
-                <div class="step-number">2</div>
-                <div class="step-content">
-                    <div class="step-title">Create Storage Bins</div>
-                    <p>Bins are specific storage locations within sites (e.g., "Shelf A3", "Cold Room 1").</p>
-                    <ul>
-                        <li>Go to <strong>Master Data → Storage Bins</strong></li>
-                        <li>Click <strong>"Create new"</strong></li>
-                        <li>Name your bin and select which site it belongs to</li>
-                        <li>Specify the bin type (shelf, refrigerator, etc.)</li>
-                        <li>Add a location description for easy finding</li>
-                    </ul>
-                </div>
-            </div>
-
-            <div class="step">
-                <div class="step-number">3</div>
-                <div class="step-content">
-                    <div class="step-title">Set Up Categories</div>
-                    <p>Categories help organize your stock items (e.g., "Dry Goods", "Perishables", "Cleaning
-                        Supplies").</p>
-                    <ul>
-                        <li>Go to <strong>Master Data → Categories</strong></li>
-                        <li>Click <strong>"Create new"</strong></li>
-                        <li>Add a title and description for your category</li>
-                    </ul>
-                </div>
-            </div>
-
-            <div class="step">
-                <div class="step-number">4</div>
-                <div class="step-content">
-                    <div class="step-title">Add Suppliers</div>
-                    <p>Suppliers are companies you purchase from.</p>
-                    <ul>
-                        <li>Go to <strong>Master Data → Suppliers</strong></li>
-                        <li>Click <strong>"Create new"</strong></li>
-                        <li>Add the supplier name, contact person, and details</li>
-                    </ul>
-                </div>
-            </div>
-
-            <div class="step">
-                <div class="step-number">5</div>
-                <div class="step-content">
-                    <div class="step-title">Create Stock Items</div>
-                    <p>Stock items are the products you keep in inventory.</p>
-                    <ul>
-                        <li>Go to <strong>Master Data → Stock Items</strong></li>
-                        <li>Click <strong>"Create new"</strong></li>
-                        <li>Add item name, SKU, category, and unit of measure</li>
-                        <li>Set minimum stock levels for alerts</li>
-                        <li>Assign a preferred supplier</li>
-                    </ul>
-
-                    <div class="tip">
-                        <strong>Tip:</strong> You can view all stock items or filter them by category using the sidebar
-                        options.
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="card">
-            <h2 class="card-title">Managing Inventory Transactions</h2>
-            <p>Once your master data is set up, you can start managing inventory movements.</p>
-
-            <div class="grid">
-                <div class="feature-card">
-                    <h3>Purchase Orders</h3>
-                    <p>Create orders to send to suppliers when you need to restock items.</p>
-                    <ul>
-                        <li>Select the supplier</li>
-                        <li>Add items and quantities</li>
-                        <li>Track status from ordered to received</li>
-                    </ul>
-                </div>
-
-                <div class="feature-card">
-                    <h3>Goods Receipts</h3>
-                    <p>Record items when they arrive from suppliers.</p>
-                    <ul>
-                        <li>Link to purchase orders</li>
-                        <li>Specify receiving bin location</li>
-                        <li>Note item condition and expiry dates</li>
-                    </ul>
-                </div>
-
-                <div class="feature-card">
-                    <h3>Dispatch Logs</h3>
-                    <p>Track items sent from one site to another.</p>
-                    <ul>
-                        <li>Select source bin</li>
-                        <li>Choose destination site</li>
-                        <li>Record dispatched quantities</li>
-                    </ul>
-                </div>
-
-                <div class="feature-card">
-                    <h3>Internal Transfers</h3>
-                    <p>Move items between bins within the same site.</p>
-                    <ul>
-                        <li>Select from and to bins</li>
-                        <li>Record transferred quantities</li>
-                        <li>Update inventory locations</li>
-                    </ul>
-                </div>
-
-                <div class="feature-card">
-                    <h3>Stock Adjustments</h3>
-                    <p>Correct inventory counts for losses, damages, or found items.</p>
-                    <ul>
-                        <li>Select adjustment type (loss, wastage, etc.)</li>
-                        <li>Record quantities and reasons</li>
-                        <li>Maintain accurate inventory records</li>
-                    </ul>
-                </div>
-
-                <div class="feature-card">
-                    <h3>Inventory Counts</h3>
-                    <p>Perform physical counts and compare with system records.</p>
-                    <ul>
-                        <li>Select bin to count</li>
-                        <li>Record counted quantities</li>
-                        <li>System shows variances automatically</li>
-                    </ul>
-                </div>
-            </div>
-        </div>
-
-        <div class="card">
-            <h2 class="card-title">System Administration</h2>
-
-            <div class="step">
-                <div class="step-number">1</div>
-                <div class="step-content">
-                    <div class="step-title">Manage Users</div>
-                    <p>Add team members and assign appropriate roles.</p>
-                    <ul>
-                        <li>Go to <strong>System Administration → App Users</strong></li>
-                        <li>Click <strong>"Create new"</strong></li>
-                        <li>Add user details and assign role</li>
-                        <li>Site Managers need an associated site</li>
-                    </ul>
-                </div>
-            </div>
-
-            <div class="step">
-                <div class="step-number">2</div>
-                <div class="step-content">
-                    <div class="step-title">Configure Notifications</div>
-                    <p>Set up alerts for low stock, expiring items, etc.</p>
-                    <ul>
-                        <li>Go to <strong>System Administration → Notification Preferences</strong></li>
-                        <li>Enable/disable notification types</li>
-                        <li>Set threshold values</li>
-                        <li>Choose delivery methods (email, SMS, in-app)</li>
-                    </ul>
-                </div>
-            </div>
-        </div>
-
-        <div class="card">
-            <h2 class="card-title">Best Practices</h2>
-
-            <div class="step">
-                <div class="step-content">
-                    <div class="step-title">Keep Data Consistent</div>
-                    <p>Use consistent naming conventions for sites, bins, and items to make searching easier.</p>
-                </div>
-            </div>
-
-            <div class="step">
-                <div class="step-content">
-                    <div class="step-title">Regular Inventory Counts</div>
-                    <p>Schedule regular counts to keep your digital records accurate.</p>
-                </div>
-            </div>
-
-            <div class="step">
-                <div class="step-content">
-                    <div class="step-title">Train Your Team</div>
-                    <p>Ensure all users understand how to record transactions properly.</p>
-                </div>
-            </div>
-
-            <div class="step">
-                <div class="step-content">
-                    <div class="step-title">Use the Search Function</div>
+                    <h3>Use the Search Function</h3>
                     <p>The search bar at the top helps you quickly find items, orders, or transactions.</p>
                 </div>
             </div>
@@ -473,7 +58,6 @@
         <div class="card">
             <h2 class="card-title">Getting Help</h2>
             <p>If you need assistance with Caterflow:</p>
-
             <ul>
                 <li>Check the built-in field descriptions throughout the system</li>
                 <li>Contact your system administrator for technical support</li>
@@ -492,7 +76,8 @@
     </div>
 
     <footer>
-        <p>Caterflow by Synapse | Inventory Management System</p>
+        <p>Caterflow by <a href="https://synapse-digital.vercel.app" target="_blank">Synapse</a> | Inventory Management
+            System</p>
         <p>© 2023 Synapse. All rights reserved.</p>
     </footer>
 </body>

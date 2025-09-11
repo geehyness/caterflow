@@ -1,0 +1,777 @@
+# Caterflow User Guide
+
+I'll create a comprehensive, multi-page user guide for your Caterflow inventory management system. The guide will be interactive, user-friendly, and highlight important features without being overly technical.
+
+## User Guide Structure
+
+Let me create a complete user guide with the following pages:
+
+1. **Getting Started** - Introduction and basic navigation
+2. **Master Data Management** - Sites, bins, categories, suppliers, and stock items
+3. **Inventory Operations** - Purchases, receipts, dispatches, transfers, adjustments
+4. **Reporting & Analytics** - Dashboard, stock levels, activity tracking
+5. **System Administration** - User management, notifications, settings
+
+Here's the implementation:
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Caterflow User Guide</title>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --primary-dark: #1d4ed8;
+            --secondary: #64748b;
+            --light: #f8fafc;
+            --dark: #0f172a;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        body {
+            background-color: #f1f5f9;
+            color: #334155;
+            line-height: 1.6;
+        }
+
+        header {
+            background: linear-gradient(120deg, var(--primary), var(--primary-dark));
+            color: white;
+            padding: 1.5rem;
+            box-shadow: var(--card-shadow);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        h1 {
+            font-size: 2.2rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .description {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 2rem auto;
+            padding: 0 1.5rem;
+        }
+
+        .guide-nav {
+            background: white;
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            box-shadow: var(--card-shadow);
+            position: sticky;
+            top: 90px;
+            z-index: 90;
+        }
+
+        .nav-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1rem;
+            list-style: none;
+        }
+
+        .nav-item a {
+            display: block;
+            padding: 0.75rem 1.5rem;
+            background: #eff6ff;
+            color: var(--primary);
+            border-radius: 4px;
+            text-decoration: none;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .nav-item a:hover, .nav-item a.active {
+            background: var(--primary);
+            color: white;
+        }
+
+        .guide-content {
+            background: white;
+            border-radius: 8px;
+            padding: 2rem;
+            box-shadow: var(--card-shadow);
+            margin-bottom: 2rem;
+        }
+
+        .section {
+            margin-bottom: 3rem;
+            scroll-margin-top: 150px;
+        }
+
+        .section:last-child {
+            margin-bottom: 0;
+        }
+
+        .section-title {
+            font-size: 1.8rem;
+            color: var(--primary);
+            margin-bottom: 1.5rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid #e2e8f0;
+        }
+
+        .step {
+            margin-bottom: 2rem;
+            padding-left: 3rem;
+            position: relative;
+        }
+
+        .step-number {
+            position: absolute;
+            left: 0;
+            top: 0;
+            background: var(--primary);
+            color: white;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.1rem;
+        }
+
+        .step-title {
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            color: var(--dark);
+            font-size: 1.2rem;
+        }
+
+        .step-content {
+            color: var(--secondary);
+        }
+
+        .step-content ul {
+            margin-top: 0.5rem;
+            padding-left: 1.5rem;
+        }
+
+        .screenshot {
+            width: 100%;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            margin: 1.5rem 0;
+            box-shadow: var(--card-shadow);
+        }
+
+        .tip, .warning {
+            padding: 1rem 1.5rem;
+            margin: 1.5rem 0;
+            border-radius: 8px;
+            display: flex;
+            gap: 1rem;
+            align-items: flex-start;
+        }
+
+        .tip {
+            background: #eff6ff;
+            border: 1px solid #93c5fd;
+            color: #1e40af;
+        }
+
+        .warning {
+            background: #fffbeb;
+            border: 1px solid #fcd34d;
+            color: #92400e;
+        }
+
+        .tip strong, .warning strong {
+            display: block;
+            margin-bottom: 0.5rem;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 1.5rem;
+            margin: 1.5rem 0;
+        }
+
+        .feature-card {
+            background: white;
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: var(--card-shadow);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            border-top: 4px solid var(--primary);
+        }
+
+        .feature-card:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+
+        .feature-card h3 {
+            color: var(--primary);
+            margin-bottom: 0.75rem;
+            font-size: 1.25rem;
+        }
+
+        .feature-card ul {
+            margin-top: 0.5rem;
+            padding-left: 1.25rem;
+        }
+
+        .feature-card p {
+            font-size: 0.95rem;
+        }
+
+        .interactive-demo {
+            background: #f8fafc;
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin: 1.5rem 0;
+            border: 1px solid #e2e8f0;
+        }
+
+        .demo-controls {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .demo-button {
+            padding: 0.5rem 1rem;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .demo-button:hover {
+            background: var(--primary-dark);
+        }
+
+        .demo-content {
+            min-height: 200px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: white;
+            border-radius: 4px;
+            padding: 1rem;
+        }
+
+        footer {
+            text-align: center;
+            padding: 2rem;
+            margin-top: 2rem;
+            color: var(--secondary);
+            border-top: 1px solid #e2e8f0;
+        }
+
+        @media (max-width: 768px) {
+            .nav-list {
+                flex-direction: column;
+            }
+            
+            .grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .step {
+                padding-left: 2.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <div>
+                <h1>Caterflow User Guide</h1>
+                <p class="description">Your complete guide to managing inventory with Caterflow</p>
+            </div>
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="guide-nav">
+            <ul class="nav-list">
+                <li class="nav-item"><a href="#getting-started" class="active">Getting Started</a></li>
+                <li class="nav-item"><a href="#master-data">Master Data</a></li>
+                <li class="nav-item"><a href="#inventory-ops">Inventory Operations</a></li>
+                <li class="nav-item"><a href="#reporting">Reporting & Analytics</a></li>
+                <li class="nav-item"><a href="#admin">System Administration</a></li>
+            </ul>
+        </div>
+
+        <div class="guide-content">
+            <!-- Getting Started Section -->
+            <section id="getting-started" class="section">
+                <h2 class="section-title">Getting Started with Caterflow</h2>
+                
+                <div class="step">
+                    <div class="step-number">1</div>
+                    <div class="step-content">
+                        <div class="step-title">Logging In</div>
+                        <p>Access Caterflow using your Google account. Only pre-approved email addresses can access the system.</p>
+                        <div class="tip">
+                            <strong>Tip:</strong> If you can't log in, contact your system administrator to ensure your email is approved.
+                        </div>
+                    </div>
+                </div>
+
+                <div class="step">
+                    <div class="step-number">2</div>
+                    <div class="step-content">
+                        <div class="step-title">Understanding the Interface</div>
+                        <p>The Caterflow interface consists of three main areas:</p>
+                        <ul>
+                            <li><strong>Sidebar Navigation:</strong> Access all system features organized by category</li>
+                            <li><strong>Top Bar:</strong> See app name, toggle sidebar (on mobile), and install the PWA</li>
+                            <li><strong>Main Content Area:</strong> Where you'll view and work with your data</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="step">
+                    <div class="step-number">3</div>
+                    <div class="step-content">
+                        <div class="step-title">Navigating the System</div>
+                        <p>The sidebar is organized into three main sections:</p>
+                        <ul>
+                            <li><strong>Main:</strong> Dashboard, stock items, locations, and activity monitoring</li>
+                            <li><strong>Operations:</strong> All inventory transactions like purchases, receipts, and dispatches</li>
+                            <li><strong>Admin:</strong> User management, suppliers, and system settings (admin only)</li>
+                        </ul>
+                        <div class="interactive-demo">
+                            <div class="demo-controls">
+                                <button class="demo-button" onclick="showDemo('sidebar-demo')">View Sidebar Demo</button>
+                            </div>
+                            <div class="demo-content" id="sidebar-demo">
+                                <p>Select "View Sidebar Demo" to see an interactive illustration of the Caterflow sidebar navigation.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="step">
+                    <div class="step-number">4</div>
+                    <div class="step-content">
+                        <div class="step-title">Using the Dashboard</div>
+                        <p>Your dashboard provides an overview of key metrics:</p>
+                        <ul>
+                            <li>Monthly receipts and dispatches</li>
+                            <li>Pending actions requiring attention</li>
+                            <li>Low stock alerts</li>
+                            <li>Recent transaction history</li>
+                        </ul>
+                        <div class="tip">
+                            <strong>Tip:</strong> Administrators can use the site filter at the top of the dashboard to view statistics for specific locations.
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Master Data Management Section -->
+            <section id="master-data" class="section">
+                <h2 class="section-title">Managing Master Data</h2>
+                <p>Master data forms the foundation of your inventory system. Set these up before recording transactions.</p>
+                
+                <div class="grid">
+                    <div class="feature-card">
+                        <h3>Sites</h3>
+                        <p>Physical locations where inventory is stored (e.g., "Main Kitchen", "Ward 3 Pantry").</p>
+                        <ul>
+                            <li>Go to <strong>Master Data → Sites</strong></li>
+                            <li>Click <strong>"Create new"</strong></li>
+                            <li>Add name, location, and assign a manager</li>
+                        </ul>
+                    </div>
+
+                    <div class="feature-card">
+                        <h3>Storage Bins</h3>
+                        <p>Specific storage locations within sites (e.g., "Shelf A3", "Cold Room 1").</p>
+                        <ul>
+                            <li>Go to <strong>Master Data → Storage Bins</strong></li>
+                            <li>Click <strong>"Create new"</strong></li>
+                            <li>Name your bin and select which site it belongs to</li>
+                        </ul>
+                    </div>
+
+                    <div class="feature-card">
+                        <h3>Categories</h3>
+                        <p>Group your inventory items (e.g., "Dry Goods", "Perishables", "Cleaning Supplies").</p>
+                        <ul>
+                            <li>Go to <strong>Master Data → Categories</strong></li>
+                            <li>Click <strong>"Create new"</strong></li>
+                            <li>Add a title and description</li>
+                        </ul>
+                    </div>
+
+                    <div class="feature-card">
+                        <h3>Suppliers</h3>
+                        <p>Companies you purchase inventory from.</p>
+                        <ul>
+                            <li>Go to <strong>Master Data → Suppliers</strong></li>
+                            <li>Click <strong>"Create new"</strong></li>
+                            <li>Add supplier details and contact information</li>
+                        </ul>
+                    </div>
+
+                    <div class="feature-card">
+                        <h3>Stock Items</h3>
+                        <p>The products you keep in inventory.</p>
+                        <ul>
+                            <li>Go to <strong>Master Data → Stock Items</strong></li>
+                            <li>Click <strong>"Create new"</strong></li>
+                            <li>Add item details, category, and minimum stock level</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="warning">
+                    <strong>Important:</strong> Set up your master data in the order shown above. You'll need sites before bins, and categories before stock items.
+                </div>
+
+                <div class="interactive-demo">
+                    <div class="demo-controls">
+                        <button class="demo-button" onclick="showDemo('data-flow')">View Data Relationship</button>
+                    </div>
+                    <div class="demo-content" id="data-flow">
+                        <p>Select "View Data Relationship" to see how master data elements connect in Caterflow.</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Inventory Operations Section -->
+            <section id="inventory-ops" class="section">
+                <h2 class="section-title">Inventory Operations</h2>
+                <p>Once your master data is set up, you can perform daily inventory operations.</p>
+                
+                <div class="grid">
+                    <div class="feature-card">
+                        <h3>Purchase Orders</h3>
+                        <p>Create orders to send to suppliers when you need to restock items.</p>
+                        <ul>
+                            <li>Select the supplier</li>
+                            <li>Add items and quantities</li>
+                            <li>Track status from ordered to received</li>
+                        </ul>
+                    </div>
+
+                    <div class="feature-card">
+                        <h3>Goods Receipts</h3>
+                        <p>Record items when they arrive from suppliers.</p>
+                        <ul>
+                            <li>Link to purchase orders</li>
+                            <li>Specify receiving bin location</li>
+                            <li>Note item condition and expiry dates</li>
+                        </ul>
+                    </div>
+
+                    <div class="feature-card">
+                        <h3>Dispatch Logs</h3>
+                        <p>Track items sent from one site to another.</p>
+                        <ul>
+                            <li>Select source bin</li>
+                            <li>Choose destination site</li>
+                            <li>Record dispatched quantities</li>
+                        </ul>
+                    </div>
+
+                    <div class="feature-card">
+                        <h3>Internal Transfers</h3>
+                        <p>Move items between bins within the same site.</p>
+                        <ul>
+                            <li>Select from and to bins</li>
+                            <li>Record transferred quantities</li>
+                            <li>Update inventory locations</li>
+                        </ul>
+                    </div>
+
+                    <div class="feature-card">
+                        <h3>Stock Adjustments</h3>
+                        <p>Correct inventory counts for losses, damages, or found items.</p>
+                        <ul>
+                            <li>Select adjustment type</li>
+                            <li>Record quantities and reasons</li>
+                            <li>Maintain accurate inventory records</li>
+                        </ul>
+                    </div>
+
+                    <div class="feature-card">
+                        <h3>Stock Takes</h3>
+                        <p>Periodic physical counts to verify system accuracy.</p>
+                        <ul>
+                            <li>Count physical inventory</li>
+                            <li>Compare to system records</li>
+                            <li>Generate adjustment reports</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="tip">
+                    <strong>Best Practice:</strong> Always complete your inventory transactions promptly to maintain accurate stock levels and avoid discrepancies.
+                </div>
+            </section>
+
+            <!-- Reporting & Analytics Section -->
+            <section id="reporting" class="section">
+                <h2 class="section-title">Reporting & Analytics</h2>
+                <p>Caterflow provides several reports to help you monitor and analyze your inventory.</p>
+                
+                <div class="step">
+                    <div class="step-number">1</div>
+                    <div class="step-content">
+                        <div class="step-title">Dashboard Overview</div>
+                        <p>The dashboard provides a quick visual summary of your inventory activity:</p>
+                        <ul>
+                            <li>Monthly receipts and dispatches chart</li>
+                            <li>Pending actions requiring attention</li>
+                            <li>Low stock alerts with item details</li>
+                            <li>Recent transaction history</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="step">
+                    <div class="step-number">2</div>
+                    <div class="step-content">
+                        <div class="step-title">Stock Levels Report</div>
+                        <p>View current inventory levels across all sites:</p>
+                        <ul>
+                            <li>Filter by site, category, or specific items</li>
+                            <li>See quantities and bin locations</li>
+                            <li>Identify items below minimum stock levels</li>
+                            <li>Export data for further analysis</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="step">
+                    <div class="step-number">3</div>
+                    <div class="step-content">
+                        <div class="step-title">Activity Tracking</div>
+                        <p>Monitor all inventory transactions:</p>
+                        <ul>
+                            <li>Filter by date range, site, or transaction type</li>
+                            <li>View user who performed each action</li>
+                            <li>Track item movement history</li>
+                            <li>Identify patterns or issues</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="interactive-demo">
+                    <div class="demo-controls">
+                        <button class="demo-button" onclick="showDemo('report-demo')">View Report Demo</button>
+                    </div>
+                    <div class="demo-content" id="report-demo">
+                        <p>Select "View Report Demo" to see how to generate and interpret Caterflow reports.</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- System Administration Section -->
+            <section id="admin" class="section">
+                <h2 class="section-title">System Administration</h2>
+                <p>Administrators can manage system settings and user access.</p>
+                
+                <div class="step">
+                    <div class="step-number">1</div>
+                    <div class="step-content">
+                        <div class="step-title">User Management</div>
+                        <p>Control who can access the system and what they can do:</p>
+                        <ul>
+                            <li>View all users with system access</li>
+                            <li>Add or remove user permissions</li>
+                            <li>Assign roles and site access</li>
+                        </ul>
+                        <div class="warning">
+                            <strong>Administrators Only:</strong> Only users with administrator privileges can access these features.
+                        </div>
+                    </div>
+                </div>
+
+                <div class="step">
+                    <div class="step-number">2</div>
+                    <div class="step-content">
+                        <div class="step-title">Notification Settings</div>
+                        <p>Configure system alerts and notifications:</p>
+                        <ul>
+                            <li>Set up low stock alerts</li>
+                            <li>Configure who receives notifications</li>
+                            <li>Customize notification thresholds</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="step">
+                    <div class="step-number">3</div>
+                    <div class="step-content">
+                        <div class="step-title">System Settings</div>
+                        <p>Configure application preferences:</p>
+                        <ul>
+                            <li>Set default measurement units</li>
+                            <li>Configure inventory counting methods</li>
+                            <li>Set up automatic report generation</li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <footer>
+        <p>Caterflow User Guide v1.0 | © 2023 Caterflow Inventory System</p>
+        <p>For additional support, contact your system administrator.</p>
+    </footer>
+
+    <script>
+        // Simple navigation highlighting
+        document.querySelectorAll('.nav-item a').forEach(link => {
+            link.addEventListener('click', function(e) {
+                document.querySelectorAll('.nav-item a').forEach(l => l.classList.remove('active'));
+                this.classList.add('active');
+                
+                // Scroll to section
+                const targetId = this.getAttribute('href');
+                const targetSection = document.querySelector(targetId);
+                if (targetSection) {
+                    e.preventDefault();
+                    window.scrollTo({
+                        top: targetSection.offsetTop - 100,
+                        behavior: 'smooth'
+                    });
+                    
+                    // Update URL hash
+                    history.pushState(null, null, targetId);
+                }
+            });
+        });
+
+        // Interactive demo functionality
+        function showDemo(demoId) {
+            const demos = document.querySelectorAll('.demo-content');
+            demos.forEach(demo => demo.innerHTML = '<p>Select a demo to see interactive illustrations of Caterflow features.</p>');
+            
+            const demoElement = document.getElementById(demoId);
+            
+            if (demoId === 'sidebar-demo') {
+                demoElement.innerHTML = `
+                    <div style="text-align: center; width: 100%;">
+                        <h3>Caterflow Sidebar Navigation</h3>
+                        <div style="display: flex; flex-direction: column; gap: 8px; margin: 20px 0;">
+                            <div style="background: #e0e7ff; padding: 8px; border-radius: 4px;"><strong>Dashboard</strong></div>
+                            <div style="background: #e0e7ff; padding: 8px; border-radius: 4px;"><strong>Stock Items</strong></div>
+                            <div style="background: #e0e7ff; padding: 8px; border-radius: 4px;"><strong>Sites & Bins</strong></div>
+                            <div style="background: #e0e7ff; padding: 8px; border-radius: 4px;"><strong>Activity Monitor</strong></div>
+                            <div style="background: #dbeafe; padding: 8px; border-radius: 4px; margin-top: 10px;"><strong>Purchases</strong></div>
+                            <div style="background: #dbeafe; padding: 8px; border-radius: 4px;"><strong>Receipts</strong></div>
+                            <div style="background: #dbeafe; padding: 8px; border-radius: 4px;"><strong>Dispatches</strong></div>
+                            <div style="background: #dbeafe; padding: 8px; border-radius: 4px;"><strong>Transfers</strong></div>
+                            <div style="background: #dbeafe; padding: 8px; border-radius: 4px;"><strong>Adjustments</strong></div>
+                            <div style="background: #fce7f3; padding: 8px; border-radius: 4px; margin-top: 10px;"><strong>Users</strong></div>
+                            <div style="background: #fce7f3; padding: 8px; border-radius: 4px;"><strong>Suppliers</strong></div>
+                            <div style="background: #fce7f3; padding: 8px; border-radius: 4px;"><strong>Settings</strong></div>
+                        </div>
+                        <p>The sidebar organizes all Caterflow features into logical sections for easy navigation.</p>
+                    </div>
+                `;
+            } else if (demoId === 'data-flow') {
+                demoElement.innerHTML = `
+                    <div style="text-align: center; width: 100%;">
+                        <h3>Master Data Relationships</h3>
+                        <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 15px; margin: 20px 0;">
+                            <div style="background: #e0e7ff; padding: 10px; border-radius: 8px; width: 120px;">
+                                <strong>Sites</strong>
+                                <div style="font-size: 12px; margin-top: 5px;">Contain</div>
+                            </div>
+                            <div style="background: #e0e7ff; padding: 10px; border-radius: 8px; width: 120px;">
+                                <strong>Bins</strong>
+                                <div style="font-size: 12px; margin-top: 5px;">Store</div>
+                            </div>
+                            <div style="background: #e0e7ff; padding: 10px; border-radius: 8px; width: 120px;">
+                                <strong>Items</strong>
+                                <div style="font-size: 12px; margin-top: 5px;">Organized by</div>
+                            </div>
+                            <div style="background: #e0e7ff; padding: 10px; border-radius: 8px; width: 120px;">
+                                <strong>Categories</strong>
+                                <div style="font-size: 12px; margin-top: 5px;">Supplied by</div>
+                            </div>
+                            <div style="background: #e0e7ff; padding: 10px; border-radius: 8px; width: 120px;">
+                                <strong>Suppliers</strong>
+                            </div>
+                        </div>
+                        <p>Master data elements are interconnected to maintain inventory accuracy and relationships.</p>
+                    </div>
+                `;
+            } else if (demoId === 'report-demo') {
+                demoElement.innerHTML = `
+                    <div style="text-align: center; width: 100%;">
+                        <h3>Generating Reports</h3>
+                        <div style="margin: 20px 0;">
+                            <div style="display: inline-block; background: #f1f5f9; padding: 15px; border-radius: 8px; text-align: left;">
+                                <p>1. Navigate to <strong>Reports</strong> in the sidebar</p>
+                                <p>2. Select the report type you need</p>
+                                <p>3. Apply filters (date range, site, category)</p>
+                                <p>4. Click <strong>"Generate Report"</strong></p>
+                                <p>5. View on screen or export as needed</p>
+                            </div>
+                        </div>
+                        <p>Caterflow provides flexible reporting options to meet your inventory management needs.</p>
+                    </div>
+                `;
+            }
+        }
+    </script>
+</body>
+</html>
+```
+
+## Features of This User Guide
+
+1. **Interactive Navigation**: Users can easily jump between sections with the sticky navigation bar.
+
+2. **Step-by-Step Instructions**: Clear, numbered steps for each process with visual cues.
+
+3. **Feature Cards**: Visually appealing cards that highlight each system feature.
+
+4. **Interactive Demos**: Simple interactive elements that explain key concepts.
+
+5. **Tips and Warnings**: Highlighted boxes with important information and best practices.
+
+6. **Responsive Design**: Works well on desktop, tablet, and mobile devices.
+
+7. **Clean, Professional Layout**: Uses a color scheme that matches the inventory management theme.
+
+This guide provides a comprehensive overview of the Caterflow system without getting too technical. As you share more details about specific features, I can expand each section with more detailed instructions and screenshots.
+
+Would you like me to elaborate on any particular section or add more specific details to any part of the guide?
