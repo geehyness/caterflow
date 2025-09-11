@@ -7,14 +7,10 @@ import {
     Tr, Th, Td, TableContainer, NumberInput, NumberInputField, NumberInputStepper,
     NumberIncrementStepper, NumberDecrementStepper, Icon, Spinner, Badge,
     useColorModeValue, AlertDialog, AlertDialogBody, AlertDialogFooter,
-    AlertDialogHeader, AlertDialogContent, AlertDialogOverlay, Input, Select,
-    useToast, ModalCloseButton,
+    AlertDialogHeader, AlertDialogContent, AlertDialogOverlay, useToast, ModalCloseButton,
 } from '@chakra-ui/react';
 import { FaBoxes, FaCheck, FaSave } from 'react-icons/fa';
-import { FiPlus } from 'react-icons/fi';
-import { Dispatch, SetStateAction, useEffect, useMemo, useRef, useState } from 'react';
-import { client } from '@/lib/sanity';
-import { groq } from 'next-sanity';
+import { Dispatch, SetStateAction, useMemo, useRef, useState } from 'react';
 
 // Interfaces remain the same...
 export interface OrderedItem {
@@ -61,42 +57,19 @@ interface PurchaseOrderModalProps {
     isSaving: boolean;
     onSave: () => void;
     onApprove: () => void;
-    onAddItem: (items: any[]) => void;
     onRemoveItem: (itemKey: string) => void;
 }
-interface StockItem {
-    _id: string;
-    name: string;
-    sku: string;
-    unitOfMeasure: string;
-    unitPrice: number;
-    primarySupplier?: { _id: string; name: string };
-    suppliers?: { _id: string; name: string }[];
-    category?: { _id: string; title: string };
-}
-interface Category {
-    _id: string;
-    title: string;
-}
-
 
 export default function PurchaseOrderModal({
     isOpen, onClose, poDetails, editedPrices, setEditedPrices,
     editedQuantities, setEditedQuantities, isSaving, onSave,
-    onApprove, onAddItem, onRemoveItem,
+    onApprove, onRemoveItem,
 }: PurchaseOrderModalProps) {
     // Theme-based colors
     const primaryTextColor = useColorModeValue('neutral.light.text-primary', 'neutral.dark.text-primary');
     const secondaryTextColor = useColorModeValue('neutral.light.text-secondary', 'neutral.dark.text-secondary');
-    const hoverBg = useColorModeValue('neutral.light.tag-bg', 'neutral.dark.tag-bg');
 
     // Local state...
-    const [isAddItemModalOpen, setIsAddItemModalOpen] = useState(false);
-    const [availableItems, setAvailableItems] = useState<StockItem[]>([]);
-    const [categories, setCategories] = useState<Category[]>([]);
-    const [searchTerm, setSearchTerm] = useState('');
-    const [selectedCategory, setSelectedCategory] = useState('');
-    const [loadingItems, setLoadingItems] = useState(false);
     const [isConfirmDialogOpen, setIsConfirmDialogOpen] = useState(false);
     const [isZeroPriceDialogOpen, setIsZeroPriceDialogOpen] = useState(false);
     const [hasZeroPriceItems, setHasZeroPriceItems] = useState<string[]>([]);
@@ -111,57 +84,6 @@ export default function PurchaseOrderModal({
             !item.stockItem || !item.supplier || item.orderedQuantity <= 0
         );
     }, [poDetails]);
-
-    const fetchAvailableItems = async () => {
-        setLoadingItems(true);
-        try {
-            const query = groq`*[_type == "StockItem"] {
-                _id,
-                name,
-                sku,
-                unitOfMeasure,
-                unitPrice,
-                primarySupplier->{_id, name},
-                suppliers[]->{_id, name},
-                category->{_id, title}
-            }`;
-            const items = await client.fetch(query);
-            setAvailableItems(items);
-        } catch (error) {
-            console.error('Failed to fetch stock items:', error);
-            toast({
-                title: 'Error',
-                description: 'Failed to fetch available items',
-                status: 'error',
-                duration: 3000,
-                isClosable: true,
-            });
-        } finally {
-            setLoadingItems(false);
-        }
-    };
-
-    const fetchCategories = async () => {
-        try {
-            const query = groq`*[_type == "Category"] { _id, title }`;
-            const categories = await client.fetch(query);
-            setCategories(categories);
-        } catch (error) {
-            console.error('Failed to fetch categories:', error);
-        }
-    };
-
-    const handleOpenAddItemModal = async () => {
-        await Promise.all([fetchAvailableItems(), fetchCategories()]);
-        setIsAddItemModalOpen(true);
-    };
-
-    const handleAddItems = (items: any[]) => {
-        onAddItem(items);
-        setIsAddItemModalOpen(false);
-        setSearchTerm('');
-        setSelectedCategory('');
-    };
 
     const handlePriceChange = (itemKey: string, newPrice: number | undefined) => {
         setEditedPrices(prev => ({
@@ -240,6 +162,7 @@ export default function PurchaseOrderModal({
             return acc + (quantity * price);
         }, 0) || 0;
     }, [poDetails?.orderedItems, editedPrices, editedQuantities]);
+
     return (
         <>
             <Modal isOpen={isOpen} onClose={onClose} size={{ base: 'full', md: '3xl', lg: '4xl' }} closeOnOverlayClick={false} scrollBehavior="inside">
@@ -273,9 +196,6 @@ export default function PurchaseOrderModal({
                                             <Icon as={FaBoxes} color={primaryTextColor} boxSize={5} />
                                             <Heading size="sm" color={primaryTextColor}>Ordered Items</Heading>
                                         </HStack>
-                                        <Button size="sm" onClick={handleOpenAddItemModal} leftIcon={<FiPlus />} colorScheme="brand" isDisabled={!isEditable}>
-                                            Add Item
-                                        </Button>
                                     </Flex>
 
                                     {/* RESPONSIVE: Box allows horizontal scrolling on small screens */}
@@ -288,7 +208,7 @@ export default function PurchaseOrderModal({
                                                         <Th isNumeric>Qty</Th>
                                                         <Th isNumeric>Unit Price</Th>
                                                         <Th isNumeric>Subtotal</Th>
-                                                        <Th></Th>
+                                                        {isEditable && <Th></Th>}
                                                     </Tr>
                                                 </Thead>
                                                 <Tbody>
@@ -317,11 +237,13 @@ export default function PurchaseOrderModal({
                                                                 <Td isNumeric>
                                                                     <Text fontWeight="bold" color={primaryTextColor}>E{(quantity * price).toFixed(2)}</Text>
                                                                 </Td>
-                                                                <Td>
-                                                                    <Button size="sm" colorScheme="red" variant="ghost" onClick={() => onRemoveItem(item._key)} isDisabled={!isEditable}>
-                                                                        Remove
-                                                                    </Button>
-                                                                </Td>
+                                                                {isEditable && (
+                                                                    <Td>
+                                                                        <Button size="sm" colorScheme="red" variant="ghost" onClick={() => onRemoveItem(item._key)}>
+                                                                            Remove
+                                                                        </Button>
+                                                                    </Td>
+                                                                )}
                                                             </Tr>
                                                         );
                                                     })}
@@ -361,11 +283,7 @@ export default function PurchaseOrderModal({
                                     </Button>
                                     <Button
                                         colorScheme="green"
-                                        onClick={() => {
-                                            // Save first, then call onApprove
-                                            onSave();
-                                            onApprove();
-                                        }}
+                                        onClick={handleApproveWithValidation}
                                         isLoading={isSaving}
                                         isDisabled={hasIncompleteItems}
                                         leftIcon={<FaCheck />}
@@ -438,87 +356,6 @@ export default function PurchaseOrderModal({
                             </AlertDialogContent>
                         </AlertDialogOverlay>
                     </AlertDialog>
-                </ModalContent>
-            </Modal>
-
-            {/* Add Item Modal */}
-            <Modal isOpen={isAddItemModalOpen} onClose={() => setIsAddItemModalOpen(false)} size="4xl">
-                <ModalOverlay />
-                <ModalContent>
-                    <ModalHeader>Add Items to Purchase Order</ModalHeader>
-                    <ModalCloseButton />
-                    <ModalBody>
-                        <VStack spacing={4} align="stretch">
-                            <HStack>
-                                <Input
-                                    placeholder="Search by name or SKU"
-                                    value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
-                                />
-                                <Select
-                                    placeholder="Filter by Category"
-                                    value={selectedCategory}
-                                    onChange={(e) => setSelectedCategory(e.target.value)}
-                                >
-                                    {categories.map(category => (
-                                        <option key={category._id} value={category.title}>
-                                            {category.title}
-                                        </option>
-                                    ))}
-                                </Select>
-                            </HStack>
-
-                            {loadingItems ?
-                                (
-                                    <Flex justifyContent="center" alignItems="center" h="200px">
-                                        <Spinner />
-                                    </Flex>
-                                ) : availableItems.length === 0 ?
-                                    (
-                                        <Text>No items to display.</Text>
-                                    ) : (
-                                        <Box overflowY="auto" maxH="300px">
-                                            <VStack spacing={2} align="stretch">
-                                                {availableItems
-                                                    .filter(item => {
-                                                        const matchesSearch = searchTerm === '' ||
-                                                            item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                                                            item.sku.toLowerCase().includes(searchTerm.toLowerCase());
-                                                        const matchesCategory = selectedCategory === '' ||
-                                                            (item.category && item.category.title === selectedCategory);
-                                                        const isAlreadyInOrder = poDetails?.orderedItems?.some(
-                                                            orderItem => orderItem.stockItem?._id === item._id
-                                                        );
-                                                        return matchesSearch && matchesCategory && !isAlreadyInOrder;
-                                                    })
-                                                    .map(item => (
-                                                        <Flex
-                                                            key={item._id}
-                                                            alignItems="center"
-                                                            justifyContent="space-between"
-                                                            p={2}
-                                                            _hover={{ bg: 'gray.100' }}
-                                                            cursor="pointer"
-                                                            onClick={() => handleAddItems([{ item, quantity: 1, price: item.unitPrice || 0 }])}
-                                                        >
-                                                            <Box>
-                                                                <Text fontWeight="bold">{item.name}</Text>
-                                                                <Text fontSize="sm">SKU: {item.sku}</Text>
-                                                                <Text fontSize="sm">Current Price: ${item.unitPrice?.toFixed(2) || '0.00'}</Text>
-                                                            </Box>
-                                                            <Button size="sm" colorScheme="blue">Add</Button>
-                                                        </Flex>
-                                                    ))}
-                                            </VStack>
-                                        </Box>
-                                    )}
-                        </VStack>
-                    </ModalBody>
-                    <ModalFooter>
-                        <Button variant="ghost" ml={3} onClick={() => setIsAddItemModalOpen(false)}>
-                            Close
-                        </Button>
-                    </ModalFooter>
                 </ModalContent>
             </Modal>
         </>

@@ -1,25 +1,20 @@
 // next.config.js
-const withPWA = require('next-pwa')({
-  dest: 'public',
-  register: true,
-  skipWaiting: true,
-  disable: process.env.NODE_ENV === 'development'
-});
-
 /** @type {import('next').NextConfig} */
-const nextConfig = withPWA({
-  // Your existing Next.js config options
-  // For example:
+const nextConfig = {
   reactStrictMode: true,
-  swcMinify: true,
+};
 
-  // PWA-specific configuration
-  pwa: {
+// Check if we're in production mode
+const isProduction = process.env.NODE_ENV === 'production';
+
+if (isProduction) {
+  // Only require and apply next-pwa in production
+  const withPWA = require('next-pwa')({
     dest: 'public',
     register: true,
     skipWaiting: true,
-    disable: process.env.NODE_ENV === 'development'
-  }
-});
-
-module.exports = nextConfig;
+  });
+  module.exports = withPWA(nextConfig);
+} else {
+  module.exports = nextConfig;
+}

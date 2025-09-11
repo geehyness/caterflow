@@ -6,14 +6,14 @@ import { Sidebar } from "@/components/Sidebar";
 import { MobileTopbar } from "@/components/MobileTopbar";
 import { SidebarProvider } from "@/context/SidebarContext";
 import { Box } from "@chakra-ui/react";
-import { useEffect } from "react";
+import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "Caterflow",
   description: "Caterflow Inventory Management System",
-  manifest: "/manifest.json", // Add this line
+  manifest: "/manifest.json",
 };
 
 export default function RootLayout({
@@ -21,20 +21,6 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  useEffect(() => {
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js')
-          .then((registration) => {
-            console.log('SW registered: ', registration);
-          })
-          .catch((registrationError) => {
-            console.log('SW registration failed: ', registrationError);
-          });
-      });
-    }
-  }, []);
-
   return (
     <html lang="en">
       <head>
@@ -55,6 +41,7 @@ export default function RootLayout({
             >
               {children}
             </Box>
+            <ServiceWorkerRegister />
           </SidebarProvider>
         </Providers>
       </body>

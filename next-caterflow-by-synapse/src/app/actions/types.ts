@@ -12,13 +12,13 @@ export interface ActionStep {
 export interface OrderedItem {
     _key: string;
     stockItem: {
-        _id?: string;
+        _id?: string; // Make optional
         name: string;
     };
     orderedQuantity: number;
     unitPrice: number;
     supplier?: {
-        _id?: string;
+        _id?: string; // Make optional
         name: string;
     };
 }

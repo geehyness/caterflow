@@ -52,17 +52,31 @@ import {
     ActionStep,
     generateWorkflow,
     actionTypeTitles,
-    OrderedItem,
+
 } from './types';
 import DataTable from './DataTable';
 import GoodsReceiptModal from '@/app/actions/GoodsReceiptModal';
-import { Category, StockItem } from '@/lib/sanityTypes';
+import { Category, Reference, StockItem } from '@/lib/sanityTypes';
 
 // Interface for items selected in the modal
 interface SelectedItemData {
     item: StockItem;
     quantity: number;
     price: number;
+}
+
+export interface OrderedItem {
+    _key: string;
+    stockItem: {
+        _id?: string;
+        name: string;
+    };
+    orderedQuantity: number;
+    unitPrice: number;
+    supplier?: { // Change from | null to optional (| undefined)
+        _id?: string;
+        name: string;
+    };
 }
 
 interface PurchaseOrder {
@@ -376,7 +390,6 @@ export default function ActionsPage() {
                 siteName: data.siteName || data.site?.name || '',
                 actionType: data.actionType || 'PurchaseOrder',
                 evidenceRequired: data.evidenceRequired || false,
-                supplierName: data.supplierName || data.supplierNames || ''
             };
 
             setPoDetails(transformedData);
@@ -699,30 +712,11 @@ export default function ActionsPage() {
                     siteName: data.siteName || data.site?.name || '',
                     actionType: data.actionType || 'PurchaseOrder',
                     evidenceRequired: data.evidenceRequired || false,
-                    supplierName: data.supplierName || data.supplierNames || ''
                 });
             }
         } catch (error) {
             console.error('Failed to fetch latest PO data:', error);
         }
-    };
-
-    const handleAddSelectedItemsToPO = (items: SelectedItemData[]) => {
-        if (!poDetails) return;
-        const newItems = items.map(itemData => ({
-            _key: Math.random().toString(36).substr(2, 9),
-            stockItem: {
-                name: itemData.item.name,
-            },
-            orderedQuantity: itemData.quantity,
-            unitPrice: itemData.price,
-        }));
-
-        setPoDetails({
-            ...poDetails,
-            orderedItems: [...(poDetails.orderedItems || []), ...newItems],
-        });
-        onAddItemModalClose();
     };
 
     const handleRemoveItemFromPO = (itemKey: string) => {
@@ -1214,7 +1208,6 @@ export default function ActionsPage() {
                     }
                 }}
                 onRemoveItem={handleRemoveItemFromPO}
-                onAddItem={handleAddSelectedItemsToPO}
             />
 
             <GoodsReceiptModal

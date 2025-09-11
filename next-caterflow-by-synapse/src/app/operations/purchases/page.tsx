@@ -585,7 +585,6 @@ export default function PurchasesPage() {
                     isSaving={isSaving}
                     onSave={handleSaveOrder}
                     onApprove={handleConfirmOrderUpdate}
-                    onAddItem={handleAddItems}
                     onRemoveItem={handleRemoveItem}
                 />
             )}
