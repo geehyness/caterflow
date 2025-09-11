@@ -33,7 +33,7 @@ export function Footer({ appName = 'Caterflow' }: FooterProps) {
           <Flex mt={{ base: 4, md: 0 }} gap={4}>
             <Link href="/privacy" fontSize="sm">Privacy Policy</Link>
             <Link href="/terms" fontSize="sm">Terms of Service</Link>
-            <Link href="/support" fontSize="sm">Support</Link>
+            <Link href="https://caterflow-docs.vercel.app/" fontSize="sm">Support</Link>
           </Flex>
         </Flex>
       </Container>

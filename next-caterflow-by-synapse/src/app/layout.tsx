@@ -6,6 +6,7 @@ import { Sidebar } from "@/components/Sidebar";
 import { MobileTopbar } from "@/components/MobileTopbar";
 import { SidebarProvider } from "@/context/SidebarContext";
 import { Box } from "@chakra-ui/react";
+import { Footer } from "@/components/Footer"; // Import the Footer component
 import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -38,8 +39,13 @@ export default function RootLayout({
               pt={{ base: "60px", md: 0 }}
               pl={{ base: 0, md: "250px" }}
               minHeight="100vh"
+              display="flex"
+              flexDirection="column"
             >
-              {children}
+              <Box flex="1">
+                {children}
+              </Box>
+              <Footer appName="Caterflow" />
             </Box>
             <ServiceWorkerRegister />
           </SidebarProvider>
