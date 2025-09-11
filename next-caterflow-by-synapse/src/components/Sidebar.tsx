@@ -14,7 +14,7 @@ import { FiLogOut, FiBarChart2, FiBox, FiMapPin, FiTruck, FiUsers, FiSettings, F
 import { useAuth } from '@/context/AuthContext';
 import { useLoading } from '@/context/LoadingContext';
 import { FaCheckCircle } from 'react-icons/fa';
-import { useSidebar } from '@/context/SidebarContext'; // FIXED: Import from correct path
+import { useSidebar } from '@/context/SidebarContext';
 
 interface SidebarProps {
     appName?: string;
@@ -30,10 +30,11 @@ const SidebarContent = ({ onItemClick }: { onItemClick?: () => void }) => {
     const [expandedGroups, setExpandedGroups] = useState<string[]>(['Main', 'Operations', 'Admin']);
     const { setLoading } = useLoading();
 
-    const sidebarBg = useColorModeValue(theme.colors.neutral.light['bg-secondary'], theme.colors.neutral.dark['bg']);
+    // Correctly reference the neutral.light.bg-secondary and neutral.dark.bg-secondary colors from your theme
+    const sidebarBg = useColorModeValue(theme.colors.neutral.light['bg-secondary'], theme.colors.neutral.dark['bg-secondary']);
     const activeBg = useColorModeValue(theme.colors.brand['100'], theme.colors.brand['700']);
     const borderColor = useColorModeValue(theme.colors.neutral.light['border-color'], theme.colors.neutral.dark['border-color']);
-    const iconColor = useColorModeValue(theme.colors.neutral.light['text-header'], theme.colors.neutral.dark['text-header']);
+    const iconColor = useColorModeValue(theme.colors.neutral.light['text-primary'], theme.colors.neutral.dark['text-primary']);
     const hoverBg = useColorModeValue('gray.100', 'gray.700');
 
     // Define menu items with roles and groups
@@ -97,23 +98,31 @@ const SidebarContent = ({ onItemClick }: { onItemClick?: () => void }) => {
 
     if (!isAuthReady) {
         return (
-            <Box
+            <Flex
                 p={4}
                 pt={6}
-                display="flex"
                 justifyContent="center"
                 alignItems="center"
                 height="100%"
             >
                 <Spinner size="md" />
-            </Box>
+            </Flex>
         );
     }
 
     return (
-        <>
-            {/* App Logo and Name */}
-            <Flex alignItems="center" mb={6} pr={2} flexDirection="column">
+        <Flex direction="column" h="full">
+            {/* Header with App Logo and Name */}
+            <Flex
+                alignItems="center"
+                justifyContent="center"
+                p={4}
+                bg={sidebarBg}
+                position="sticky"
+                top="0"
+                zIndex="sticky"
+                boxShadow="sm"
+            >
                 <Box
                     bg="white"
                     p={3}
@@ -134,7 +143,7 @@ const SidebarContent = ({ onItemClick }: { onItemClick?: () => void }) => {
             <Divider mb={4} />
 
             {/* Scrollable Menu Items */}
-            <Flex direction="column" overflowY="auto" overflowX="hidden" flex="1" pr={2}>
+            <Flex direction="column" overflowY="auto" overflowX="hidden" flex="1" px={2}>
                 <Stack direction="column" spacing={2} w="full">
                     {filteredMenuGroups.map((group) => (
                         <Box key={group.heading} w="full">
@@ -189,8 +198,15 @@ const SidebarContent = ({ onItemClick }: { onItemClick?: () => void }) => {
                 </Stack>
             </Flex>
 
-            {/* Bottom Fixed Section */}
-            <Box>
+            {/* Footer with Actions */}
+            <Box
+                bg={sidebarBg}
+                position="sticky"
+                bottom="0"
+                zIndex="sticky"
+                p={4}
+                boxShadow="sm"
+            >
                 <Divider my={4} />
                 <Button
                     w="full"
@@ -213,14 +229,16 @@ const SidebarContent = ({ onItemClick }: { onItemClick?: () => void }) => {
                     </Button>
                 )}
             </Box>
-        </>
+        </Flex>
     );
 };
 
 export function Sidebar({ appName = 'Caterflow' }: SidebarProps) {
     const isMobile = useBreakpointValue({ base: true, md: false });
     const { isOpen, closeSidebar } = useSidebar();
-    const sidebarBg = useColorModeValue('white', 'gray.800');
+    const theme = useTheme();
+    // Use the same theme color for the main sidebar background
+    const sidebarBg = useColorModeValue(theme.colors.neutral.light['bg-secondary'], theme.colors.neutral.dark['bg-secondary']);
 
     console.log('Sidebar component - isMobile:', isMobile, 'isOpen:', isOpen); // Debug log
 
@@ -230,12 +248,14 @@ export function Sidebar({ appName = 'Caterflow' }: SidebarProps) {
                 isOpen={isOpen}
                 placement="left"
                 onClose={closeSidebar}
-                size="full"
             >
                 <DrawerOverlay />
-                <DrawerContent bg={sidebarBg}>
+                <DrawerContent
+                    bg={sidebarBg}
+                    maxW={{ base: '75%', sm: '320px' }} // Set a max-width for the drawer on small screens
+                >
                     <DrawerCloseButton />
-                    <DrawerBody p={4} pt={10}>
+                    <DrawerBody p={0}>
                         <SidebarContent onItemClick={closeSidebar} />
                     </DrawerBody>
                 </DrawerContent>

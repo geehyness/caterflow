@@ -25,16 +25,17 @@ import {
     AlertDialogHeader,
     AlertDialogOverlay,
     VStack,
+    Icon,
 } from '@chakra-ui/react';
 import { FiPlus, FiSearch, FiEye, FiFilter, FiEdit } from 'react-icons/fi';
 import DataTable from '@/app/actions/DataTable';
 import { useAuth } from '@/context/AuthContext';
 import CreatePurchaseOrderModal from '@/app/actions/CreatePurchaseOrderModal';
-import PurchaseOrderModal from '@/app/actions/PurchaseOrderModal';
+import PurchaseOrderModal, { PurchaseOrderDetails } from '@/app/actions/PurchaseOrderModal';
 import { PendingAction } from '@/app/actions/types';
 import { StockItem, Category, Site } from '@/lib/sanityTypes';
-import { PurchaseOrderDetails } from '@/app/actions/PurchaseOrderModal';
 
+// Interfaces remain the same...
 interface PurchaseOrderItem {
     stockItem: string;
     orderedQuantity: number;
@@ -98,34 +99,22 @@ export default function PurchasesPage() {
     const [hasZeroPriceItems, setHasZeroPriceItems] = useState<string[]>([]);
 
     const [selectedAction, setSelectedAction] = useState<PurchaseOrderDetails | null>(null);
-    //const [selectedAction, setSelectedAction] = useState<PendingAction | null>(null);
 
-
-    // Add state for selectedItems, suppliers and sites
     const [selectedItems, setSelectedItems] = useState<any[]>([]);
     const [suppliers, setSuppliers] = useState<any[]>([]);
     const [sites, setSites] = useState<Site[]>([]);
 
-
     const cancelRef = useRef<HTMLButtonElement>(null);
 
-
     const { isOpen: isOrderModalOpen, onOpen: onOrderModalOpen, onClose: onOrderModalClose } = useDisclosure();
-    const { isOpen: isAddItemModalOpen, onOpen: onAddItemModalOpen, onClose: onAddItemModalClose } = useDisclosure();
-    //const [poDetails, setPoDetails] = useState<PendingAction | null>(null);
-    // Then update the state declaration:
     const [poDetails, setPoDetails] = useState<PurchaseOrderDetails | null>(null);
     const [editedPrices, setEditedPrices] = useState<{ [key: string]: number | undefined }>({});
     const [editedQuantities, setEditedQuantities] = useState<{ [key: string]: number | undefined }>({});
     const [isSaving, setIsSaving] = useState(false);
-    const [availableItems, setAvailableItems] = useState<StockItem[]>([]);
-    const [categories, setCategories] = useState<Category[]>([]);
-    const [loadingItems, setLoadingItems] = useState(false);
 
-    const cardBg = useColorModeValue('white', 'gray.700');
-    const borderColor = useColorModeValue('gray.200', 'gray.600');
-    const inputBg = useColorModeValue('white', 'gray.800');
-
+    // Theme-based color values
+    const secondaryTextColor = useColorModeValue('neutral.light.text-secondary', 'neutral.dark.text-secondary');
+    const searchIconColor = useColorModeValue('gray.300', 'gray.500');
 
     useEffect(() => {
         const fetchSuppliers = async () => {
@@ -142,7 +131,6 @@ export default function PurchasesPage() {
         fetchSuppliers();
     }, []);
 
-    // Add new useEffect for fetching sites
     useEffect(() => {
         const fetchSites = async () => {
             try {
@@ -158,8 +146,8 @@ export default function PurchasesPage() {
         fetchSites();
     }, []);
 
-
     const fetchPurchaseOrders = useCallback(async () => {
+        setLoading(true);
         try {
             const response = await fetch('/api/purchase-orders');
             if (response.ok) {
@@ -174,7 +162,6 @@ export default function PurchasesPage() {
                     createdAt: order.orderDate,
                 }));
                 setPurchaseOrders(transformedData);
-                setFilteredOrders(transformedData);
             } else {
                 throw new Error('Failed to fetch purchase orders');
             }
@@ -192,45 +179,39 @@ export default function PurchasesPage() {
         }
     }, [toast]);
 
-    const refreshData = useCallback(async () => {
-        await fetchPurchaseOrders();
-    }, [fetchPurchaseOrders]);
+    useEffect(() => {
+        const filtered = searchTerm
+            ? purchaseOrders.filter(order => {
+                const term = searchTerm.toLowerCase();
+                const poNumberMatch = order.poNumber.toLowerCase().includes(term);
+                const supplierMatch = order.supplierNames?.toLowerCase().includes(term) || false;
+                const siteMatch = order.siteName?.toLowerCase().includes(term) || false;
+                return poNumberMatch || supplierMatch || siteMatch;
+            })
+            : purchaseOrders;
+
+        const ordersToDisplay = viewMode === 'actionRequired'
+            ? filtered.filter(order => order.status === 'draft')
+            : filtered;
+
+        setFilteredOrders(ordersToDisplay);
+
+    }, [purchaseOrders, searchTerm, viewMode]);
 
     useEffect(() => {
         fetchPurchaseOrders();
     }, [fetchPurchaseOrders]);
 
-    useEffect(() => {
-        if (searchTerm) {
-            const term = searchTerm.toLowerCase();
-            setFilteredOrders(
-                purchaseOrders.filter(order => {
-                    const poNumberMatch = order.poNumber.toLowerCase().includes(term);
-                    const supplierMatch = order.supplierNames?.toLowerCase().includes(term) || false;
-                    const siteMatch = order.siteName?.toLowerCase().includes(term) || false;
-                    return poNumberMatch || supplierMatch || siteMatch;
-                })
-            );
-        } else {
-            setFilteredOrders(purchaseOrders);
-        }
-    }, [purchaseOrders, searchTerm]);
-
-    const handleAddOrder = () => {
-        onOpen();
-    };
+    // Handlers remain the same...
+    const handleAddOrder = () => onOpen();
 
     const handleCreateOrders = async (items: OrderItem[], siteId?: string) => {
         try {
-            const totalAmount = items.reduce((sum, item) => {
-                return sum + (item.orderedQuantity * item.unitPrice);
-            }, 0);
+            const totalAmount = items.reduce((sum, item) => sum + (item.orderedQuantity * item.unitPrice), 0);
 
             const response = await fetch('/api/purchase-orders', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     poNumber: `PO-${Date.now()}`,
                     orderDate: new Date().toISOString(),
@@ -245,14 +226,12 @@ export default function PurchasesPage() {
             if (response.ok) {
                 toast({
                     title: 'Purchase order created',
-                    description: 'The purchase order has been created successfully',
                     status: 'success',
                     duration: 5000,
                     isClosable: true,
                 });
-
-
                 onClose();
+                fetchPurchaseOrders(); // Refresh data
             } else {
                 const errorData = await response.json();
                 throw new Error(errorData.error || 'Failed to create purchase order');
@@ -261,7 +240,7 @@ export default function PurchasesPage() {
             console.error('Error creating purchase order:', error);
             toast({
                 title: 'Error creating purchase order',
-                description: error.message || 'An unexpected error occurred. Please try again.',
+                description: error.message || 'An unexpected error occurred.',
                 status: 'error',
                 duration: 5000,
                 isClosable: true,
@@ -269,16 +248,13 @@ export default function PurchasesPage() {
         }
     };
 
-
     const handleSaveOrder = async () => {
         if (!poDetails) return;
-
         setIsSaving(true);
         try {
             const updates = poDetails.orderedItems?.map((item: any) => {
                 const newPrice = editedPrices[item._key];
                 const newQuantity = editedQuantities[item._key];
-
                 if (newPrice !== undefined || newQuantity !== undefined) {
                     return fetch('/api/purchase-orders/update-item', {
                         method: 'POST',
@@ -293,28 +269,19 @@ export default function PurchasesPage() {
                 }
                 return Promise.resolve();
             });
-
-            if (updates && updates.length > 0) {
-                await Promise.all(updates);
-            }
-
-            await fetchLatestPOData(poDetails._id);
+            if (updates) await Promise.all(updates);
 
             toast({
                 title: 'Order Saved',
-                description: 'Purchase order has been updated successfully.',
                 status: 'success',
                 duration: 3000,
                 isClosable: true,
             });
-
             onOrderModalClose();
-            await refreshData();
+            fetchPurchaseOrders();
         } catch (error) {
-            console.error('Error saving order:', error);
             toast({
                 title: 'Save Failed',
-                description: 'Failed to save purchase order.',
                 status: 'error',
                 duration: 5000,
                 isClosable: true,
@@ -324,87 +291,18 @@ export default function PurchasesPage() {
         }
     };
 
-    // Add this helper function
-    const fetchLatestPOData = async (poId: string) => {
-        try {
-            const response = await fetch(`/api/purchase-orders?id=${poId}`);
-            if (response.ok) {
-                const data = await response.json();
-                setPoDetails({
-                    ...data,
-                    description: `Order for items from ${data.supplierNames}`,
-                    orderedItems: data.orderedItems?.map((item: any) => ({
-                        _key: item._key || Math.random().toString(36).substr(2, 9),
-                        stockItem: { name: item.stockItem?.name || 'Unknown Item' },
-                        orderedQuantity: item.orderedQuantity,
-                        unitPrice: item.unitPrice,
-                        supplier: item.supplier ? { name: item.supplier.name } : undefined // Convert null to undefined
-                    })) || [] // Add empty array fallback
-                });
-            }
-        } catch (error) {
-            console.error('Failed to fetch latest PO data:', error);
-        }
-    };
-
-    const handleRemoveItem = (itemKey: string) => {
-        if (!poDetails) return;
-
-        console.log('Removing item:', itemKey);
-        setPoDetails({
-            ...poDetails,
-            orderedItems: poDetails.orderedItems?.filter((item: { _key: string; }) => item._key !== itemKey) || [],
-        });
-    };
-
-    // Add this function after handleRemoveItem
-    const handleAddItems = (items: any[]) => {
-        if (!poDetails) return;
-
-        // Create new items with proper structure
-        const newItems = items.map(item => ({
-            _key: Math.random().toString(36).substr(2, 9),
-            stockItem: {
-                name: item.item.name,
-                _id: item.item._id
-            },
-            orderedQuantity: item.quantity,
-            unitPrice: item.price,
-            supplier: item.item.primarySupplier || item.item.suppliers?.[0] || null
-        }));
-
-        // Update the PO details with new items
-        setPoDetails({
-            ...poDetails,
-            orderedItems: [...(poDetails.orderedItems || []), ...newItems]
-        });
-
-        toast({
-            title: 'Items Added',
-            description: `${items.length} item(s) added to the purchase order.`,
-            status: 'success',
-            duration: 3000,
-            isClosable: true,
-        });
-    };
-
     const handleApprovePO = async (action: PurchaseOrderDetails | PendingAction) => {
         try {
-            // Extract the ID from either type
-            const actionId = action._id;
-
             const response = await fetch('/api/actions/update', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    id: actionId,
+                    id: action._id,
                     status: 'pending-approval',
                 }),
             });
 
-            if (!response.ok) {
-                throw new Error('Failed to submit for approval');
-            }
+            if (!response.ok) throw new Error('Failed to submit for approval');
 
             toast({
                 title: 'Order Submitted',
@@ -413,9 +311,7 @@ export default function PurchasesPage() {
                 duration: 5000,
                 isClosable: true,
             });
-
-            await refreshData();
-
+            fetchPurchaseOrders();
         } catch (error: any) {
             toast({
                 title: 'Error',
@@ -427,82 +323,32 @@ export default function PurchasesPage() {
         }
     };
 
-    const handleViewOrder = (order: PurchaseOrder) => {
-        const action: PurchaseOrderDetails = {
-            _id: order._id,
-            _type: 'PurchaseOrder',
-            title: `Purchase Order ${order.poNumber}`,
-            description: `Order for items from ${order.supplierNames}`,
-            createdAt: order.orderDate,
-            priority: 'medium',
-            siteName: order.siteName || '',
-            actionType: 'PurchaseOrder',
-            status: order.status,
-            poNumber: order.poNumber, // Ensure this is always provided
-            supplierNames: order.supplierNames || "",
-            totalAmount: order.totalAmount,
-            orderedItems: order.orderedItems?.map(item => ({
-                _key: item._key || Math.random().toString(36).substr(2, 9),
-                stockItem: { name: item.stockItem?.name || 'Unknown Item' },
-                orderedQuantity: item.orderedQuantity,
-                unitPrice: item.unitPrice,
-                supplier: item.supplier ? { name: item.supplier.name } : undefined
-            })) || [], // Add empty array fallback
-            evidenceRequired: false,
-            workflow: [
-                {
-                    title: 'Finalize Order Details',
-                    description: 'Review and confirm the items, quantities, and prices before submitting.',
-                    completed: order.status !== 'draft',
-                    required: true
-                },
-                {
-                    title: 'Submit for Approval',
-                    description: 'Send the purchase order to a manager for approval.',
-                    completed: order.status === 'approved' || order.status === 'pending-approval',
-                    required: true
-                }
-            ],
-            completedSteps: order.status === 'draft' ? 0 : (order.status === 'approved' || order.status === 'pending-approval') ? 2 : 1
-        };
-
-        setSelectedAction(action);
-
-        if (order.status === 'draft') {
-            handleFinalizeOrderStep(action);
-        } else {
-            setPoDetails(action);
-            onOrderModalOpen();
-        }
-    };
-
-    const handleSaveSuccess = () => {
-        refreshData();
-        onClose();
-    };
-
-    const handleFinalizeOrderStep = async (action: PurchaseOrderDetails) => {
+    const handleViewOrder = async (order: PurchaseOrder) => {
         try {
-            const response = await fetch(`/api/purchase-orders?id=${action._id}`);
-            if (!response.ok) {
-                throw new Error('Failed to fetch purchase order details');
-            }
+            const response = await fetch(`/api/purchase-orders?id=${order._id}`);
+            if (!response.ok) throw new Error('Failed to fetch PO details');
             const data = await response.json();
-            setPoDetails({
+
+            const detailedAction: PurchaseOrderDetails = {
                 ...data,
-                description: `Order for items from ${data.supplierNames}`,
-                // Ensure all required PendingAction properties are included
                 _type: 'PurchaseOrder',
-                actionType: 'PurchaseOrder',
+                title: `Purchase Order ${data.poNumber}`,
+                description: `Order for items from ${data.supplierNames}`,
+                createdAt: data.orderDate,
                 priority: 'medium',
-            });
+                siteName: data.site?.name || '',
+                actionType: 'PurchaseOrder',
+                evidenceRequired: false,
+            };
+
+            setPoDetails(detailedAction);
             setEditedPrices({});
             setEditedQuantities({});
             onOrderModalOpen();
         } catch (err: any) {
             toast({
                 title: 'Error',
-                description: 'Failed to fetch purchase order details. Please try again.',
+                description: err.message || 'Failed to fetch purchase order details.',
                 status: 'error',
                 duration: 5000,
                 isClosable: true,
@@ -510,23 +356,37 @@ export default function PurchasesPage() {
         }
     };
 
-    const validatePrices = (order: any) => {
-        const zeroPriceItems: string[] = [];
+    const handleRemoveItem = (itemKey: string) => {
+        if (!poDetails) return;
+        setPoDetails(prev => prev ? {
+            ...prev,
+            orderedItems: prev.orderedItems?.filter(item => item._key !== itemKey) || [],
+        } : null);
+    };
 
-        order.orderedItems?.forEach((item: any) => {
-            const price = editedPrices[item._key] ?? item.unitPrice;
-            if (price === 0) {
-                zeroPriceItems.push(item.stockItem?.name || 'Unknown Item');
-            }
-        });
+    const handleAddItems = (items: any[]) => {
+        if (!poDetails) return;
+        const newItems = items.map(item => ({
+            _key: Math.random().toString(36).substr(2, 9),
+            stockItem: { name: item.item.name, _id: item.item._id },
+            orderedQuantity: item.quantity,
+            unitPrice: item.price,
+            supplier: item.item.primarySupplier || item.item.suppliers?.[0] || null
+        }));
 
-        return zeroPriceItems;
+        setPoDetails(prev => prev ? {
+            ...prev,
+            orderedItems: [...(prev.orderedItems || []), ...newItems]
+        } : null);
     };
 
     const handleConfirmOrderUpdate = async () => {
-        if (!selectedAction) return;
+        if (!poDetails) return;
 
-        const zeroPriceItems = validatePrices(selectedAction);
+        const zeroPriceItems = poDetails.orderedItems?.filter(item => {
+            const price = editedPrices[item._key] ?? item.unitPrice;
+            return price === 0;
+        }).map(item => item.stockItem?.name || 'Unknown Item') || [];
 
         if (zeroPriceItems.length > 0) {
             setHasZeroPriceItems(zeroPriceItems);
@@ -539,56 +399,39 @@ export default function PurchasesPage() {
     const proceedWithOrderUpdate = async () => {
         setIsConfirmDialogOpen(false);
         setIsZeroPriceDialogOpen(false);
-
         setIsSaving(true);
         try {
             await handleSaveOrder();
-            if (selectedAction) {
-                await handleApprovePO(selectedAction);
+            if (poDetails) {
+                await handleApprovePO(poDetails);
             }
-            onOrderModalClose();
-            await refreshData();
         } catch (error) {
-            console.error('Error during PO update:', error);
-            toast({
-                title: 'Update Failed',
-                description: 'An error occurred while submitting the purchase order.',
-                status: 'error',
-                duration: 5000,
-                isClosable: true,
-            });
+            // Errors are handled in the specific functions
         } finally {
             setIsSaving(false);
+            onOrderModalClose();
+            fetchPurchaseOrders();
         }
     };
 
+    // UPDATED: Aligns with custom theme variants for Tags/Badges
     const getStatusColor = (status: string) => {
         switch (status) {
             case 'draft': return 'gray';
-            case 'pending': return 'yellow';
             case 'pending-approval': return 'orange';
-            case 'approved': return 'blue';
-            case 'partially-received': return 'orange';
+            case 'approved': return 'purple';
             case 'received': return 'green';
-            case 'cancelled': return 'red';
+            case 'partially-received': return 'orange';
+            case 'cancelled':
             case 'rejected': return 'red';
             default: return 'gray';
         }
     };
 
-    const getOrdersToDisplay = () => {
-        if (viewMode === 'actionRequired') {
-            return filteredOrders.filter(order =>
-                order.status === 'draft'
-            );
-        }
-        return filteredOrders;
-    };
-
     const getItemList = (order: PurchaseOrder) => {
-        if (!order.orderedItems || order.orderedItems.length === 0) return '';
+        if (!order.orderedItems || order.orderedItems.length === 0) return 'No items';
         const items = order.orderedItems.slice(0, 3).map(item =>
-            `${item.stockItem?.name || 'Unknown Item'} (${item.orderedQuantity})`
+            `${item.stockItem?.name || 'Unknown'} (${item.orderedQuantity})`
         );
         return items.join(', ') + (order.orderedItems.length > 3 ? '...' : '');
     };
@@ -597,61 +440,38 @@ export default function PurchasesPage() {
         {
             accessorKey: 'workflowAction',
             header: 'Action',
-            isSortable: false,
             cell: (row: any) => (
                 <Button
                     size="sm"
-                    colorScheme={row.status === 'draft' ? 'blue' : 'gray'}
+                    colorScheme={row.status === 'draft' ? 'brand' : 'gray'}
                     variant={row.status === 'draft' ? 'solid' : 'outline'}
                     onClick={() => handleViewOrder(row)}
-                    leftIcon={row.status === 'draft' ? <FiEdit /> : <FiEye />}
+                    leftIcon={<Icon as={row.status === 'draft' ? FiEdit : FiEye} />}
                 >
                     {row.status === 'draft' ? 'Edit' : 'View'}
                 </Button>
             )
         },
-        {
-            accessorKey: 'poNumber',
-            header: 'PO Number',
-            isSortable: true
-        },
-        {
-            accessorKey: 'supplierNames',
-            header: 'Suppliers',
-            isSortable: false,
-            cell: (row: any) => {
-                return row.supplierNames;
-            }
-        },
+        { accessorKey: 'poNumber', header: 'PO Number' },
+        { accessorKey: 'supplierNames', header: 'Suppliers' },
         {
             accessorKey: 'description',
             header: 'Description',
-            isSortable: true,
-            cell: (row: any) => {
-                const itemList = getItemList(row);
-                return (
-                    <Box>
-                        <Text>Items: </Text>
-                        {itemList && (
-                            <Text fontSize="sm" color="gray.600" mt={1}>
-                                {itemList}
-                            </Text>
-                        )}
-                    </Box>
-                );
-            }
+            cell: (row: any) => (
+                <Box>
+                    <Text>Items:</Text>
+                    <Text fontSize="sm" color={secondaryTextColor} mt={1} noOfLines={2}>
+                        {getItemList(row)}
+                    </Text>
+                </Box>
+            )
         },
-        {
-            accessorKey: 'siteName',
-            header: 'Site',
-            isSortable: true
-        },
+        { accessorKey: 'siteName', header: 'Site' },
         {
             accessorKey: 'status',
             header: 'Status',
-            isSortable: true,
             cell: (row: any) => (
-                <Badge colorScheme={getStatusColor(row.status)}>
+                <Badge colorScheme={getStatusColor(row.status)} variant="subtle">
                     {row.status.replace('-', ' ').toUpperCase()}
                 </Badge>
             )
@@ -659,51 +479,51 @@ export default function PurchasesPage() {
         {
             accessorKey: 'orderDate',
             header: 'Order Date',
-            isSortable: true,
             cell: (row: any) => new Date(row.orderDate).toLocaleDateString()
         },
         {
             accessorKey: 'totalAmount',
             header: 'Total Amount',
-            isSortable: true,
-            cell: (row: any) => `$${row.totalAmount?.toFixed(2) || '0.00'}`
+            cell: (row: any) => `E${row.totalAmount?.toFixed(2) || '0.00'}`
         },
     ];
 
-    if (loading) {
+    if (loading && purchaseOrders.length === 0) {
         return (
-            <Box p={4}>
-                <Flex justifyContent="center" alignItems="center" height="50vh">
-                    <Spinner size="xl" />
-                </Flex>
-            </Box>
+            <Flex justify="center" align="center" minH="70vh">
+                <Spinner size="xl" />
+            </Flex>
         );
     }
 
     return (
-        <Box p={4}>
-            <Flex justifyContent="space-between" alignItems="center" mb={6}>
+        <Box p={{ base: 2, md: 4 }}>
+            <Flex
+                justifyContent="space-between"
+                alignItems={{ base: 'flex-start', md: 'center' }}
+                mb={6}
+                flexDirection={{ base: 'column', md: 'row' }}
+                gap={4}
+            >
                 <Heading as="h1" size="lg">Purchase Orders</Heading>
-                <Flex gap={3}>
+                <Flex gap={3} flexWrap="wrap" justifyContent={{ base: 'flex-start', md: 'flex-end' }}>
                     <Button
                         leftIcon={<FiFilter />}
-                        colorScheme={viewMode === 'actionRequired' ? 'blue' : 'gray'}
-                        variant={viewMode === 'actionRequired' ? 'solid' : 'outline'}
+                        colorScheme={viewMode === 'actionRequired' ? 'brand' : 'gray'}
                         onClick={() => setViewMode('actionRequired')}
                     >
                         Action Required
                     </Button>
                     <Button
                         leftIcon={<FiEye />}
-                        colorScheme={viewMode === 'all' ? 'blue' : 'gray'}
-                        variant={viewMode === 'all' ? 'solid' : 'outline'}
+                        colorScheme={viewMode === 'all' ? 'brand' : 'gray'}
                         onClick={() => setViewMode('all')}
                     >
                         View All
                     </Button>
                     <Button
                         leftIcon={<FiPlus />}
-                        colorScheme="blue"
+                        colorScheme="brand"
                         onClick={handleAddOrder}
                     >
                         New Order
@@ -711,54 +531,59 @@ export default function PurchasesPage() {
                 </Flex>
             </Flex>
 
-            <Card bg={cardBg} border="1px" borderColor={borderColor} borderRadius="md" mb={4} p={4}>
-                <InputGroup>
-                    <InputLeftElement pointerEvents="none">
-                        <FiSearch color="gray.300" />
-                    </InputLeftElement>
-                    <Input
-                        placeholder="Search purchase orders..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        bg={inputBg}
-                    />
-                </InputGroup>
+            <Card mb={4}>
+                <CardBody>
+                    <InputGroup>
+                        <InputLeftElement pointerEvents="none">
+                            <Icon as={FiSearch} color={searchIconColor} />
+                        </InputLeftElement>
+                        <Input
+                            placeholder="Search by PO number, supplier, or site..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                        />
+                    </InputGroup>
+                </CardBody>
             </Card>
 
-            <Card bg={cardBg} border="1px" borderColor={borderColor} borderRadius="md">
+            <Card>
                 <CardBody p={0}>
                     <DataTable
                         columns={columns}
-                        data={getOrdersToDisplay()}
+                        data={filteredOrders}
                         loading={loading}
-                        onActionClick={handleViewOrder}
                     />
                 </CardBody>
             </Card>
 
-            <CreatePurchaseOrderModal
-                isOpen={isOpen}
-                onClose={onClose}
-                onSave={handleCreateOrders}
-                selectedItems={selectedItems}
-                suppliers={suppliers}
-                sites={sites}
-            />
+            {isOpen && (
+                <CreatePurchaseOrderModal
+                    isOpen={isOpen}
+                    onClose={onClose}
+                    onSave={handleCreateOrders}
+                    selectedItems={selectedItems}
+                    suppliers={suppliers}
+                    sites={sites}
+                />
+            )}
 
-            <PurchaseOrderModal
-                isOpen={isOrderModalOpen}
-                onClose={onOrderModalClose}
-                poDetails={poDetails}
-                editedPrices={editedPrices}
-                setEditedPrices={setEditedPrices}
-                editedQuantities={editedQuantities}
-                setEditedQuantities={setEditedQuantities}
-                isSaving={isSaving}
-                onSave={handleSaveOrder}
-                onApprove={handleConfirmOrderUpdate}
-                onAddItem={handleAddItems}
-                onRemoveItem={handleRemoveItem}
-            />
+            {poDetails && (
+                <PurchaseOrderModal
+                    isOpen={isOrderModalOpen}
+                    onClose={onOrderModalClose}
+                    poDetails={poDetails}
+                    editedPrices={editedPrices}
+                    setEditedPrices={setEditedPrices}
+                    editedQuantities={editedQuantities}
+                    setEditedQuantities={setEditedQuantities}
+                    isSaving={isSaving}
+                    onSave={handleSaveOrder}
+                    onApprove={handleConfirmOrderUpdate}
+                    onAddItem={handleAddItems}
+                    onRemoveItem={handleRemoveItem}
+                />
+            )}
+
 
             <AlertDialog
                 isOpen={isConfirmDialogOpen}

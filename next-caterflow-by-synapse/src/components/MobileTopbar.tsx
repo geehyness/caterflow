@@ -1,39 +1,40 @@
 // components/MobileTopbar.tsx
 'use client';
 
-import { Flex, IconButton, Heading, Box } from '@chakra-ui/react';
+import { Flex, IconButton, Heading, Box, useColorModeValue } from '@chakra-ui/react';
 import { HamburgerIcon } from '@chakra-ui/icons';
 import { useSidebar } from '@/context/SidebarContext';
 import Image from 'next/image';
 
 export const MobileTopbar = () => {
-    const { toggleSidebar, isOpen } = useSidebar();
+    const { toggleSidebar } = useSidebar();
 
-    console.log('MobileTopbar - Sidebar isOpen:', isOpen); // Debug log
+    // 1. Define theme-aware colors using tokens from your theme.ts
+    const bg = useColorModeValue('neutral.light.bg-header', 'neutral.dark.bg-header');
+    const borderColor = useColorModeValue('neutral.light.border-color', 'neutral.dark.border-color');
+    const headingColor = useColorModeValue('brand.500', 'brand.300'); // Use a lighter brand color in dark mode for contrast
 
     return (
         <Flex
+            as="header" // 2. Use semantic HTML for accessibility
             position="fixed"
             top="0"
             left="0"
             right="0"
             height="60px"
-            bg="white"
-            borderBottom="1px"
-            borderColor="gray.200"
+            bg={bg} // Use theme-based background
+            borderBottomWidth="1px" // Use explicit style prop
+            borderColor={borderColor} // Use theme-based border color
             align="center"
             px={4}
-            zIndex="sticky"
+            zIndex={1100} // 3. Set a numeric z-index for proper stacking
             display={{ base: 'flex', md: 'none' }}
         >
             <IconButton
                 aria-label="Open sidebar"
                 icon={<HamburgerIcon />}
                 variant="ghost"
-                onClick={() => {
-                    console.log('Hamburger clicked'); // Debug log
-                    toggleSidebar();
-                }}
+                onClick={toggleSidebar} // 4. Removed console.log
                 mr={3}
             />
             <Flex align="center">
@@ -41,14 +42,12 @@ export const MobileTopbar = () => {
                 <Box
                     w={8}
                     h={8}
-                    bg="white"
+                    bg="white" // This white bg is kept intentionally to make the logo stand out in both modes
                     borderRadius="md"
                     mr={2}
                     display="flex"
                     alignItems="center"
                     justifyContent="center"
-                    color="white"
-                    fontWeight="bold"
                     overflow="hidden"
                 >
                     <Image
@@ -59,7 +58,7 @@ export const MobileTopbar = () => {
                         style={{ objectFit: 'cover' }}
                     />
                 </Box>
-                <Heading size="md" color="brand.500">
+                <Heading size="md" color={headingColor}>
                     Caterflow
                 </Heading>
             </Flex>
