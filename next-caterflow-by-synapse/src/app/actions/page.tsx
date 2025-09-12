@@ -1,7 +1,7 @@
 // src/app/actions/page.tsx
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
     Box,
     Heading,
@@ -38,6 +38,12 @@ import {
     Tr,
     Th,
     Td,
+    AlertDialog,
+    AlertDialogBody,
+    AlertDialogContent,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogOverlay,
 } from '@chakra-ui/react';
 import { useAuth } from '@/context/AuthContext';
 import { FaBoxes } from 'react-icons/fa';
@@ -139,6 +145,14 @@ export default function ActionsPage() {
     const [goodsReceipts, setGoodsReceipts] = useState<GoodsReceipt[]>([]);
     const [loadingPOs, setLoadingPOs] = useState(false);
     const [loadingReceipts, setLoadingReceipts] = useState(false);
+
+
+    const [isConfirmDialogOpen, setIsConfirmDialogOpen] = useState(false);
+    const [isZeroPriceDialogOpen, setIsZeroPriceDialogOpen] = useState(false);
+    const [hasZeroPriceItems, setHasZeroPriceItems] = useState<string[]>([]);
+
+    const cancelRef = useRef<HTMLButtonElement>(null);
+
 
 
     const fetchActions = useCallback(async () => {
@@ -523,13 +537,85 @@ export default function ActionsPage() {
         }
     };
 
-    const handleApprovePO = async (action: PendingAction) => {
+    const handleSaveOrder = async () => {
+        if (!poDetails) return;
+        setIsSaving(true);
         try {
-            // First save any changes if this is a PO being edited
-            if (action.actionType === 'PurchaseOrder' && poDetails) {
-                await handleConfirmOrderUpdate();
-            }
+            const updates = poDetails.orderedItems?.map((item: any) => {
+                const newPrice = editedPrices[item._key];
+                const newQuantity = editedQuantities[item._key];
+                if (newPrice !== undefined || newQuantity !== undefined) {
+                    return fetch('/api/purchase-orders/update-item', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            poId: poDetails._id,
+                            itemKey: item._key,
+                            newPrice,
+                            newQuantity,
+                        }),
+                    });
+                }
+                return Promise.resolve();
+            });
+            if (updates) await Promise.all(updates);
 
+            toast({
+                title: 'Order Saved',
+                status: 'success',
+                duration: 3000,
+                isClosable: true,
+            });
+            onOrderModalClose();
+        } catch (error) {
+            toast({
+                title: 'Save Failed',
+                status: 'error',
+                duration: 5000,
+                isClosable: true,
+            });
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handleConfirmOrderUpdate = async () => {
+        if (!poDetails) return;
+
+        const zeroPriceItems = poDetails.orderedItems?.filter(item => {
+            const price = editedPrices[item._key] ?? item.unitPrice;
+            return price === 0;
+        }).map(item => item.stockItem?.name || 'Unknown Item') || [];
+
+        if (zeroPriceItems.length > 0) {
+            setHasZeroPriceItems(zeroPriceItems);
+            setIsZeroPriceDialogOpen(true);
+        } else {
+            setIsConfirmDialogOpen(true);
+        }
+    };
+
+    const proceedWithOrderUpdate = async () => {
+        setIsConfirmDialogOpen(false);
+        setIsZeroPriceDialogOpen(false);
+        setIsSaving(true);
+        try {
+            await handleSaveOrder();
+            if (poDetails) {
+                await handleApprovePO(poDetails);
+            }
+        } catch (error) {
+            // Errors are handled in the specific functions
+        } finally {
+            setIsSaving(false);
+            onOrderModalClose();
+        }
+    };
+
+
+
+    const handleApprovePO = async (action: PurchaseOrderDetails | PendingAction) => {
+        try {
             const response = await fetch('/api/actions/update', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -540,7 +626,8 @@ export default function ActionsPage() {
             });
 
             if (!response.ok) {
-                throw new Error('Failed to submit for approval');
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Failed to submit for approval');
             }
 
             toast({
@@ -551,13 +638,12 @@ export default function ActionsPage() {
                 isClosable: true,
             });
 
-            await refreshData();
             onOrderModalClose();
 
         } catch (error: any) {
             toast({
                 title: 'Error',
-                description: 'Failed to submit order for approval. Please try again.',
+                description: error.message || 'Failed to submit order for approval. Please try again.',
                 status: 'error',
                 duration: 5000,
                 isClosable: true,
@@ -608,71 +694,6 @@ export default function ActionsPage() {
             isClosable: true,
         });
         await fetchActions();
-    };
-
-    const handleConfirmOrderUpdate = async () => {
-        setIsSaving(true);
-        try {
-            // Update individual items with price/quantity changes
-            const updates = poDetails?.orderedItems?.map((item: any) => {
-                const newPrice = editedPrices[item._key];
-                const newQuantity = editedQuantities[item._key];
-
-                if (newPrice !== undefined || newQuantity !== undefined) {
-                    return fetch('/api/purchase-orders/update-item', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            poId: poDetails?._id,
-                            itemKey: item._key,
-                            newPrice,
-                            newQuantity,
-                        }),
-                    });
-                }
-                return Promise.resolve();
-            });
-
-            if (updates && updates.length > 0) {
-                await Promise.all(updates);
-            }
-
-            // Update the step completion status
-            const stepUpdateResponse = await fetch('/api/actions/update', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    id: selectedAction?._id,
-                    completedSteps: 1,
-                }),
-            });
-
-            if (!stepUpdateResponse.ok) {
-                throw new Error('Failed to update step completion');
-            }
-
-            toast({
-                title: 'Order Updated',
-                description: 'The purchase order has been saved successfully. You can now submit it for approval.',
-                status: 'success',
-                duration: 5000,
-                isClosable: true,
-            });
-
-            await fetchLatestPOData(poDetails?._id); await refreshData();
-
-            onOrderModalClose();
-        } catch (error) {
-            toast({
-                title: 'Error',
-                description: 'Failed to save changes. Please try again.',
-                status: 'error',
-                duration: 5000,
-                isClosable: true,
-            });
-        } finally {
-            setIsSaving(false);
-        }
     };
 
     // Add this helper function
@@ -1200,13 +1221,8 @@ export default function ActionsPage() {
                 editedQuantities={editedQuantities}
                 setEditedQuantities={setEditedQuantities}
                 isSaving={isSaving}
-                onSave={handleConfirmOrderUpdate}
-                onApprove={() => {
-                    handleConfirmOrderUpdate();
-                    if (selectedAction) {
-                        handleApprovePO(selectedAction);
-                    }
-                }}
+                onSave={handleSaveOrder}
+                onApprove={handleConfirmOrderUpdate}
                 onRemoveItem={handleRemoveItemFromPO}
             />
 
@@ -1230,6 +1246,63 @@ export default function ActionsPage() {
                 approvedPurchaseOrders={approvedPOsWithoutReceipts}
                 preSelectedPO={preSelectedPO}
             />
+
+            <AlertDialog
+                isOpen={isConfirmDialogOpen}
+                onClose={() => setIsConfirmDialogOpen(false)}
+                leastDestructiveRef={cancelRef}>
+                <AlertDialogOverlay>
+                    <AlertDialogContent>
+                        <AlertDialogHeader fontSize="lg" fontWeight="bold">
+                            Confirm Submission
+                        </AlertDialogHeader>
+                        <AlertDialogBody>
+                            Are you sure you want to submit this Purchase Order for approval?
+                            This action cannot be undone.
+                        </AlertDialogBody>
+                        <AlertDialogFooter>
+                            <Button onClick={() => setIsConfirmDialogOpen(false)}>
+                                Cancel
+                            </Button>
+                            <Button colorScheme="blue" onClick={proceedWithOrderUpdate} ml={3}>
+                                Confirm Submit
+                            </Button>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialogOverlay>
+            </AlertDialog>
+
+
+            <AlertDialog
+                isOpen={isZeroPriceDialogOpen}
+                onClose={() => setIsZeroPriceDialogOpen(false)}
+                leastDestructiveRef={cancelRef}
+            >
+                <AlertDialogOverlay>
+                    <AlertDialogContent>
+                        <AlertDialogHeader fontSize="lg" fontWeight="bold">
+                            Zero Price Warning
+                        </AlertDialogHeader>
+                        <AlertDialogBody>
+                            <Text mb={3}>The following items have a price of $0:</Text>
+                            <VStack align="start" spacing={1} mb={3}>
+                                {hasZeroPriceItems.map((itemName, index) => (
+                                    <Text key={index} fontSize="sm">• {itemName}</Text>
+                                ))}
+                            </VStack>
+                            <Text>Are you sure you want to proceed with zero prices?</Text>
+                        </AlertDialogBody>
+                        <AlertDialogFooter>
+                            <Button onClick={() => setIsZeroPriceDialogOpen(false)}>
+                                Cancel
+                            </Button>
+                            <Button colorScheme="orange" onClick={proceedWithOrderUpdate} ml={3}>
+                                Proceed Anyway
+                            </Button>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialogOverlay>
+            </AlertDialog>
         </Box>
     );
 }
