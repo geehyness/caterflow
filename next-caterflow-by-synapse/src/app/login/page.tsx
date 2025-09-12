@@ -14,7 +14,7 @@ import {
   useColorModeValue,
   Spinner
 } from '@chakra-ui/react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 
 export default function LoginPage() {
@@ -24,18 +24,22 @@ export default function LoginPage() {
 
   const toast = useToast();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { login, isAuthenticated, isAuthReady } = useAuth();
 
   const bgColor = useColorModeValue('white', 'gray.800');
   const formBgColor = useColorModeValue('gray.50', 'gray.700');
   const textColor = useColorModeValue('gray.800', 'whiteAlpha.900');
 
+  // Get the redirect parameter from URL
+  const redirect = searchParams.get('redirect') || '/';
+
   useEffect(() => {
     // Redirect if already logged in
     if (isAuthReady && isAuthenticated) {
-      router.push('/');
+      router.push(redirect);
     }
-  }, [isAuthenticated, isAuthReady, router]);
+  }, [isAuthenticated, isAuthReady, router, redirect]);
 
   const handleLogin = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -52,6 +56,9 @@ export default function LoginPage() {
         duration: 5000,
         isClosable: true,
       });
+    } else {
+      // On successful login, redirect to the intended page
+      router.push(redirect);
     }
   };
 

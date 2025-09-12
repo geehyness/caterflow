@@ -18,7 +18,7 @@ export async function middleware(request: NextRequest) {
   const protectedRoutes = {
     '/': ['admin', 'siteManager', 'stockController', 'dispatchStaff', 'auditor'],
     '/actions': ['admin', 'siteManager', 'stockController', 'dispatchStaff'],
-    '/approvals': ['admin', 'siteManager'], // New route for approvals
+    '/approvals': ['admin', 'siteManager'],
     '/activity': ['admin', 'siteManager', 'stockController', 'auditor'],
     '/low-stock': ['admin', 'siteManager', 'stockController', 'auditor'],
     '/inventory': ['admin', 'siteManager', 'stockController', 'auditor'],
@@ -58,7 +58,10 @@ export async function middleware(request: NextRequest) {
   if (isProtectedRoute && !authToken) {
     const url = request.nextUrl.clone();
     url.pathname = '/login';
-    url.searchParams.set('redirect', pathname);
+    // Only set redirect param if we're not already going to login and it's not the dashboard
+    if (pathname !== '/') {
+      url.searchParams.set('redirect', pathname);
+    }
     console.log(`[Middleware] ACTION: Redirecting to login from ${pathname} (no auth token).`);
     console.log(`--- Middleware End ---\n`);
     return NextResponse.redirect(url);
@@ -89,7 +92,7 @@ export const config = {
     '/',
     '/login',
     '/actions',
-    '/approvals', // New matcher for approvals page
+    '/approvals',
     '/activity',
     '/low-stock',
     '/inventory/:path*',
