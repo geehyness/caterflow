@@ -1,0 +1,263 @@
+Download the React DevTools for a better development experience: https://react.dev/link/react-devtools react-dom-client.development.js:25631:17
+./src/app/actions/page.tsx
+Attempted import error: 'useActionMutations' is not exported from '@/hooks/useMutations' (imported as 'useActionMutations'). 2 hot-reloader-app.js:242:33
+Sidebar component - isMobile: true isOpen: false 2 Sidebar.tsx:566:13
+Sidebar component - isMobile: false isOpen: false 2 Sidebar.tsx:566:13
+Image with src "/icons/icon-512x512.png" was detected as the Largest Contentful Paint (LCP). Please add the "priority" property if this image is above the fold.
+Read more: https://nextjs.org/docs/api-reference/next/image#priority warn-once.js:16:21
+The resource at “http://localhost:3000/_next/static/media/e4af272ccee01ff0-s.p.woff2” preloaded with link preload was not used within a few seconds. Make sure all attributes of the preload tag are set correctly. purchases
+[Fast Refresh] rebuilding hot-reloader-app.js:197:29
+./src/app/actions/page.tsx
+Attempted import error: 'useActionMutations' is not exported from '@/hooks/useMutations' (imported as 'useActionMutations').
+
+Import trace for requested module:
+./src/app/actions/page.tsx 2 hot-reloader-app.js:242:33
+[Fast Refresh] done in 29259ms report-hmr-latency.js:14:13
+[Fast Refresh] rebuilding hot-reloader-app.js:197:29
+./src/app/operations/purchases/page.tsx
+Module parse failed: Identifier 'approvePO' has already been declared (157:26)
+|     });
+|     // ADD this custom hook (place it near the top with other hooks):
+>     const { updatePOItem, approvePO } = usePOMutations();
+|     useEffect({
+|         "PurchasesPage.useEffect": ()=>{
+
+Import trace for requested module:
+./src/app/operations/purchases/page.tsx intercept-console-error.js:57:32
+Object { file: {…} }
+index.js:1631:403572
+./src/app/operations/purchases/page.tsx
+Module parse failed: Identifier 'approvePO' has already been declared (163:26)
+|     });
+|     // ADD this custom hook (place it near the top with other hooks):
+>     const { updatePOItem, approvePO } = usePOMutations();
+|     useEffect({
+|         "PurchasesPage.useEffect": ()=>{
+
+Import trace for requested module:
+./src/app/operations/purchases/page.tsx intercept-console-error.js:57:32
+[Fast Refresh] rebuilding hot-reloader-app.js:197:29
+Object { file: {…} }
+index.js:1631:403572
+./src/app/operations/purchases/page.tsx
+Module parse failed: Identifier 'approvePO' has already been declared (157:26)
+|     });
+|     // ADD this custom hook (place it near the top with other hooks):
+>     const { updatePOItem, approvePO } = usePOMutations();
+|     useEffect({
+|         "PurchasesPage.useEffect": ()=>{
+
+Import trace for requested module:
+./src/app/operations/purchases/page.tsx intercept-console-error.js:57:32
+Object { file: {…} }
+index.js:1631:403572
+./src/app/operations/purchases/page.tsx
+Module parse failed: Identifier 'approvePO' has already been declared (163:26)
+|     });
+|     // ADD this custom hook (place it near the top with other hooks):
+>     const { updatePOItem, approvePO } = usePOMutations();
+|     useEffect({
+|         "PurchasesPage.useEffect": ()=>{
+
+Import trace for requested module:
+./src/app/operations/purchases/page.tsx intercept-console-error.js:57:32
+Object { file: {…} }
+index.js:1631:403572
+[Fast Refresh] rebuilding hot-reloader-app.js:197:29
+./src/app/actions/page.tsx
+Attempted import error: 'useActionMutations' is not exported from '@/hooks/useMutations' (imported as 'useActionMutations').
+
+Import trace for requested module:
+./src/app/actions/page.tsx 2 hot-reloader-app.js:242:33
+[Fast Refresh] done in 10745ms report-hmr-latency.js:14:13
+[Fast Refresh] rebuilding hot-reloader-app.js:197:29
+./src/app/actions/page.tsx
+Attempted import error: 'useActionMutations' is not exported from '@/hooks/useMutations' (imported as 'useActionMutations').
+
+Import trace for requested module:
+./src/app/actions/page.tsx 2 hot-reloader-app.js:242:33
+[Fast Refresh] done in 18157ms report-hmr-latency.js:14:13
+[Fast Refresh] rebuilding hot-reloader-app.js:197:29
+./src/app/actions/page.tsx
+Attempted import error: 'useActionMutations' is not exported from '@/hooks/useMutations' (imported as 'useActionMutations').
+
+Import trace for requested module:
+./src/app/actions/page.tsx 2 hot-reloader-app.js:242:33
+[Fast Refresh] done in 4955ms report-hmr-latency.js:14:13
+[Fast Refresh] rebuilding hot-reloader-app.js:197:29
+./src/app/actions/page.tsx
+Attempted import error: 'useActionMutations' is not exported from '@/hooks/useMutations' (imported as 'useActionMutations').
+
+Import trace for requested module:
+./src/app/actions/page.tsx 2 hot-reloader-app.js:242:33
+[Fast Refresh] done in 5101ms report-hmr-latency.js:14:13
+[Fast Refresh] rebuilding hot-reloader-app.js:197:29
+./src/app/actions/page.tsx
+Attempted import error: 'useActionMutations' is not exported from '@/hooks/useMutations' (imported as 'useActionMutations').
+
+Import trace for requested module:
+./src/app/actions/page.tsx 2 hot-reloader-app.js:242:33
+[Fast Refresh] done in 3425ms report-hmr-latency.js:14:13
+🚪 MODAL RENDERED: 
+Object { isOpen: true, hasPoDetails: true, poDetailsId: "h5VnHE-XrPUXWXHiN4yUB", editedPricesCount: 0, editedQuantitiesCount: 0 }
+PurchaseOrderModal.tsx:52:13
+🚪 MODAL RENDERED: 
+Object { isOpen: true, hasPoDetails: true, poDetailsId: "h5VnHE-XrPUXWXHiN4yUB", editedPricesCount: 0, editedQuantitiesCount: 0 }
+PurchaseOrderModal.tsx:52:13
+📦 Quantity change: 
+Object { itemKey: "zw9o7c13z", newValue: 2, oldValue: undefined, inputValue: "2" }
+PurchaseOrderModal.tsx:372:17
+🚪 MODAL RENDERED: 
+Object { isOpen: true, hasPoDetails: true, poDetailsId: "h5VnHE-XrPUXWXHiN4yUB", editedPricesCount: 0, editedQuantitiesCount: 1 }
+PurchaseOrderModal.tsx:52:13
+🚪 MODAL RENDERED: 
+Object { isOpen: true, hasPoDetails: true, poDetailsId: "h5VnHE-XrPUXWXHiN4yUB", editedPricesCount: 0, editedQuantitiesCount: 1 }
+PurchaseOrderModal.tsx:52:13
+📦 Quantity change: 
+Object { itemKey: "zw9o7c13z", newValue: 2, oldValue: 2, inputValue: "2" }
+PurchaseOrderModal.tsx:372:17
+🚪 MODAL RENDERED: 
+Object { isOpen: true, hasPoDetails: true, poDetailsId: "h5VnHE-XrPUXWXHiN4yUB", editedPricesCount: 0, editedQuantitiesCount: 1 }
+PurchaseOrderModal.tsx:52:13
+🚪 MODAL RENDERED: 
+Object { isOpen: true, hasPoDetails: true, poDetailsId: "h5VnHE-XrPUXWXHiN4yUB", editedPricesCount: 0, editedQuantitiesCount: 1 }
+PurchaseOrderModal.tsx:52:13
+🚪 MODAL RENDERED: 
+Object { isOpen: true, hasPoDetails: true, poDetailsId: "h5VnHE-XrPUXWXHiN4yUB", editedPricesCount: 0, editedQuantitiesCount: 1 }
+PurchaseOrderModal.tsx:52:13
+🚪 MODAL RENDERED: 
+Object { isOpen: true, hasPoDetails: true, poDetailsId: "h5VnHE-XrPUXWXHiN4yUB", editedPricesCount: 0, editedQuantitiesCount: 1 }
+PurchaseOrderModal.tsx:52:13
+🚪 MODAL RENDERED: 
+Object { isOpen: true, hasPoDetails: true, poDetailsId: "h5VnHE-XrPUXWXHiN4yUB", editedPricesCount: 0, editedQuantitiesCount: 1 }
+PurchaseOrderModal.tsx:52:13
+🚪 MODAL RENDERED: 
+Object { isOpen: true, hasPoDetails: true, poDetailsId: "h5VnHE-XrPUXWXHiN4yUB", editedPricesCount: 0, editedQuantitiesCount: 1 }
+PurchaseOrderModal.tsx:52:13
+[Fast Refresh] rebuilding hot-reloader-app.js:197:29
+./src/app/actions/page.tsx
+Attempted import error: 'useActionMutations' is not exported from '@/hooks/useMutations' (imported as 'useActionMutations').
+
+Import trace for requested module:
+./src/app/actions/page.tsx 2 hot-reloader-app.js:242:33
+[Fast Refresh] done in 8255ms report-hmr-latency.js:14:13
+🚪 MODAL RENDERED: 
+Object { isOpen: true, hasPoDetails: true, poDetailsId: "h5VnHE-XrPUXWXHiN4yUB", editedPricesCount: 0, editedQuantitiesCount: 1 }
+PurchaseOrderModal.tsx:52:13
+🚪 MODAL RENDERED: 
+Object { isOpen: true, hasPoDetails: true, poDetailsId: "h5VnHE-XrPUXWXHiN4yUB", editedPricesCount: 0, editedQuantitiesCount: 1 }
+PurchaseOrderModal.tsx:52:13
+🚪 MODAL RENDERED: 
+Object { isOpen: true, hasPoDetails: true, poDetailsId: "h5VnHE-XrPUXWXHiN4yUB", editedPricesCount: 0, editedQuantitiesCount: 1 }
+PurchaseOrderModal.tsx:52:13
+🚪 MODAL RENDERED: 
+Object { isOpen: true, hasPoDetails: true, poDetailsId: "h5VnHE-XrPUXWXHiN4yUB", editedPricesCount: 0, editedQuantitiesCount: 1 }
+PurchaseOrderModal.tsx:52:13
+🚪 MODAL RENDERED: 
+Object { isOpen: true, hasPoDetails: true, poDetailsId: "h5VnHE-XrPUXWXHiN4yUB", editedPricesCount: 0, editedQuantitiesCount: 1 }
+PurchaseOrderModal.tsx:52:13
+🚪 MODAL RENDERED: 
+Object { isOpen: true, hasPoDetails: true, poDetailsId: "h5VnHE-XrPUXWXHiN4yUB", editedPricesCount: 0, editedQuantitiesCount: 1 }
+PurchaseOrderModal.tsx:52:13
+[Fast Refresh] rebuilding hot-reloader-app.js:197:29
+🚪 MODAL RENDERED: 
+Object { isOpen: true, hasPoDetails: true, poDetailsId: "h5VnHE-XrPUXWXHiN4yUB", editedPricesCount: 0, editedQuantitiesCount: 1 }
+PurchaseOrderModal.tsx:52:13
+🚪 MODAL RENDERED: 
+Object { isOpen: true, hasPoDetails: true, poDetailsId: "h5VnHE-XrPUXWXHiN4yUB", editedPricesCount: 0, editedQuantitiesCount: 1 }
+PurchaseOrderModal.tsx:52:13
+./src/app/actions/page.tsx
+Attempted import error: 'useActionMutations' is not exported from '@/hooks/useMutations' (imported as 'useActionMutations').
+
+Import trace for requested module:
+./src/app/actions/page.tsx 2 hot-reloader-app.js:242:33
+🚪 MODAL RENDERED: 
+Object { isOpen: true, hasPoDetails: true, poDetailsId: "h5VnHE-XrPUXWXHiN4yUB", editedPricesCount: 0, editedQuantitiesCount: 1 }
+PurchaseOrderModal.tsx:52:13
+🚪 MODAL RENDERED: 
+Object { isOpen: true, hasPoDetails: true, poDetailsId: "h5VnHE-XrPUXWXHiN4yUB", editedPricesCount: 0, editedQuantitiesCount: 1 }
+PurchaseOrderModal.tsx:52:13
+[Fast Refresh] done in 4450ms report-hmr-latency.js:14:13
+🚪 MODAL RENDERED: 
+Object { isOpen: true, hasPoDetails: true, poDetailsId: "h5VnHE-XrPUXWXHiN4yUB", editedPricesCount: 0, editedQuantitiesCount: 1 }
+PurchaseOrderModal.tsx:52:13
+🚪 MODAL RENDERED: 
+Object { isOpen: true, hasPoDetails: true, poDetailsId: "h5VnHE-XrPUXWXHiN4yUB", editedPricesCount: 0, editedQuantitiesCount: 1 }
+PurchaseOrderModal.tsx:52:13
+Download the React DevTools for a better development experience: https://react.dev/link/react-devtools react-dom-client.development.js:25631:17
+Sidebar component - isMobile: true isOpen: false 2 Sidebar.tsx:566:13
+Sidebar component - isMobile: false isOpen: false 2 Sidebar.tsx:566:13
+The resource at “http://localhost:3000/_next/static/media/e4af272ccee01ff0-s.p.woff2” preloaded with link preload was not used within a few seconds. Make sure all attributes of the preload tag are set correctly. purchases
+[Fast Refresh] rebuilding hot-reloader-app.js:197:29
+[Fast Refresh] rebuilding hot-reloader-app.js:197:29
+[Fast Refresh] done in 3102ms report-hmr-latency.js:14:13
+Image with src "/icons/icon-512x512.png" was detected as the Largest Contentful Paint (LCP). Please add the "priority" property if this image is above the fold.
+Read more: https://nextjs.org/docs/api-reference/next/image#priority warn-once.js:16:21
+[Fast Refresh] done in 6499ms report-hmr-latency.js:14:13
+🚪 MODAL RENDERED: 
+Object { isOpen: true, hasPoDetails: true, poDetailsId: "h5VnHE-XrPUXWXHiN4yUB", editedPricesCount: 0, editedQuantitiesCount: 0 }
+PurchaseOrderModal.tsx:52:13
+🚪 MODAL RENDERED: 
+Object { isOpen: true, hasPoDetails: true, poDetailsId: "h5VnHE-XrPUXWXHiN4yUB", editedPricesCount: 0, editedQuantitiesCount: 0 }
+PurchaseOrderModal.tsx:52:13
+📦 Quantity change: 
+Object { itemKey: "zw9o7c13z", newValue: 3, oldValue: undefined, inputValue: "3" }
+PurchaseOrderModal.tsx:372:17
+🚪 MODAL RENDERED: 
+Object { isOpen: true, hasPoDetails: true, poDetailsId: "h5VnHE-XrPUXWXHiN4yUB", editedPricesCount: 0, editedQuantitiesCount: 1 }
+PurchaseOrderModal.tsx:52:13
+🚪 MODAL RENDERED: 
+Object { isOpen: true, hasPoDetails: true, poDetailsId: "h5VnHE-XrPUXWXHiN4yUB", editedPricesCount: 0, editedQuantitiesCount: 1 }
+PurchaseOrderModal.tsx:52:13
+📦 Quantity change: 
+Object { itemKey: "zw9o7c13z", newValue: 4, oldValue: 3, inputValue: "4" }
+PurchaseOrderModal.tsx:372:17
+🚪 MODAL RENDERED: 
+Object { isOpen: true, hasPoDetails: true, poDetailsId: "h5VnHE-XrPUXWXHiN4yUB", editedPricesCount: 0, editedQuantitiesCount: 1 }
+PurchaseOrderModal.tsx:52:13
+🚪 MODAL RENDERED: 
+Object { isOpen: true, hasPoDetails: true, poDetailsId: "h5VnHE-XrPUXWXHiN4yUB", editedPricesCount: 0, editedQuantitiesCount: 1 }
+PurchaseOrderModal.tsx:52:13
+📦 Quantity change: 
+Object { itemKey: "zw9o7c13z", newValue: 4, oldValue: 4, inputValue: "4" }
+PurchaseOrderModal.tsx:372:17
+🚪 MODAL RENDERED: 
+Object { isOpen: true, hasPoDetails: true, poDetailsId: "h5VnHE-XrPUXWXHiN4yUB", editedPricesCount: 0, editedQuantitiesCount: 1 }
+PurchaseOrderModal.tsx:52:13
+🚪 MODAL RENDERED: 
+Object { isOpen: true, hasPoDetails: true, poDetailsId: "h5VnHE-XrPUXWXHiN4yUB", editedPricesCount: 0, editedQuantitiesCount: 1 }
+PurchaseOrderModal.tsx:52:13
+XHRPOST
+http://localhost:3000/api/purchase-orders/update-items
+[HTTP/1.1 500 Internal Server Error 8424ms]
+
+🚪 MODAL RENDERED: 
+Object { isOpen: true, hasPoDetails: true, poDetailsId: "h5VnHE-XrPUXWXHiN4yUB", editedPricesCount: 0, editedQuantitiesCount: 1 }
+PurchaseOrderModal.tsx:52:13
+🚪 MODAL RENDERED: 
+Object { isOpen: true, hasPoDetails: true, poDetailsId: "h5VnHE-XrPUXWXHiN4yUB", editedPricesCount: 0, editedQuantitiesCount: 1 }
+PurchaseOrderModal.tsx:52:13
+🚪 MODAL RENDERED: 
+Object { isOpen: true, hasPoDetails: true, poDetailsId: "h5VnHE-XrPUXWXHiN4yUB", editedPricesCount: 0, editedQuantitiesCount: 1 }
+PurchaseOrderModal.tsx:52:13
+🚪 MODAL RENDERED: 
+Object { isOpen: true, hasPoDetails: true, poDetailsId: "h5VnHE-XrPUXWXHiN4yUB", editedPricesCount: 0, editedQuantitiesCount: 1 }
+PurchaseOrderModal.tsx:52:13
+[Fast Refresh] rebuilding hot-reloader-app.js:197:29
+[Fast Refresh] done in 5191ms report-hmr-latency.js:14:13
+🚪 MODAL RENDERED: 
+Object { isOpen: true, hasPoDetails: true, poDetailsId: "h5VnHE-XrPUXWXHiN4yUB", editedPricesCount: 0, editedQuantitiesCount: 1 }
+PurchaseOrderModal.tsx:52:13
+🚪 MODAL RENDERED: 
+Object { isOpen: true, hasPoDetails: true, poDetailsId: "h5VnHE-XrPUXWXHiN4yUB", editedPricesCount: 0, editedQuantitiesCount: 1 }
+PurchaseOrderModal.tsx:52:13
+XHRPOST
+http://localhost:3000/api/purchase-orders/update-items
+[HTTP/1.1 500 Internal Server Error 1861ms]
+
+🚪 MODAL RENDERED: 
+Object { isOpen: true, hasPoDetails: true, poDetailsId: "h5VnHE-XrPUXWXHiN4yUB", editedPricesCount: 0, editedQuantitiesCount: 1 }
+PurchaseOrderModal.tsx:52:13
+🚪 MODAL RENDERED: 
+Object { isOpen: true, hasPoDetails: true, poDetailsId: "h5VnHE-XrPUXWXHiN4yUB", editedPricesCount: 0, editedQuantitiesCount: 1 }
+PurchaseOrderModal.tsx:52:13
