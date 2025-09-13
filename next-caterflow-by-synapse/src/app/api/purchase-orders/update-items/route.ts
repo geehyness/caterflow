@@ -2,6 +2,7 @@
 import { NextResponse } from 'next/server';
 import { writeClient } from '@/lib/sanity';
 
+// Alternative: Update the entire array
 export async function POST(request: Request) {
     try {
         const { poId, updates } = await request.json();
@@ -9,50 +10,38 @@ export async function POST(request: Request) {
         console.log('API received update request:', { poId, updates });
 
         if (!poId || !updates || !Array.isArray(updates)) {
-            console.error('Missing required fields');
             return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
         }
 
-        // First, fetch the current PO to validate structure
+        // Fetch the current PO
         const currentPO = await writeClient.fetch(`*[_id == $poId][0]`, { poId });
         if (!currentPO) {
             return NextResponse.json({ error: 'Purchase order not found' }, { status: 404 });
         }
 
-        const transaction = writeClient.transaction();
-
-        for (const update of updates) {
-            console.log('Processing update:', update);
-
-            // For nested objects, we need to replace the entire array item
-            const currentItem = currentPO.orderedItems.find((item: any) => item._key === update.itemKey);
-
-            if (!currentItem) {
-                console.error(`Item with key ${update.itemKey} not found`);
-                continue;
+        // Create updated orderedItems array
+        const updatedOrderedItems = currentPO.orderedItems.map((item: any) => {
+            const update = updates.find(u => u.itemKey === item._key);
+            if (update) {
+                return {
+                    ...item,
+                    unitPrice: update.newPrice !== undefined ? update.newPrice : item.unitPrice,
+                    orderedQuantity: update.newQuantity !== undefined ? update.newQuantity : item.orderedQuantity,
+                    priceManuallyUpdated: update.newPrice !== undefined ? true : item.priceManuallyUpdated
+                };
             }
+            return item;
+        });
 
-            // Create updated item with all required fields
-            const updatedItem = {
-                ...currentItem,
-                unitPrice: update.newPrice !== undefined ? update.newPrice : currentItem.unitPrice,
-                orderedQuantity: update.newQuantity !== undefined ? update.newQuantity : currentItem.orderedQuantity,
-                priceManuallyUpdated: update.newPrice !== undefined ? true : currentItem.priceManuallyUpdated
-            };
+        // Update the entire orderedItems array
+        const result = await writeClient
+            .patch(poId)
+            .set({ orderedItems: updatedOrderedItems })
+            .commit();
 
-            // Remove the old item and add the updated one
-            transaction.patch(poId, (patch) =>
-                patch
-                    .unset([`orderedItems[_key=="${update.itemKey}"]`])
-                    .insert('after', 'orderedItems[-1]', [updatedItem])
-            );
-        }
+        console.log('Update successful:', result);
 
-        console.log('Committing transaction...');
-        const result = await transaction.commit();
-        console.log('Transaction committed successfully:', result);
-
-        // Fetch the updated PO with proper structure
+        // Fetch the updated PO
         const query = `*[_id == $poId][0]{
             _id,
             _type,
@@ -72,16 +61,8 @@ export async function POST(request: Request) {
             "supplierNames": coalesce(orderedItems[].supplier->name, []) |> unique() |> join(", ")
         }`;
 
-        console.log('Fetching updated PO...');
         const updatedPO = await writeClient.fetch(query, { poId });
 
-        if (!updatedPO) {
-            throw new Error('Failed to fetch updated purchase order');
-        }
-
-        console.log('Updated PO fetched successfully');
-
-        // Transform to match frontend structure
         const transformedPO = {
             ...updatedPO,
             siteName: updatedPO.site?.name || '',
@@ -99,13 +80,8 @@ export async function POST(request: Request) {
 
     } catch (error: any) {
         console.error('Failed to update items:', error);
-
         return NextResponse.json(
-            {
-                error: 'Failed to update items',
-                details: error.message,
-                stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
-            },
+            { error: 'Failed to update items', details: error.message },
             { status: 500 }
         );
     }
