@@ -55,9 +55,13 @@ export async function POST(request: Request) {
 
         await transaction.commit();
 
+        // Return the updated data for optimistic updates
+        const updatedPO = await writeClient.getDocument(poId);
+
         return NextResponse.json({
             success: true,
             message: 'Item updated successfully',
+            updatedPO,
             updatedFields: {
                 ...(newPrice !== undefined && { price: newPrice }),
                 ...(newQuantity !== undefined && { quantity: newQuantity })

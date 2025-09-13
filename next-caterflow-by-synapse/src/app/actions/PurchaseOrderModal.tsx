@@ -9,8 +9,10 @@ import {
     useColorModeValue, AlertDialog, AlertDialogBody, AlertDialogFooter,
     AlertDialogHeader, AlertDialogContent, AlertDialogOverlay, useToast, ModalCloseButton,
 } from '@chakra-ui/react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { FaBoxes, FaCheck, FaSave } from 'react-icons/fa';
 import { Dispatch, SetStateAction, useMemo, useRef, useState } from 'react';
+import { usePOMutations } from '@/hooks/useMutations';
 
 // Interfaces remain the same...
 export interface OrderedItem {
@@ -65,6 +67,9 @@ export default function PurchaseOrderModal({
     editedQuantities, setEditedQuantities, isSaving, onSave,
     onApprove, onRemoveItem,
 }: PurchaseOrderModalProps) {
+
+    const { updatePOItem, approvePO } = usePOMutations();
+
     // Theme-based colors
     const primaryTextColor = useColorModeValue('neutral.light.text-primary', 'neutral.dark.text-primary');
     const secondaryTextColor = useColorModeValue('neutral.light.text-secondary', 'neutral.dark.text-secondary');
@@ -75,6 +80,271 @@ export default function PurchaseOrderModal({
     const [hasZeroPriceItems, setHasZeroPriceItems] = useState<string[]>([]);
     const cancelRef = useRef<HTMLButtonElement>(null);
     const toast = useToast();
+
+    // Get query client
+    const queryClient = useQueryClient();
+
+    // ADD this mutation for saving order items with optimistic updates
+    const saveOrderMutation = useMutation({
+        mutationFn: async (updateData: {
+            poId: string;
+            updates: { itemKey: string; newPrice?: number; newQuantity?: number }[]
+        }) => {
+            const updatePromises = updateData.updates.map(update =>
+                fetch('/api/purchase-orders/update-item', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        poId: updateData.poId,
+                        itemKey: update.itemKey,
+                        newPrice: update.newPrice,
+                        newQuantity: update.newQuantity,
+                    }),
+                })
+            );
+
+            const responses = await Promise.all(updatePromises);
+            const errors = responses.filter(response => !response.ok);
+
+            if (errors.length > 0) {
+                throw new Error('Failed to update some items');
+            }
+
+            return responses.map(response => response.json());
+        },
+        onMutate: async (updateData) => {
+            // Cancel any outgoing refetches
+            await queryClient.cancelQueries({ queryKey: ['purchaseOrders'] });
+
+            // Snapshot the previous value
+            const previousOrders = queryClient.getQueryData(['purchaseOrders']);
+
+            // Optimistically update the purchase orders
+            queryClient.setQueryData(['purchaseOrders'], (old: PurchaseOrderDetails[] | undefined) =>
+                old?.map(order => {
+                    if (order._id === updateData.poId) {
+                        const updatedItems = order.orderedItems?.map(item => {
+                            const update = updateData.updates.find(u => u.itemKey === item._key);
+                            if (update) {
+                                return {
+                                    ...item,
+                                    unitPrice: update.newPrice ?? item.unitPrice,
+                                    orderedQuantity: update.newQuantity ?? item.orderedQuantity,
+                                };
+                            }
+                            return item;
+                        });
+
+                        // Recalculate total amount
+                        const totalAmount = updatedItems?.reduce((sum, item) =>
+                            sum + (item.orderedQuantity * item.unitPrice), 0) || 0;
+
+                        return {
+                            ...order,
+                            orderedItems: updatedItems,
+                            totalAmount
+                        };
+                    }
+                    return order;
+                })
+            );
+
+            return { previousOrders };
+        },
+        onError: (err, variables, context) => {
+            // Roll back the optimistic update on failure
+            if (context?.previousOrders) {
+                queryClient.setQueryData(['purchaseOrders'], context.previousOrders);
+            }
+
+            toast({
+                title: 'Save Failed',
+                description: err.message || 'Failed to save order changes',
+                status: 'error',
+                duration: 5000,
+                isClosable: true,
+            });
+        },
+        onSuccess: () => {
+            toast({
+                title: 'Order Saved',
+                status: 'success',
+                duration: 3000,
+                isClosable: true,
+            });
+        },
+        onSettled: () => {
+            // Invalidate the cache to ensure the server state is refetched
+            queryClient.invalidateQueries({ queryKey: ['purchaseOrders'] });
+        },
+    });
+
+    // UPDATED handleSaveOrder function
+    const handleSaveOrder = async () => {
+        if (!poDetails) return;
+
+        try {
+            const updates = poDetails.orderedItems
+                ?.filter(item => {
+                    const newPrice = editedPrices[item._key];
+                    const newQuantity = editedQuantities[item._key];
+                    return newPrice !== undefined || newQuantity !== undefined;
+                })
+                .map(item => ({
+                    itemKey: item._key,
+                    newPrice: editedPrices[item._key],
+                    newQuantity: editedQuantities[item._key],
+                })) || [];
+
+            if (updates.length > 0) {
+                await saveOrderMutation.mutateAsync({
+                    poId: poDetails._id,
+                    updates,
+                });
+            } else {
+                toast({
+                    title: 'No changes to save',
+                    status: 'info',
+                    duration: 3000,
+                    isClosable: true,
+                });
+            }
+
+            onClose();
+        } catch (error) {
+            // Error is handled by the mutation
+        }
+    };
+
+    // Mutation for approving PO
+    const approvePOMutation = useMutation({
+        mutationFn: async (poId: string) => {
+            const response = await fetch('/api/actions/update', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    id: poId,
+                    status: 'pending-approval',
+                }),
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to submit for approval');
+            }
+            return response.json();
+        },
+        onMutate: async (poId) => {
+            // Optimistically update the PO status
+            queryClient.setQueryData(['purchaseOrders'], (old: PurchaseOrderDetails[] | undefined) =>
+                old?.map(po => po._id === poId ? { ...po, status: 'pending-approval' } : po)
+            );
+        },
+        onError: (err, poId, context) => {
+            toast({ title: 'Error approving PO', description: err.message, status: 'error' });
+        },
+        onSuccess: () => {
+            toast({
+                title: 'Order Submitted',
+                description: 'The purchase order has been submitted for approval.',
+                status: 'success',
+                duration: 5000,
+                isClosable: true,
+            });
+            onClose();
+        },
+        onSettled: () => {
+            queryClient.invalidateQueries({ queryKey: ['purchaseOrders'] });
+            queryClient.invalidateQueries({ queryKey: ['pendingActions'] });
+        },
+    });
+
+    const proceedWithApproval = () => {
+        if (poDetails?._id) {
+            approvePOMutation.mutate(poDetails._id);
+        }
+        setIsConfirmDialogOpen(false);
+        setIsZeroPriceDialogOpen(false);
+    };
+
+    // Mutation for updating PO items
+    const updatePOItemsMutation = useMutation({
+        mutationFn: async (updateData: { poId: string; itemKey: string; newPrice?: number; newQuantity?: number }) => {
+            const response = await fetch('/api/purchase-orders/update-item', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(updateData),
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to update PO item');
+            }
+            return response.json();
+        },
+        onMutate: async (updateData) => {
+            // Optimistically update the PO details
+            if (poDetails) {
+                const updatedItems = poDetails.orderedItems?.map(item => {
+                    if (item._key === updateData.itemKey) {
+                        return {
+                            ...item,
+                            unitPrice: updateData.newPrice ?? item.unitPrice,
+                            orderedQuantity: updateData.newQuantity ?? item.orderedQuantity,
+                        };
+                    }
+                    return item;
+                });
+
+                queryClient.setQueryData(['purchaseOrder', poDetails._id], (old: PurchaseOrderDetails | undefined) =>
+                    old ? { ...old, orderedItems: updatedItems } : old
+                );
+            }
+        },
+        onError: (err) => {
+            toast({ title: 'Error updating item', description: err.message, status: 'error' });
+        },
+        onSettled: () => {
+            queryClient.invalidateQueries({ queryKey: ['purchaseOrders'] });
+            queryClient.invalidateQueries({ queryKey: ['purchaseOrder', poDetails?._id] });
+        },
+    });
+
+
+
+    // Mutation hook for approving a purchase order
+    const approvePurchaseOrderMutation = useMutation({
+        mutationFn: async (poId: string) => {
+            const res = await fetch(`/api/purchase-orders/${poId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: 'approved' }),
+            });
+            if (!res.ok) {
+                throw new Error('Failed to approve purchase order');
+            }
+            return res.json();
+        },
+        onMutate: async (poId: string) => {
+            // Cancel any outgoing refetches so they don't overwrite our optimistic update
+            await queryClient.cancelQueries({ queryKey: ['purchaseOrders'] });
+            // Snapshot the previous value
+            const previousPOs = queryClient.getQueryData(['purchaseOrders']);
+            // Optimistically update to the new value
+            queryClient.setQueryData(['purchaseOrders'], (old: PurchaseOrderDetails[] | undefined) =>
+                old?.map(po => po._id === poId ? { ...po, status: 'approved' } : po)
+            );
+            // Return a context object with the snapshotted value
+            return { previousPOs };
+        },
+        onError: (err, poId, context) => {
+            // Roll back the optimistic update on failure
+            if (context?.previousPOs) queryClient.setQueryData(['purchaseOrders'], context.previousPOs);
+            toast({ title: 'Error approving PO', description: err.message, status: 'error' });
+        },
+        onSettled: () => {
+            // Invalidate the cache to ensure the server state is refetched
+            queryClient.invalidateQueries({ queryKey: ['purchaseOrders'] });
+        },
+    });
 
     const isEditable = poDetails?.status === 'draft';
 
@@ -133,12 +403,6 @@ export default function PurchaseOrderModal({
         } else {
             setIsConfirmDialogOpen(true);
         }
-    };
-
-    const proceedWithApproval = () => {
-        setIsConfirmDialogOpen(false);
-        setIsZeroPriceDialogOpen(false);
-        onApprove();
     };
 
     // UPDATED: Aligns with custom theme variants for Tags/Badges
@@ -275,8 +539,8 @@ export default function PurchaseOrderModal({
                                     <Button
                                         colorScheme="brand"
                                         variant="outline"
-                                        onClick={onSave}
-                                        isLoading={isSaving}
+                                        onClick={handleSaveOrder} // ✅ Use local function
+                                        isLoading={saveOrderMutation.isPending} // ✅ Use local mutation state
                                         leftIcon={<FaSave />}
                                     >
                                         Save Draft

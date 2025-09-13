@@ -29,6 +29,7 @@ export async function middleware(request: NextRequest) {
     '/operations/adjustments': ['admin', 'siteManager', 'stockController', 'auditor'],
     '/operations/counts': ['admin', 'siteManager', 'stockController', 'auditor'],
     '/admin': ['admin'],
+    '/profile': ['admin', 'siteManager', 'stockController', 'dispatchStaff', 'auditor'],
   };
 
   // Check if the current path is a protected route
@@ -98,5 +99,6 @@ export const config = {
     '/inventory/:path*',
     '/operations/:path*',
     '/admin/:path*',
+    '/profile',
   ],
 };

@@ -1,86 +1,154 @@
 // src/app/dashboard/page.tsx
 import { getStockItems, getPurchaseOrders, getAppUsers } from '@/lib/queries';
-import Link from 'next/link';
 import { AppUser } from '@/lib/sanityTypes';
+import { SimpleGrid, Card, CardHeader, CardBody, Heading, Text, Box, List, ListItem, Flex, Tag, Link as ChakraLink } from '@chakra-ui/react';
+import NextLink from 'next/link';
+
+// Helper function to get the status color
+const getStatusColor = (status: string) => {
+    switch (status) {
+        case 'received':
+            return 'green';
+        case 'ordered':
+            return 'orange';
+        case 'cancelled':
+            return 'red';
+        case 'completed':
+            return 'purple';
+        default:
+            return 'gray';
+    }
+};
 
 export default async function DashboardPage() {
     const [stockItems, purchaseOrders, appUsers] = await Promise.all([
         getStockItems(),
         getPurchaseOrders(),
-        getAppUsers()
+        getAppUsers(),
     ]);
 
     const activeUsers = appUsers.filter((user: AppUser) => user.isActive);
 
     return (
-        <div className="p-6">
-            <h1 className="text-2xl font-bold mb-6">Caterflow Dashboard</h1>
+        <Box p={6}>
+            <Heading as="h1" size="xl" mb={6} fontWeight="semibold">
+                Caterflow Dashboard
+            </Heading>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                <div className="bg-white p-4 rounded shadow">
-                    <h2 className="text-lg font-semibold">Stock Items</h2>
-                    <p className="text-3xl">{stockItems.length}</p>
-                </div>
+            {/* Summary Cards */}
+            <SimpleGrid columns={{ base: 1, md: 2, lg: 4 }} spacing={6} mb={8}>
+                <Card>
+                    <CardHeader pb={0}>
+                        <Heading as="h2" size="sm" fontWeight="semibold">
+                            Stock Items
+                        </Heading>
+                    </CardHeader>
+                    <CardBody>
+                        <Text fontSize="4xl" fontWeight="bold">
+                            {stockItems.length}
+                        </Text>
+                    </CardBody>
+                </Card>
 
-                <div className="bg-white p-4 rounded shadow">
-                    <h2 className="text-lg font-semibold">Active Users</h2>
-                    <p className="text-3xl">{activeUsers.length}</p>
-                </div>
+                <Card>
+                    <CardHeader pb={0}>
+                        <Heading as="h2" size="sm" fontWeight="semibold">
+                            Active Users
+                        </Heading>
+                    </CardHeader>
+                    <CardBody>
+                        <Text fontSize="4xl" fontWeight="bold">
+                            {activeUsers.length}
+                        </Text>
+                    </CardBody>
+                </Card>
 
-                <div className="bg-white p-4 rounded shadow">
-                    <h2 className="text-lg font-semibold">Purchase Orders</h2>
-                    <p className="text-3xl">{purchaseOrders.length}</p>
-                </div>
+                <Card>
+                    <CardHeader pb={0}>
+                        <Heading as="h2" size="sm" fontWeight="semibold">
+                            Purchase Orders
+                        </Heading>
+                    </CardHeader>
+                    <CardBody>
+                        <Text fontSize="4xl" fontWeight="bold">
+                            {purchaseOrders.length}
+                        </Text>
+                    </CardBody>
+                </Card>
 
-                <div className="bg-white p-4 rounded shadow">
-                    <h2 className="text-lg font-semibold">Pending Orders</h2>
-                    <p className="text-3xl">
-                        {purchaseOrders.filter((po: any) => po.status === 'ordered').length}
-                    </p>
-                </div>
-            </div>
+                <Card>
+                    <CardHeader pb={0}>
+                        <Heading as="h2" size="sm" fontWeight="semibold">
+                            Pending Orders
+                        </Heading>
+                    </CardHeader>
+                    <CardBody>
+                        <Text fontSize="4xl" fontWeight="bold">
+                            {purchaseOrders.filter((po: any) => po.status === 'ordered').length}
+                        </Text>
+                    </CardBody>
+                </Card>
+            </SimpleGrid>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="bg-white p-4 rounded shadow">
-                    <h2 className="text-lg font-semibold mb-4">Recent Stock Items</h2>
-                    <ul>
-                        {stockItems.slice(0, 5).map((item: any) => (
-                            <li key={item._id} className="flex justify-between py-2 border-b">
-                                <span>{item.name}</span>
-                                <span>{item.sku}</span>
-                            </li>
-                        ))}
-                    </ul>
-                    <Link href="/inventory" className="text-blue-500 mt-4 block">
-                        View All Inventory
-                    </Link>
-                </div>
+            {/* Recent Lists */}
+            <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={6}>
+                {/* Recent Stock Items List */}
+                <Card>
+                    <CardHeader>
+                        <Heading as="h2" size="md" fontWeight="semibold">
+                            Recent Stock Items
+                        </Heading>
+                    </CardHeader>
+                    <CardBody>
+                        <List spacing={3}>
+                            {stockItems.slice(0, 5).map((item: any) => (
+                                <ListItem key={item._id} borderBottom="1px solid" borderColor="neutral.border-color" pb={2}>
+                                    <Flex justifyContent="space-between" alignItems="center">
+                                        <Text>{item.name}</Text>
+                                        <Text color="neutral.text-secondary">{item.sku}</Text>
+                                    </Flex>
+                                </ListItem>
+                            ))}
+                        </List>
+                        <NextLink href="/inventory" passHref>
+                            <ChakraLink mt={4} display="block">
+                                View All Inventory
+                            </ChakraLink>
+                        </NextLink>
+                    </CardBody>
+                </Card>
 
-                <div className="bg-white p-4 rounded shadow">
-                    <h2 className="text-lg font-semibold mb-4">Recent Orders</h2>
-                    <ul>
-                        {purchaseOrders.slice(0, 5).map((order: any) => (
-                            <li key={order._id} className="py-2 border-b">
-                                <div className="flex justify-between">
-                                    <span>{order.poNumber}</span>
-                                    <span className={`px-2 py-1 rounded text-xs ${order.status === 'received' ? 'bg-green-100 text-green-800' :
-                                        order.status === 'ordered' ? 'bg-yellow-100 text-yellow-800' :
-                                            'bg-gray-100 text-gray-800'
-                                        }`}>
-                                        {order.status}
-                                    </span>
-                                </div>
-                                <div className="text-sm text-gray-500">
-                                    {order.supplier?.name || 'No Supplier'} • {new Date(order.orderDate).toLocaleDateString()}
-                                </div>
-                            </li>
-                        ))}
-                    </ul>
-                    <Link href="/operations/purchases" className="text-blue-500 mt-4 block">
-                        View All Orders
-                    </Link>
-                </div>
-            </div>
-        </div>
+                {/* Recent Orders List */}
+                <Card>
+                    <CardHeader>
+                        <Heading as="h2" size="md" fontWeight="semibold">
+                            Recent Orders
+                        </Heading>
+                    </CardHeader>
+                    <CardBody>
+                        <List spacing={3}>
+                            {purchaseOrders.slice(0, 5).map((order: any) => (
+                                <ListItem key={order._id} borderBottom="1px solid" borderColor="neutral.border-color" pb={2}>
+                                    <Flex justifyContent="space-between" alignItems="center" mb={1}>
+                                        <Text>{order.poNumber}</Text>
+                                        <Tag variant="subtle" colorScheme={getStatusColor(order.status)}>
+                                            {order.status}
+                                        </Tag>
+                                    </Flex>
+                                    <Text fontSize="sm" color="neutral.text-secondary">
+                                        {order.supplier?.name || 'No Supplier'} • {new Date(order.orderDate).toLocaleDateString()}
+                                    </Text>
+                                </ListItem>
+                            ))}
+                        </List>
+                        <NextLink href="/operations/purchases" passHref>
+                            <ChakraLink mt={4} display="block">
+                                View All Orders
+                            </ChakraLink>
+                        </NextLink>
+                    </CardBody>
+                </Card>
+            </SimpleGrid>
+        </Box>
     );
 }

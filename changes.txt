@@ -1,0 +1,303 @@
+--- a/src/app/purchases/page.tsx
++++ b/src/app/purchases/page.tsx
+@@ -29,14 +29,14 @@
+ import PurchaseOrderModal, { PurchaseOrderDetails } from '@/app/actions/PurchaseOrderModal';
+ import { PendingAction } from '@/app/actions/types';
+ import { StockItem, Category, Site } from '@/lib/sanityTypes';
+-
+-// Interfaces remain the same...
+-interface PurchaseOrderItem {
+-    stockItem: string;
+-    orderedQuantity: number;
+-    unitPrice: number;
+-    _key?: string;
+-}
++import { getPurchaseOrders, updatePurchaseOrder } from '@/lib/queries';
++import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+ 
+ export interface PurchaseOrder {
+     _id: string;
+     poNumber: string;
+     orderDate: string;
+     status: 'draft' | 'pending' | 'partially-received' | 'received' | 'cancelled' | 'approved' | 'pending-approval' | 'rejected';
+     totalAmount: number;
+     supplierName?: string;
+@@ -45,19 +45,39 @@
+ 
+ export default function PurchaseOrdersPage() {
+     const { user } = useAuth();
+-    const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
+-    const [loading, setLoading] = useState(true);
+     const [searchTerm, setSearchTerm] = useState('');
+     const [selectedPo, setSelectedPo] = useState<PurchaseOrderDetails | null>(null);
+     const [editedPrices, setEditedPrices] = useState<{ [key: string]: number | undefined }>({});
+     const [editedQuantities, setEditedQuantities] = useState<{ [key: string]: number | undefined }>({});
+-    const [isSaving, setIsSaving] = useState(false);
+     const toast = useToast();
+     const { isOpen: isModalOpen, onOpen: onOpenModal, onClose: onCloseModal } = useDisclosure();
+     const { isOpen: isConfirmDialogOpen, onOpen: onOpenConfirmDialog, onClose: onCloseConfirmDialog } = useDisclosure();
+     const { isOpen: isZeroPriceDialogOpen, onOpen: onOpenZeroPriceDialog, onClose: onCloseZeroPriceDialog } = useDisclosure();
+-
+     const [hasZeroPriceItems, setHasZeroPriceItems] = useState<string[]>([]);
+     const cancelRef = useRef<HTMLButtonElement>(null);
++    const queryClient = useQueryClient();
++
++    const { data: purchaseOrders, isLoading, error } = useQuery<PurchaseOrder[]>({
++        queryKey: ['purchaseOrders'],
++        queryFn: getPurchaseOrders,
++    });
++
++    const updatePoMutation = useMutation({
++        mutationFn: updatePurchaseOrder,
++        onMutate: async (updatedPo: PurchaseOrderDetails) => {
++            await queryClient.cancelQueries({ queryKey: ['purchaseOrders'] });
++            const previousPOs = queryClient.getQueryData<PurchaseOrder[]>(['purchaseOrders']);
++            queryClient.setQueryData<PurchaseOrder[]>(['purchaseOrders'], (old) =>
++                old ? old.map(po => po._id === updatedPo._id ? updatedPo : po) : []
++            );
++            onCloseModal();
++            return { previousPOs };
++        },
++        onError: (err, updatedPo, context) => {
++            if (context?.previousPOs) queryClient.setQueryData(['purchaseOrders'], context.previousPOs);
++            toast({ title: 'Update failed', description: err.message, status: 'error' });
++        },
++        onSettled: () => queryClient.invalidateQueries({ queryKey: ['purchaseOrders'] }),
++    });
+ 
+     const handleOpenModal = (po: PurchaseOrder) => {
+         setSelectedPo(po as unknown as PurchaseOrderDetails);
+@@ -74,26 +94,21 @@
+     };
+ 
+     const handleSavePo = async () => {
+-        setIsSaving(true);
+-        if (selectedPo) {
+-            const updatedPo = {
+-                ...selectedPo,
+-                orderedItems: selectedPo.orderedItems?.map(item => ({
+-                    ...item,
+-                    unitPrice: editedPrices[item._key] ?? item.unitPrice,
+-                    orderedQuantity: editedQuantities[item._key] ?? item.orderedQuantity,
+-                }))
+-            };
+-            try {
+-                // API call to save draft
+-                // await saveDraft(updatedPo);
+-                toast({ title: 'Purchase Order draft saved.', status: 'success' });
+-                // For now, close the modal and pretend it saved
+-                onCloseModal();
+-            } catch (error) {
+-                toast({ title: 'Error saving draft.', description: 'Could not save PO.', status: 'error' });
+-            } finally {
+-                setIsSaving(false);
+-            }
++        if (!selectedPo) return;
++        const updatedPo = {
++            ...selectedPo,
++            orderedItems: selectedPo.orderedItems?.map(item => ({
++                ...item,
++                unitPrice: editedPrices[item._key] ?? item.unitPrice,
++                orderedQuantity: editedQuantities[item._key] ?? item.orderedQuantity,
++            })),
++        };
++        updatePoMutation.mutate({ ...updatedPo, status: 'draft' });
++    };
++
++    const handleApprovePo = async (totalAmount: number, zeroPriceItems: string[]) => {
++        if (zeroPriceItems.length > 0) {
++            setHasZeroPriceItems(zeroPriceItems);
++            onOpenZeroPriceDialog();
+         }
+-    };
+-
+-    const handleApprovePo = async () => {
+-        if (selectedPo) {
+-            const zeroPriceItems = selectedPo.orderedItems?.filter(item => item.unitPrice === 0).map(item => item.stockItem?.name || 'Unknown Item');
+-            if (zeroPriceItems && zeroPriceItems.length > 0) {
+-                setHasZeroPriceItems(zeroPriceItems);
+-                onOpenZeroPriceDialog();
+-            } else {
+-                onOpenConfirmDialog();
+-            }
+-        }
+-    };
+-
+-    const proceedWithOrderUpdate = async () => {
+-        onCloseZeroPriceDialog();
+-        onOpenConfirmDialog();
+-    };
+-
+-    const proceedWithApproval = async () => {
+-        onCloseConfirmDialog();
+-        setIsSaving(true);
+-        if (selectedPo) {
+-            try {
+-                const updatedPo = { ...selectedPo, status: 'pending-approval' };
+-                // API call to approve PO
+-                // await approvePo(updatedPo);
+-                toast({ title: 'Purchase Order submitted for approval.', status: 'success' });
+-                // For now, close the modal and pretend it saved
+-                onCloseModal();
+-                // Refetch data to update the table
+-                // await fetchPurchaseOrders();
+-            } catch (error) {
+-                toast({ title: 'Error submitting PO.', description: 'Could not submit PO.', status: 'error' });
+-            } finally {
+-                setIsSaving(false);
+-            }
++        else {
++            onOpenConfirmDialog();
+         }
+     };
++
++    const proceedWithOrderUpdate = () => {
++        onCloseZeroPriceDialog();
++        proceedWithApproval();
++    };
++
++    const proceedWithApproval = () => {
++        if (!selectedPo) return;
++        const updatedPo = {
++            ...selectedPo,
++            status: 'pending-approval',
++            orderedItems: selectedPo.orderedItems?.map(item => ({
++                ...item,
++                unitPrice: editedPrices[item._key] ?? item.unitPrice,
++                orderedQuantity: editedQuantities[item._key] ?? item.orderedQuantity,
++            })),
++        };
++        updatePoMutation.mutate(updatedPo);
++        onCloseConfirmDialog();
++    };
+ 
+-    useEffect(() => {
+-        const fetchPurchaseOrders = async () => {
+-            try {
+-                // Fetch POs from API
+-                // const data = await fetchPOs();
+-                const data = [
+-                    {
+-                        _id: 'po1',
+-                        poNumber: 'PO-001',
+-                        orderDate: '2023-10-26',
+-                        status: 'draft',
+-                        totalAmount: 150.00,
+-                        supplierName: 'Supplier A',
+-                        orderedItems: [
+-                            { _key: 'item1', stockItem: { _id: 's1', name: 'Item A' }, supplier: { _id: 'supA', name: 'Supplier A' }, orderedQuantity: 10, unitPrice: 15 },
+-                            { _key: 'item2', stockItem: { _id: 's2', name: 'Item B' }, supplier: { _id: 'supA', name: 'Supplier A' }, orderedQuantity: 5, unitPrice: 0 },
+-                        ]
+-                    },
+-                    {
+-                        _id: 'po2',
+-                        poNumber: 'PO-002',
+-                        orderDate: '2023-10-25',
+-                        status: 'approved',
+-                        totalAmount: 250.00,
+-                        supplierName: 'Supplier B',
+-                        orderedItems: [
+-                            { _key: 'item3', stockItem: { _id: 's3', name: 'Item C' }, supplier: { _id: 'supB', name: 'Supplier B' }, orderedQuantity: 2, unitPrice: 125 }
+-                        ]
+-                    },
+-                    {
+-                        _id: 'po3',
+-                        poNumber: 'PO-003',
+-                        orderDate: '2023-10-24',
+-                        status: 'received',
+-                        totalAmount: 50.00,
+-                        supplierName: 'Supplier C',
+-                        orderedItems: [
+-                            { _key: 'item4', stockItem: { _id: 's4', name: 'Item D' }, supplier: { _id: 'supC', name: 'Supplier C' }, orderedQuantity: 50, unitPrice: 1 }
+-                        ]
+-                    },
+-                ];
+-                setPurchaseOrders(data as PurchaseOrder[]);
+-            } catch (error) {
+-                toast({ title: 'Error loading purchase orders.', status: 'error' });
+-            } finally {
+-                setLoading(false);
+-            }
+-        };
+-        fetchPurchaseOrders();
+-    }, [toast]);
++    const { isPending: isSaving } = updatePoMutation;
+ 
+     const filteredPOs = purchaseOrders?.filter(po =>
+         po.poNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+@@ -107,10 +122,10 @@
+     return (
+         <Box p={8} maxW="container.xl" mx="auto">
+             <Flex justifyContent="space-between" alignItems="center" mb={6}>
+-                <Heading as="h1" size="xl">Purchase Orders</Heading>
++                <Heading as="h1" size="xl">Purchase Orders</Heading> 
+                 <HStack spacing={4}>
+-                    <InputGroup width={{ base: '100%', md: '300px' }}>
+-                        <InputLeftElement pointerEvents="none">
++                    <InputGroup width={{ base: '100%', md: '300px' }}> 
++                        <InputLeftElement pointerEvents="none"> 
+
+[Image of a magnifying glass over a document]
+
+                             <FiSearch color="gray.300" />
+                         </InputLeftElement>
+                         <Input
+@@ -128,15 +143,15 @@
+             </Flex>
+ 
+             <Box p={6} borderWidth="1px" borderRadius="lg" bg={cardBg}>
+-                {loading ? (
++                {isLoading ? (
+                     <Flex justify="center" align="center" direction="column" py={10}>
+                         <Spinner size="xl" color="blue.500" />
+                         <Text mt={4} color="gray.500">Loading purchase orders...</Text>
+                     </Flex>
+-                ) : (
++                ) : error ? (
++                    <Text>Error: {error.message}</Text>
++                ) : (
+                     <DataTable
+-                        columns={columns}
+-                        data={filteredPOs}
+-                        loading={loading}
+                         onActionClick={handleOpenModal}
+                         hideStatusColumn={false}
+                         actionType='PurchaseOrder'
+@@ -147,7 +162,7 @@
+             </Box>
+ 
+             {selectedPo && (
+-                <PurchaseOrderModal
++                <PurchaseOrderModal // Ensure this component is now importing types from './types'
+                     isOpen={isModalOpen}
+                     onClose={onCloseModal}
+                     poDetails={selectedPo}
+@@ -156,7 +171,7 @@
+                     editedQuantities={editedQuantities}
+                     setEditedQuantities={setEditedQuantities}
+                     isSaving={isSaving}
+-                    onSave={handleSavePo}
+-                    onApprove={handleApprovePo}
++                    onSave={() => handleSavePo()}
++                    onApprove={handleApprovePo}
+                     onRemoveItem={handleRemoveItem}
+                 />
+             )}
+@@ -165,7 +180,7 @@
+                 leastDestructiveRef={cancelRef}
+                 onClose={onCloseConfirmDialog}
+             >
+-                <AlertDialogOverlay>
++                <AlertDialogOverlay> 
+                     <AlertDialogContent>
+                         <AlertDialogHeader fontSize="lg" fontWeight="bold">
+                             Confirm Submission
+@@ -192,7 +207,7 @@
+                 onClose={onCloseZeroPriceDialog}
+                 leastDestructiveRef={cancelRef}
+             >
+-                <AlertDialogOverlay>
++                <AlertDialogOverlay> 
+                     <AlertDialogContent>
+                         <AlertDialogHeader fontSize="lg" fontWeight="bold">
+                             Zero Price Warning

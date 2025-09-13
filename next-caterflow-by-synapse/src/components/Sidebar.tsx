@@ -10,7 +10,7 @@ import { MoonIcon, SunIcon, HamburgerIcon } from '@chakra-ui/icons';
 import NextLink from 'next/link';
 import Image from 'next/image';
 import { useRouter, usePathname } from 'next/navigation';
-import { FiLogOut, FiBarChart2, FiBox, FiMapPin, FiTruck, FiUsers, FiSettings, FiBell, FiClock, FiActivity, FiChevronDown, FiChevronUp } from 'react-icons/fi';
+import { FiLogOut, FiBarChart2, FiBox, FiMapPin, FiTruck, FiUsers, FiSettings, FiBell, FiClock, FiActivity, FiChevronDown, FiChevronUp, FiUser } from 'react-icons/fi';
 import { useAuth } from '@/context/AuthContext';
 import { useLoading } from '@/context/LoadingContext';
 import { FaCheckCircle } from 'react-icons/fa';
@@ -218,6 +218,18 @@ const SidebarContent = ({ onItemClick }: { onItemClick?: () => void }) => {
                 >
                     Toggle Theme
                 </Button>
+                {isAuthenticated && (
+                    <Button
+                        w="full"
+                        variant="ghost"
+                        justifyContent="flex-start"
+                        leftIcon={<Icon as={FiUser} />}
+                        _hover={{ bg: activeBg, color: theme.colors.brand['500'] }}
+                        onClick={() => handleItemClick("/profile")}
+                    >
+                        Profile
+                    </Button>
+                )}
                 {isAuthenticated && (
                     <Button
                         w="full"
