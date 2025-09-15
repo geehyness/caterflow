@@ -1,5 +1,8 @@
 // src/app/api/actions/route.ts
+export const dynamic = 'force-dynamic';
+
 import { NextResponse } from "next/server";
+import { unstable_noStore as noStore } from "next/cache";
 import { client } from "@/lib/sanity";
 
 // Define separate GROQ queries for each document type
@@ -50,7 +53,7 @@ const purchaseOrderQuery = `
         "name": stockItem->name,
         "sku": stockItem->sku,
         "unitOfMeasure": stockItem->unitOfMeasure,
-        "_ref": stockItem._ref  // Add this to get the reference to the stock item
+        "_ref": stockItem._ref
       },
     },
     "completedSteps": completedSteps
@@ -127,6 +130,14 @@ const stockAdjustmentQuery = `
 `;
 
 export async function GET(request: Request) {
+  // Tell Next.js not to cache anything for this handler
+  try {
+    noStore();
+  } catch (e) {
+    // unstable_noStore can throw in some environments; fail-safe: continue
+    console.warn("noStore() call failed (non-fatal). Proceeding anyway.");
+  }
+
   try {
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get("userId");
@@ -136,7 +147,7 @@ export async function GET(request: Request) {
     console.log("➡️ /api/actions: Request received.");
     console.log("➡️ /api/actions: Fetching actions for:", { userId, userRole, userSite });
 
-    // Execute all queries concurrently
+    // Execute all queries concurrently (fresh fetches)
     const [transfers, purchaseOrders, goodsReceipts, stockAdjustments] = await Promise.all([
       client.fetch(internalTransferQuery),
       client.fetch(purchaseOrderQuery),
@@ -150,37 +161,17 @@ export async function GET(request: Request) {
 
     // Filter actions based on user role and site
     if (userRole === "admin") {
-      // Admin can see all actions
       console.log("👤 User Role: Admin. No filtering applied.");
-    } else if (userRole === "siteManager" && userSite) {
-      // Site Manager can only see actions for their site
+    } else if (["siteManager", "stockController", "dispatchStaff"].includes(userRole || "") && userSite) {
       actions = actions.filter((action: any) => {
         return action.site === userSite ||
           action.fromSite === userSite ||
           action.toSite === userSite;
       });
-      console.log(`👤 Site Manager. Filtered actions for site ${userSite}: ${actions.length}`);
-    } else if (userRole === "stockController" && userSite) {
-      // Stock Controller can only see actions for their site
-      actions = actions.filter((action: any) => {
-        return action.site === userSite ||
-          action.fromSite === userSite ||
-          action.toSite === userSite;
-      });
-      console.log(`👤 Stock Controller. Filtered actions for site ${userSite}: ${actions.length}`);
-    } else if (userRole === "dispatchStaff" && userSite) {
-      // Dispatch Staff can only see actions for their site
-      actions = actions.filter((action: any) => {
-        return action.site === userSite ||
-          action.fromSite === userSite ||
-          action.toSite === userSite;
-      });
-      console.log(`👤 Dispatch Staff. Filtered actions for site ${userSite}: ${actions.length}`);
+      console.log(`👤 ${userRole}. Filtered actions for site ${userSite}: ${actions.length}`);
     } else if (userRole === "auditor") {
-      // Auditor can see all actions
       console.log("👤 Auditor. No filtering applied.");
     } else {
-      // Unknown role or missing site info
       actions = [];
       console.log("⚠️ Unknown role or missing site. No actions returned.");
     }
@@ -189,11 +180,19 @@ export async function GET(request: Request) {
     actions.sort((a: any, b: any) => new Date(b._createdAt).getTime() - new Date(a._createdAt).getTime());
     console.log(`✅ /api/actions: Sorting complete. Returning ${actions.length} actions.`);
 
-    return NextResponse.json(actions);
+    // Build response and explicitly prevent caching at HTTP level
+    const response = NextResponse.json(actions);
+    response.headers.set(
+      "Cache-Control",
+      "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0"
+    );
+    response.headers.set("Pragma", "no-cache");
+    response.headers.set("Expires", "0");
+
+    return response;
   } catch (error: any) {
     console.error("❌ Error in /api/actions:", error);
 
-    // This is the corrected error handling logic
     let errorMessage = "Unknown server error occurred.";
     if (error instanceof Error) {
       errorMessage = error.message;
@@ -201,9 +200,14 @@ export async function GET(request: Request) {
       errorMessage = error;
     }
 
-    return NextResponse.json(
+    const errRes = NextResponse.json(
       { error: "Failed to fetch pending actions", details: errorMessage },
       { status: 500 }
     );
+    errRes.headers.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0");
+    errRes.headers.set("Pragma", "no-cache");
+    errRes.headers.set("Expires", "0");
+
+    return errRes;
   }
 }

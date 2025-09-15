@@ -1,16 +1,39 @@
 // src/app/api/purchase-orders/route.ts
-import { NextResponse, NextRequest } from 'next/server';
+export const dynamic = 'force-dynamic';
+
+import { NextResponse } from 'next/server';
+import { unstable_noStore as noStore } from 'next/cache';
 import { client, writeClient } from '@/lib/sanity';
 import { groq } from 'next-sanity';
 import { logSanityInteraction } from '@/lib/sanityLogger';
 import { nanoid } from 'nanoid';
 
+/**
+ * Helper to set no-cache headers on a NextResponse
+ */
+function setNoCache(res: NextResponse) {
+    res.headers.set(
+        'Cache-Control',
+        'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0'
+    );
+    res.headers.set('Pragma', 'no-cache');
+    res.headers.set('Expires', '0');
+    return res;
+}
 
 /**
  * GET handler to fetch all purchase orders or a specific one by query parameter
  */
 export async function GET(request: Request) {
     try {
+        // Instruct Next to avoid caching for this route
+        try {
+            noStore();
+        } catch (e) {
+            // noStore is unstable in some environments — non-fatal
+            console.warn('noStore() failed (non-fatal). Continuing.');
+        }
+
         const { searchParams } = new URL(request.url);
         const id = searchParams.get('id');
         const status = searchParams.get('status');
@@ -53,20 +76,21 @@ export async function GET(request: Request) {
             const purchaseOrder = await client.fetch(query, { id });
 
             if (!purchaseOrder || purchaseOrder.length === 0) {
-                return NextResponse.json(
-                    { error: 'Purchase order not found' },
-                    { status: 404 }
-                );
+                const res = NextResponse.json({ error: 'Purchase order not found' }, { status: 404 });
+                return setNoCache(res);
             }
 
             // Manually get unique supplier names from the fetched data
-            const suppliers = purchaseOrder[0].orderedItems.map((item: any) => item.supplier?.name).filter(Boolean);
+            const suppliers = purchaseOrder[0].orderedItems
+                .map((item: any) => item.supplier?.name)
+                .filter(Boolean);
             const uniqueSupplierNames = [...new Set(suppliers)].join(', ');
 
-            return NextResponse.json({
+            const res = NextResponse.json({
                 ...purchaseOrder[0],
                 supplierNames: uniqueSupplierNames
             });
+            return setNoCache(res);
         }
 
         // Build the base query - only filter by status if provided
@@ -93,13 +117,15 @@ export async function GET(request: Request) {
             };
         });
 
-        return NextResponse.json(processedOrders);
+        const res = NextResponse.json(processedOrders);
+        return setNoCache(res);
     } catch (error: any) {
-        console.error("Error fetching purchase orders:", error);
-        return NextResponse.json(
-            { error: "Failed to fetch purchase orders", details: error.message },
+        console.error('Error fetching purchase orders:', error);
+        const res = NextResponse.json(
+            { error: 'Failed to fetch purchase orders', details: error?.message || String(error) },
             { status: 500 }
         );
+        return setNoCache(res);
     }
 }
 
@@ -109,6 +135,13 @@ export async function GET(request: Request) {
  */
 export async function POST(request: Request) {
     try {
+        // Instruct Next to avoid caching for this route
+        try {
+            noStore();
+        } catch (e) {
+            console.warn('noStore() failed (non-fatal). Continuing.');
+        }
+
         const {
             poNumber,
             orderDate,
@@ -121,10 +154,11 @@ export async function POST(request: Request) {
 
         // --- 1. Basic Payload Validation ---
         if (!orderedBy || !site || !orderedItems || orderedItems.length === 0) {
-            return NextResponse.json(
+            const res = NextResponse.json(
                 { error: 'Missing required fields: orderedBy, site, or orderedItems' },
                 { status: 400 }
             );
+            return setNoCache(res);
         }
 
         // --- 2. Iterate and Validate Each Item ---
@@ -137,10 +171,11 @@ export async function POST(request: Request) {
 
             if (!supplierExists) {
                 // This is the correct way to handle a validation error
-                return NextResponse.json(
+                const res = NextResponse.json(
                     { error: `Supplier ${item.supplier} does not exist. Please try again.` },
                     { status: 400 }
                 );
+                return setNoCache(res);
             }
         }
 
@@ -187,18 +222,19 @@ export async function POST(request: Request) {
             true
         );
 
-        return NextResponse.json(result);
+        const res = NextResponse.json(result);
+        return setNoCache(res);
     } catch (error: any) {
-        // --- 5. Catch-all for unexpected errors ---
         console.error('Failed to create purchase order:', error);
-        return NextResponse.json(
+        const res = NextResponse.json(
             {
                 error: 'Failed to create purchase order',
-                details: error.message,
-                stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+                details: error?.message || String(error),
+                stack: process.env.NODE_ENV === 'development' ? error?.stack : undefined
             },
             { status: 500 }
         );
+        return setNoCache(res);
     }
 }
 
@@ -207,14 +243,22 @@ export async function POST(request: Request) {
  */
 export async function PATCH(request: Request) {
     try {
+        // Instruct Next to avoid caching for this route
+        try {
+            noStore();
+        } catch (e) {
+            console.warn('noStore() failed (non-fatal). Continuing.');
+        }
+
         const body = await request.json();
         const { _id, updateData } = body;
 
         if (!_id || !updateData) {
-            return NextResponse.json(
+            const res = NextResponse.json(
                 { error: 'Purchase order ID and update data are required' },
                 { status: 400 }
             );
+            return setNoCache(res);
         }
 
         const transaction = writeClient.transaction();
@@ -264,13 +308,15 @@ export async function PATCH(request: Request) {
             true
         );
 
-        return NextResponse.json(purchaseOrder);
-    } catch (error) {
+        const res = NextResponse.json(purchaseOrder);
+        return setNoCache(res);
+    } catch (error: any) {
         console.error('Failed to update purchase order:', error);
-        return NextResponse.json(
-            { error: 'Failed to update purchase order' },
+        const res = NextResponse.json(
+            { error: 'Failed to update purchase order', details: error?.message || String(error) },
             { status: 500 }
         );
+        return setNoCache(res);
     }
 }
 
@@ -279,14 +325,22 @@ export async function PATCH(request: Request) {
  */
 export async function DELETE(request: Request) {
     try {
+        // Instruct Next to avoid caching for this route
+        try {
+            noStore();
+        } catch (e) {
+            console.warn('noStore() failed (non-fatal). Continuing.');
+        }
+
         const { searchParams } = new URL(request.url);
         const id = searchParams.get('id');
 
         if (!id) {
-            return NextResponse.json(
+            const res = NextResponse.json(
                 { error: 'Purchase order ID is required' },
                 { status: 400 }
             );
+            return setNoCache(res);
         }
 
         await writeClient.delete(id);
@@ -300,12 +354,14 @@ export async function DELETE(request: Request) {
             true
         );
 
-        return NextResponse.json({ success: true });
-    } catch (error) {
+        const res = NextResponse.json({ success: true });
+        return setNoCache(res);
+    } catch (error: any) {
         console.error('Failed to delete purchase order:', error);
-        return NextResponse.json(
-            { error: 'Failed to delete purchase order' },
+        const res = NextResponse.json(
+            { error: 'Failed to delete purchase order', details: error?.message || String(error) },
             { status: 500 }
         );
+        return setNoCache(res);
     }
 }

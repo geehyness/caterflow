@@ -1,3 +1,4 @@
+// src/app/goods-receipts/page.tsx
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
@@ -9,7 +10,6 @@ import {
     Spinner,
     useDisclosure,
     useToast,
-    IconButton,
     useColorModeValue,
     Card,
     CardBody,
@@ -17,90 +17,39 @@ import {
     InputGroup,
     InputLeftElement,
     Badge,
+    Text,
+    Icon,
+    HStack
 } from '@chakra-ui/react';
-import { FiPlus, FiSearch, FiEdit, FiTrash2, FiEye } from 'react-icons/fi';
-import DataTable from '@/components/DataTable';
+import { FiPlus, FiSearch, FiEye, FiFilter } from 'react-icons/fi';
+import DataTable from '@/app/actions/DataTable';
 import { useAuth } from '@/context/AuthContext';
 import GoodsReceiptModal from '@/app/actions/GoodsReceiptModal';
+import { GoodsReceipt } from '@/lib/sanityTypes'; // Assuming this interface is correct
 
-import { PurchaseOrder } from '../../actions/types';
-
-// Define the interface for an item within the goods receipt
-interface ReceivedItem {
-    stockItem: string;
-    stockItemName: string;
-    orderedQuantity: number;
-    receivedQuantity: number;
-    batchNumber?: string;
-    expiryDate?: string;
-    condition: 'good' | 'damaged' | 'short-shipped' | 'over-shipped';
-    _key: string;
-}
-
-// Define the interface for the goods receipt document
-interface GoodsReceipt {
-    _id: string;
-    receiptNumber: string;
-    receiptDate: string;
-    purchaseOrder: string;
-    purchaseOrderNumber: string;
-    receivingBin: string;
-    receivingBinName: string;
-    items: ReceivedItem[];
-    status: 'draft' | 'partial' | 'completed';
-    notes?: string;
-}
-
-/* Define the interface for a purchase order (matching what GoodsReceiptModal expects)
-interface PurchaseOrder {
-    _id: string;
-    poNumber: string;
-    supplier?: {
-        name: string;
-    };
-    site?: {
-        name: string;
-    };
-    orderedItems?: Array<{
-        _key: string;
-        stockItem: {
-            _id: string;
-            name: string;
-        };
-        orderedQuantity: number;
-        unitPrice: number;
-    }>;
-}*/
-
-export default function ReceiptsPage() {
-    const [receipts, setReceipts] = useState<GoodsReceipt[]>([]);
+export default function GoodsReceiptsPage() {
+    const [goodsReceipts, setGoodsReceipts] = useState<GoodsReceipt[]>([]);
     const [filteredReceipts, setFilteredReceipts] = useState<GoodsReceipt[]>([]);
-    const [selectedReceipt, setSelectedReceipt] = useState<GoodsReceipt | null>(null);
-    const [approvedPurchaseOrders, setApprovedPurchaseOrders] = useState<PurchaseOrder[]>([]);
     const [loading, setLoading] = useState(true);
-    const [loadingApprovedPOs, setLoadingApprovedPOs] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
-    const { isOpen, onOpen, onClose } = useDisclosure();
-    const toast = useToast();
     const { user } = useAuth();
+    const toast = useToast();
+    const [viewMode, setViewMode] = useState<'actionRequired' | 'all'>('actionRequired');
 
-    const cardBg = useColorModeValue('white', 'gray.700');
-    const borderColor = useColorModeValue('gray.200', 'gray.600');
-    const inputBg = useColorModeValue('white', 'gray.800');
+    const [selectedGoodsReceipt, setSelectedGoodsReceipt] = useState<GoodsReceipt | null>(null);
+    const { isOpen: isReceiptModalOpen, onOpen: onReceiptModalOpen, onClose: onReceiptModalClose } = useDisclosure();
 
-    // Replace the current fetchReceipts function with:
-    const fetchReceipts = useCallback(async () => {
+    // Theme-based color values
+    const secondaryTextColor = useColorModeValue('neutral.light.text-secondary', 'neutral.dark.text-secondary');
+    const searchIconColor = useColorModeValue('gray.300', 'gray.500');
+
+    const fetchGoodsReceipts = useCallback(async () => {
+        setLoading(true);
         try {
             const response = await fetch('/api/goods-receipts');
             if (response.ok) {
                 const data = await response.json();
-                // Transform the data to match the expected structure
-                const transformedData = data.map((receipt: any) => ({
-                    ...receipt,
-                    purchaseOrder: receipt.purchaseOrder?.poNumber || receipt.purchaseOrder || '',
-                    receivingBin: receipt.receivingBin?.name || receipt.receivingBin || '',
-                }));
-                setReceipts(transformedData);
+                setGoodsReceipts(data || []);
             } else {
                 throw new Error('Failed to fetch goods receipts');
             }
@@ -118,228 +67,142 @@ export default function ReceiptsPage() {
         }
     }, [toast]);
 
-    const fetchApprovedPurchaseOrders = async () => {
-        try {
-            setLoadingApprovedPOs(true);
-            const response = await fetch('/api/purchase-orders?status=approved');
-            if (response.ok) {
-                const data = await response.json();
-                setApprovedPurchaseOrders(data);
-            }
-        } catch (error) {
-            console.error('Failed to fetch approved purchase orders:', error);
-        } finally {
-            setLoadingApprovedPOs(false);
-        }
-    };
+    useEffect(() => {
+        fetchGoodsReceipts();
+    }, [fetchGoodsReceipts]);
 
     useEffect(() => {
-        fetchReceipts();
-        fetchApprovedPurchaseOrders();
-    }, [fetchReceipts]); // Add fetchReceipts to dependencies
+        const filtered = searchTerm
+            ? goodsReceipts.filter(receipt => {
+                const term = searchTerm.toLowerCase();
+                const receiptNumberMatch = receipt.receiptNumber?.toLowerCase().includes(term) || false;
+                const poNumberMatch = receipt.purchaseOrder?.poNumber?.toLowerCase().includes(term) || false;
+                return receiptNumberMatch || poNumberMatch;
+            })
+            : goodsReceipts;
 
-    useEffect(() => {
-        if (searchTerm) {
-            const term = searchTerm.toLowerCase();
-            setFilteredReceipts(
-                receipts.filter(receipt =>
-                    receipt.receiptNumber.toLowerCase().includes(term) ||
-                    receipt.purchaseOrder.toLowerCase().includes(term) ||
-                    receipt.receivingBin.toLowerCase().includes(term)
-                )
-            );
-        } else {
-            setFilteredReceipts(receipts);
-        }
-    }, [receipts, searchTerm]);
+        const receiptsToDisplay = viewMode === 'actionRequired'
+            ? filtered.filter(receipt => receipt.status === 'draft' || receipt.status === 'partially-received')
+            : filtered;
 
-    const handleAddReceipt = () => {
-        setSelectedReceipt(null);
-        onOpen();
-    };
+        setFilteredReceipts(receiptsToDisplay);
 
-    const handleEditReceipt = (receipt: GoodsReceipt) => {
-        setSelectedReceipt(receipt);
-        onOpen();
-    };
+    }, [goodsReceipts, searchTerm, viewMode]);
 
     const handleViewReceipt = (receipt: GoodsReceipt) => {
-        console.log('View receipt:', receipt);
+        setSelectedGoodsReceipt(receipt);
+        onReceiptModalOpen();
     };
 
-    const handleDeleteReceipt = async (receiptId: string) => {
-        if (window.confirm('Are you sure you want to delete this goods receipt?')) {
-            try {
-                const response = await fetch(`/api/goods-receipts?id=${receiptId}`, {
-                    method: 'DELETE'
-                });
-
-                if (!response.ok) {
-                    throw new Error('Failed to delete goods receipt');
-                }
-
-                setReceipts(receipts.filter(receipt => receipt._id !== receiptId));
-                toast({
-                    title: 'Receipt deleted.',
-                    description: 'The goods receipt has been successfully deleted.',
-                    status: 'success',
-                    duration: 3000,
-                    isClosable: true,
-                });
-            } catch (error) {
-                console.error('Error deleting goods receipt:', error);
-                toast({
-                    title: 'Error',
-                    description: 'Failed to delete goods receipt. Please try again.',
-                    status: 'error',
-                    duration: 5000,
-                    isClosable: true,
-                });
-            }
-        }
-    };
-
-    const handleSaveSuccess = () => {
-        fetchReceipts();
-        onClose();
+    const handleModalClose = () => {
+        onReceiptModalClose();
+        setSelectedGoodsReceipt(null);
+        fetchGoodsReceipts();
     };
 
     const getStatusColor = (status: string) => {
         switch (status) {
             case 'draft': return 'gray';
-            case 'partial': return 'orange';
+            case 'partially-received': return 'orange';
             case 'completed': return 'green';
-            case 'cancelled': return 'red';
             default: return 'gray';
         }
     };
 
     const columns = [
         {
-            accessorKey: 'actions',
-            header: 'Actions',
-            cell: (row: GoodsReceipt) => (
-                <Flex>
-                    <IconButton
-                        aria-label="View receipt"
-                        icon={<FiEye />}
-                        size="sm"
-                        colorScheme="blue"
-                        variant="ghost"
-                        mr={2}
-                        onClick={() => handleViewReceipt(row)}
-                    />
-                    <IconButton
-                        aria-label="Edit receipt"
-                        icon={<FiEdit />}
-                        size="sm"
-                        colorScheme="green"
-                        variant="ghost"
-                        mr={2}
-                        onClick={() => handleEditReceipt(row)}
-                    />
-                    <IconButton
-                        aria-label="Delete receipt"
-                        icon={<FiTrash2 />}
-                        size="sm"
-                        colorScheme="red"
-                        variant="ghost"
-                        onClick={() => handleDeleteReceipt(row._id)}
-                    />
-                </Flex>
-            ),
+            accessorKey: 'action',
+            header: 'Action',
+            cell: (row: any) => (
+                <Button
+                    size="sm"
+                    colorScheme="brand"
+                    onClick={() => handleViewReceipt(row)}
+                    leftIcon={<Icon as={FiEye} />}
+                >
+                    View
+                </Button>
+            )
         },
-        {
-            accessorKey: 'receiptNumber',
-            header: 'Receipt Number',
-            isSortable: true,
-        },
+        { accessorKey: 'receiptNumber', header: 'Receipt Number' },
+        { accessorKey: 'poNumber', header: 'PO Number', cell: (row: any) => row.purchaseOrder?.poNumber || 'N/A' },
         {
             accessorKey: 'receiptDate',
             header: 'Receipt Date',
-            isSortable: true,
-            cell: (row: GoodsReceipt) => new Date(row.receiptDate).toLocaleDateString(),
-        },
-        {
-            accessorKey: 'purchaseOrder',
-            header: 'Purchase Order',
-            isSortable: true,
-            cell: (row: GoodsReceipt) => row.purchaseOrder || 'N/A',
-        },
-        {
-            accessorKey: 'receivingBin',
-            header: 'Receiving Bin',
-            isSortable: true,
-            cell: (row: GoodsReceipt) => row.receivingBin || 'N/A',
+            cell: (row: any) => new Date(row.receiptDate).toLocaleDateString()
         },
         {
             accessorKey: 'status',
             header: 'Status',
-            isSortable: true,
-            cell: (row: GoodsReceipt) => (
-                <Badge colorScheme={getStatusColor(row.status)}>
-                    {row.status.toUpperCase()}
+            cell: (row: any) => (
+                <Badge colorScheme={getStatusColor(row.status)} variant="subtle">
+                    {row.status.replace('-', ' ').toUpperCase()}
                 </Badge>
-            ),
+            )
         },
     ];
 
-    if (loading) {
-        return (
-            <Box p={4}>
-                <Flex justifyContent="center" alignItems="center" height="50vh">
-                    <Spinner size="xl" />
-                </Flex>
-            </Box>
-        );
-    }
-
     return (
-        <Box p={4}>
-            <Flex justifyContent="space-between" alignItems="center" mb={6}>
+        <Box p={{ base: 2, md: 4 }}>
+            <Flex
+                justifyContent="space-between"
+                alignItems={{ base: 'flex-start', md: 'center' }}
+                mb={6}
+                flexDirection={{ base: 'column', md: 'row' }}
+                gap={4}
+            >
                 <Heading as="h1" size="lg">Goods Receipts</Heading>
-                <Button
-                    leftIcon={<FiPlus />}
-                    colorScheme="blue"
-                    onClick={handleAddReceipt}
-                >
-                    New Receipt
-                </Button>
+                <HStack>
+                    <Button
+                        leftIcon={<FiFilter />}
+                        colorScheme={viewMode === 'actionRequired' ? 'brand' : 'gray'}
+                        onClick={() => setViewMode('actionRequired')}
+                    >
+                        Action Required
+                    </Button>
+                    <Button
+                        leftIcon={<FiEye />}
+                        colorScheme={viewMode === 'all' ? 'brand' : 'gray'}
+                        onClick={() => setViewMode('all')}
+                    >
+                        View All
+                    </Button>
+                </HStack>
             </Flex>
 
-            {/* Search */}
-            <Card bg={cardBg} border="1px" borderColor={borderColor} borderRadius="md" mb={4} p={4}>
-                <InputGroup>
-                    <InputLeftElement pointerEvents="none">
-                        <FiSearch color="gray.300" />
-                    </InputLeftElement>
-                    <Input
-                        placeholder="Search goods receipts..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        bg={inputBg}
-                    />
-                </InputGroup>
+            <Card mb={4}>
+                <CardBody>
+                    <InputGroup>
+                        <InputLeftElement pointerEvents="none">
+                            <Icon as={FiSearch} color={searchIconColor} />
+                        </InputLeftElement>
+                        <Input
+                            placeholder="Search by receipt number or PO number..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                        />
+                    </InputGroup>
+                </CardBody>
             </Card>
 
-            {/* Goods Receipts Table */}
-            <Card bg={cardBg} border="1px" borderColor={borderColor} borderRadius="md">
+            <Card>
                 <CardBody p={0}>
                     <DataTable
                         columns={columns}
                         data={filteredReceipts}
-                        loading={false}
+                        loading={loading}
                     />
                 </CardBody>
             </Card>
 
-            <GoodsReceiptModal
-                isOpen={isOpen}
-                onClose={onClose}
-                receipt={selectedReceipt}
-                onSave={handleSaveSuccess}
-                approvedPurchaseOrders={approvedPurchaseOrders}
-            />
+            {selectedGoodsReceipt && (
+                <GoodsReceiptModal
+                    isOpen={isReceiptModalOpen}
+                    onClose={handleModalClose}
+                    receipt={selectedGoodsReceipt}
+                    onSave={handleModalClose}
+                />
+            )}
         </Box>
     );
 }

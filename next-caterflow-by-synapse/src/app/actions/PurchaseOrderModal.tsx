@@ -6,11 +6,10 @@ import {
     Button, Box, Text, VStack, HStack, Flex, Heading, Table, Thead, Tbody,
     Tr, Th, Td, TableContainer, NumberInput, NumberInputField, NumberInputStepper,
     NumberIncrementStepper, NumberDecrementStepper, Icon, Spinner, Badge,
-    useColorModeValue, AlertDialog, AlertDialogBody, AlertDialogFooter,
-    AlertDialogHeader, AlertDialogContent, AlertDialogOverlay, useToast, ModalCloseButton,
+    useColorModeValue, ModalCloseButton,
 } from '@chakra-ui/react';
 import { FaBoxes, FaCheck, FaSave } from 'react-icons/fa';
-import { Dispatch, SetStateAction, useMemo, useRef, useState } from 'react';
+import { Dispatch, SetStateAction, useMemo } from 'react';
 
 // Interfaces remain the same...
 export interface OrderedItem {
@@ -56,25 +55,18 @@ interface PurchaseOrderModalProps {
     setEditedQuantities: Dispatch<SetStateAction<{ [key: string]: number | undefined }>>;
     isSaving: boolean;
     onSave: () => void;
-    onApprove: () => void;
+    onApproveRequest: () => void; // Prop changed to reflect new purpose
     onRemoveItem: (itemKey: string) => void;
 }
 
 export default function PurchaseOrderModal({
     isOpen, onClose, poDetails, editedPrices, setEditedPrices,
     editedQuantities, setEditedQuantities, isSaving, onSave,
-    onApprove, onRemoveItem,
+    onApproveRequest, onRemoveItem,
 }: PurchaseOrderModalProps) {
     // Theme-based colors
     const primaryTextColor = useColorModeValue('neutral.light.text-primary', 'neutral.dark.text-primary');
     const secondaryTextColor = useColorModeValue('neutral.light.text-secondary', 'neutral.dark.text-secondary');
-
-    // Local state...
-    const [isConfirmDialogOpen, setIsConfirmDialogOpen] = useState(false);
-    const [isZeroPriceDialogOpen, setIsZeroPriceDialogOpen] = useState(false);
-    const [hasZeroPriceItems, setHasZeroPriceItems] = useState<string[]>([]);
-    const cancelRef = useRef<HTMLButtonElement>(null);
-    const toast = useToast();
 
     const isEditable = poDetails?.status === 'draft';
 
@@ -112,33 +104,6 @@ export default function PurchaseOrderModal({
         } catch (e) {
             return 'N/A';
         }
-    };
-
-    const validatePrices = () => {
-        const zeroPriceItems: string[] = [];
-        poDetails?.orderedItems?.forEach(item => {
-            const price = editedPrices[item._key] ?? item.unitPrice;
-            if (price === 0) {
-                zeroPriceItems.push(item.stockItem?.name || 'Unknown Item');
-            }
-        });
-        return zeroPriceItems;
-    };
-
-    const handleApproveWithValidation = () => {
-        const zeroPriceItems = validatePrices();
-        if (zeroPriceItems.length > 0) {
-            setHasZeroPriceItems(zeroPriceItems);
-            setIsZeroPriceDialogOpen(true);
-        } else {
-            setIsConfirmDialogOpen(true);
-        }
-    };
-
-    const proceedWithApproval = () => {
-        setIsConfirmDialogOpen(false);
-        setIsZeroPriceDialogOpen(false);
-        onApprove();
     };
 
     // UPDATED: Aligns with custom theme variants for Tags/Badges
@@ -283,7 +248,7 @@ export default function PurchaseOrderModal({
                                     </Button>
                                     <Button
                                         colorScheme="green"
-                                        onClick={handleApproveWithValidation}
+                                        onClick={onApproveRequest} // Calls the new prop
                                         isLoading={isSaving}
                                         isDisabled={hasIncompleteItems}
                                         leftIcon={<FaCheck />}
@@ -294,68 +259,6 @@ export default function PurchaseOrderModal({
                             )}
                         </HStack>
                     </ModalFooter>
-
-                    {/* Confirmation Dialog */}
-                    <AlertDialog
-                        isOpen={isConfirmDialogOpen}
-                        leastDestructiveRef={cancelRef}
-                        onClose={() => setIsConfirmDialogOpen(false)}
-                    >
-                        <AlertDialogOverlay>
-                            <AlertDialogContent>
-                                <AlertDialogHeader fontSize="lg" fontWeight="bold">
-                                    Confirm Submission
-                                </AlertDialogHeader>
-
-                                <AlertDialogBody>
-                                    Are you sure you want to submit this Purchase Order for approval? This action cannot be undone.
-                                </AlertDialogBody>
-
-                                <AlertDialogFooter>
-                                    <Button ref={cancelRef} onClick={() => setIsConfirmDialogOpen(false)}>
-                                        Cancel
-                                    </Button>
-                                    <Button colorScheme="blue" onClick={proceedWithApproval} ml={3}>
-                                        Confirm Submit
-                                    </Button>
-                                </AlertDialogFooter>
-                            </AlertDialogContent>
-                        </AlertDialogOverlay>
-                    </AlertDialog>
-
-                    {/* Zero Price Confirmation Dialog */}
-                    <AlertDialog
-                        isOpen={isZeroPriceDialogOpen}
-                        leastDestructiveRef={cancelRef}
-                        onClose={() => setIsZeroPriceDialogOpen(false)}
-                    >
-                        <AlertDialogOverlay>
-                            <AlertDialogContent>
-                                <AlertDialogHeader fontSize="lg" fontWeight="bold">
-                                    Zero Price Warning
-                                </AlertDialogHeader>
-
-                                <AlertDialogBody>
-                                    <Text mb={3}>The following items have a price of $0:</Text>
-                                    <VStack align="start" spacing={1} mb={3}>
-                                        {hasZeroPriceItems.map((itemName, index) => (
-                                            <Text key={index} fontSize="sm">• {itemName}</Text>
-                                        ))}
-                                    </VStack>
-                                    <Text>Are you sure you want to proceed with zero prices?</Text>
-                                </AlertDialogBody>
-
-                                <AlertDialogFooter>
-                                    <Button ref={cancelRef} onClick={() => setIsZeroPriceDialogOpen(false)}>
-                                        Cancel
-                                    </Button>
-                                    <Button colorScheme="orange" onClick={proceedWithApproval} ml={3}>
-                                        Proceed Anyway
-                                    </Button>
-                                </AlertDialogFooter>
-                            </AlertDialogContent>
-                        </AlertDialogOverlay>
-                    </AlertDialog>
                 </ModalContent>
             </Modal>
         </>

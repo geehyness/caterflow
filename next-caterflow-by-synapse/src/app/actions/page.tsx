@@ -153,8 +153,6 @@ export default function ActionsPage() {
 
     const cancelRef = useRef<HTMLButtonElement>(null);
 
-
-
     const fetchActions = useCallback(async () => {
         setLoading(true);
         setError(null);
@@ -253,12 +251,14 @@ export default function ActionsPage() {
         }
     }, []);
 
-    const refreshData = useCallback(async () => {
+    const refreshActions = useCallback(async () => {
         await fetchActions();
-        if (activeTab === 1) { // Goods Receipt tab
-            await Promise.all([fetchAllPurchaseOrders(), fetchGoodsReceipts()]);
-        }
-    }, [fetchActions, fetchAllPurchaseOrders, fetchGoodsReceipts, activeTab]);
+    }, [fetchActions]);
+
+    const refreshPOsAndReceipts = useCallback(async () => {
+        await Promise.all([fetchAllPurchaseOrders(), fetchGoodsReceipts()]);
+    }, [fetchAllPurchaseOrders, fetchGoodsReceipts]);
+
 
     // Filter approved POs without receipts
     const getApprovedPOsWithoutReceipts = (): PurchaseOrder[] => {
@@ -332,11 +332,12 @@ export default function ActionsPage() {
         setSelectedActions(selectedItems);
     };
 
+    // Refactored useEffects to be more specific
     useEffect(() => {
         if (isAuthReady && isAuthenticated && user) {
-            fetchActions();
+            refreshActions();
         }
-    }, [isAuthReady, isAuthenticated, user, fetchActions]);
+    }, [isAuthReady, isAuthenticated, user, refreshActions]);
 
     useEffect(() => {
         if (isAddItemModalOpen) {
@@ -351,13 +352,9 @@ export default function ActionsPage() {
 
     useEffect(() => {
         if (activeTab === 1) { // Goods Receipt tab
-            // Fetch both purchase orders and goods receipts
-            const fetchData = async () => {
-                await Promise.all([fetchAllPurchaseOrders(), fetchGoodsReceipts()]);
-            };
-            fetchData();
+            refreshPOsAndReceipts();
         }
-    }, [activeTab, fetchAllPurchaseOrders, fetchGoodsReceipts]); // Add the missing dependencies
+    }, [activeTab, refreshPOsAndReceipts]);
 
     const handleOpenWorkflow = (action: PendingAction) => {
         setSelectedAction(action);
@@ -567,6 +564,8 @@ export default function ActionsPage() {
                 isClosable: true,
             });
             onOrderModalClose();
+            // Refresh only the actions list after saving
+            refreshActions();
         } catch (error) {
             toast({
                 title: 'Save Failed',
@@ -579,7 +578,7 @@ export default function ActionsPage() {
         }
     };
 
-    const handleConfirmOrderUpdate = async () => {
+    const handleConfirmOrderUpdate = () => {
         if (!poDetails) return;
 
         const zeroPriceItems = poDetails.orderedItems?.filter(item => {
@@ -609,6 +608,7 @@ export default function ActionsPage() {
         } finally {
             setIsSaving(false);
             onOrderModalClose();
+            refreshActions();
         }
     };
 
@@ -637,8 +637,6 @@ export default function ActionsPage() {
                 duration: 5000,
                 isClosable: true,
             });
-
-            onOrderModalClose();
 
         } catch (error: any) {
             toast({
@@ -671,7 +669,7 @@ export default function ActionsPage() {
                 duration: 5000,
                 isClosable: true,
             });
-            await refreshData();
+            await refreshActions();
             onModalClose();
         } catch (error: any) {
             toast({
@@ -1222,9 +1220,10 @@ export default function ActionsPage() {
                 setEditedQuantities={setEditedQuantities}
                 isSaving={isSaving}
                 onSave={handleSaveOrder}
-                onApprove={handleConfirmOrderUpdate}
+                onApproveRequest={handleConfirmOrderUpdate}
                 onRemoveItem={handleRemoveItemFromPO}
             />
+
 
             <GoodsReceiptModal
                 isOpen={isGoodsReceiptModalOpen}
@@ -1238,10 +1237,9 @@ export default function ActionsPage() {
                     onGoodsReceiptModalClose();
                     setPreSelectedPO(null);
                     setSelectedGoodsReceipt(null);
-                    fetchActions();
+                    refreshActions();
                     // Refresh both purchase orders and receipts
-                    fetchAllPurchaseOrders();
-                    fetchGoodsReceipts();
+                    refreshPOsAndReceipts();
                 }}
                 approvedPurchaseOrders={approvedPOsWithoutReceipts}
                 preSelectedPO={preSelectedPO}

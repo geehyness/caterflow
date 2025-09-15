@@ -411,12 +411,11 @@ export default function PurchasesPage() {
             if (poDetails) {
                 await handleApprovePO(poDetails);
             }
+            onOrderModalClose(); // Close the modal here after successful update and approval
         } catch (error) {
-            // Errors are handled in the specific functions
+            // Errors are handled in the specific functions, toast will be shown
         } finally {
             setIsSaving(false);
-            onOrderModalClose();
-            fetchPurchaseOrders();
         }
     };
 
@@ -493,14 +492,6 @@ export default function PurchasesPage() {
             cell: (row: any) => `E${row.totalAmount?.toFixed(2) || '0.00'}`
         },
     ];
-
-    if (loading && purchaseOrders.length === 0) {
-        return (
-            <Flex justify="center" align="center" minH="70vh">
-                <Spinner size="xl" />
-            </Flex>
-        );
-    }
 
     return (
         <Box p={{ base: 2, md: 4 }}>
@@ -584,7 +575,7 @@ export default function PurchasesPage() {
                     setEditedQuantities={setEditedQuantities}
                     isSaving={isSaving}
                     onSave={handleSaveOrder}
-                    onApprove={handleConfirmOrderUpdate}
+                    onApproveRequest={handleConfirmOrderUpdate} // Changed prop name here
                     onRemoveItem={handleRemoveItem}
                 />
             )}
