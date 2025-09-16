@@ -34,6 +34,9 @@ import CreatePurchaseOrderModal from '@/app/actions/CreatePurchaseOrderModal';
 import PurchaseOrderModal, { PurchaseOrderDetails } from '@/app/actions/PurchaseOrderModal';
 import { PendingAction } from '@/app/actions/types';
 import { StockItem, Category, Site } from '@/lib/sanityTypes';
+// Add these imports at the top with the other imports
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { usePOMutations } from '@/hooks/useMutations';
 
 // Interfaces remain the same...
 interface PurchaseOrderItem {
@@ -85,14 +88,45 @@ interface OrderItem {
 
 
 export default function PurchasesPage() {
+<<<<<<< HEAD
     const { data: session, status } = useSession();
     const user = session?.user;
 
     const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
+=======
+    //const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
+    // REPLACE the useState for purchaseOrders and loading with this useQuery:
+    const { data: purchaseOrders = [], isLoading, error, refetch } = useQuery({
+        queryKey: ['purchaseOrders'],
+        queryFn: async () => {
+            const response = await fetch('/api/purchase-orders');
+            if (!response.ok) {
+                throw new Error('Failed to fetch purchase orders');
+            }
+            const data = await response.json();
+            return data.map((order: any) => ({
+                ...order,
+                siteName: order.site?.name || '',
+                actionType: 'PurchaseOrder',
+                title: `Purchase Order ${order.poNumber}`,
+                description: `Order from ${order.supplierNames}`,
+                priority: 'medium',
+                createdAt: order.orderDate,
+            }));
+        },
+        staleTime: 1000 * 60 * 5, // 5 minutes
+    });
+
+>>>>>>> dev
     const [filteredOrders, setFilteredOrders] = useState<PurchaseOrder[]>([]);
-    const [loading, setLoading] = useState(true);
+    // const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const { isOpen, onOpen, onClose } = useDisclosure();
+<<<<<<< HEAD
+=======
+    const queryClient = useQueryClient();
+    const { user } = useAuth();
+>>>>>>> dev
     const toast = useToast();
     const [viewMode, setViewMode] = useState<'actionRequired' | 'all'>('actionRequired');
 
@@ -113,10 +147,104 @@ export default function PurchasesPage() {
     const [editedPrices, setEditedPrices] = useState<{ [key: string]: number | undefined }>({});
     const [editedQuantities, setEditedQuantities] = useState<{ [key: string]: number | undefined }>({});
     const [isSaving, setIsSaving] = useState(false);
+    const [isModalSaving, setIsModalSaving] = useState(false);
 
     // Theme-based color values
     const secondaryTextColor = useColorModeValue('neutral.light.text-secondary', 'neutral.dark.text-secondary');
     const searchIconColor = useColorModeValue('gray.300', 'gray.500');
+
+
+    // ADD optimistic update mutation for saving order
+    // Replace the complex saveOrderMutation with this simpler version:
+    const { updatePOItems, approvePO } = usePOMutations();
+
+    // Remove the old saveOrderMutation and use this instead:
+    const handleSaveOrder = async () => {
+        if (!poDetails) return;
+
+        setIsModalSaving(true);
+        try {
+            const updates = poDetails.orderedItems
+                ?.filter(item => {
+                    const newPrice = editedPrices[item._key];
+                    const newQuantity = editedQuantities[item._key];
+                    return newPrice !== undefined || newQuantity !== undefined;
+                })
+                .map(item => ({
+                    itemKey: item._key,
+                    newPrice: editedPrices[item._key],
+                    newQuantity: editedQuantities[item._key],
+                })) || [];
+
+            if (updates.length > 0) {
+                await updatePOItems.mutateAsync({
+                    poId: poDetails._id,
+                    updates,
+                });
+            }
+
+            toast({
+                title: 'Order Saved',
+                status: 'success',
+                duration: 3000,
+                isClosable: true,
+            });
+            onOrderModalClose();
+        } catch (error) {
+            // Error is handled by the mutation
+        } finally {
+            setIsModalSaving(false);
+        }
+    };
+
+
+    // ADD this mutation hook (place it near the top with other hooks):
+    const createPOMutation = useMutation({
+        mutationFn: async (createData: { items: OrderItem[]; siteId?: string }) => {
+            const totalAmount = createData.items.reduce((sum, item) => sum + (item.orderedQuantity * item.unitPrice), 0);
+
+            const response = await fetch('/api/purchase-orders', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    poNumber: `PO-${Date.now()}`,
+                    orderDate: new Date().toISOString(),
+                    orderedBy: user?._id,
+                    orderedItems: createData.items,
+                    totalAmount,
+                    status: 'draft',
+                    site: createData.siteId,
+                }),
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Failed to create purchase order');
+            }
+            return response.json();
+        },
+        onSuccess: () => {
+            toast({
+                title: 'Purchase order created',
+                status: 'success',
+                duration: 5000,
+                isClosable: true,
+            });
+            onClose();
+            // queryClient.invalidateQueries({ queryKey: ['purchaseOrders'] });
+        },
+        onError: (error: any) => {
+            toast({
+                title: 'Error creating purchase order',
+                description: error.message || 'An unexpected error occurred.',
+                status: 'error',
+                duration: 5000,
+                isClosable: true,
+            });
+        },
+    });
+    // ADD this custom hook (place it near the top with other hooks):
+    //const { updatePOItem, approvePO } = usePOMutations();
 
     useEffect(() => {
         const fetchSuppliers = async () => {
@@ -148,7 +276,7 @@ export default function PurchasesPage() {
         fetchSites();
     }, []);
 
-    const fetchPurchaseOrders = useCallback(async () => {
+    {/*const fetchPurchaseOrders = useCallback(async () => {
         setLoading(true);
         try {
             const response = await fetch('/api/purchase-orders');
@@ -179,11 +307,12 @@ export default function PurchasesPage() {
         } finally {
             setLoading(false);
         }
-    }, [toast]);
+    }, [toast]);*/}
 
+    // Replace the useEffect that filters orders with this:
     useEffect(() => {
         const filtered = searchTerm
-            ? purchaseOrders.filter(order => {
+            ? purchaseOrders.filter((order: PurchaseOrder) => {
                 const term = searchTerm.toLowerCase();
                 const poNumberMatch = order.poNumber.toLowerCase().includes(term);
                 const supplierMatch = order.supplierNames?.toLowerCase().includes(term) || false;
@@ -193,20 +322,32 @@ export default function PurchasesPage() {
             : purchaseOrders;
 
         const ordersToDisplay = viewMode === 'actionRequired'
-            ? filtered.filter(order => order.status === 'draft')
+            ? filtered.filter((order: PurchaseOrder) => order.status === 'draft')
             : filtered;
 
-        setFilteredOrders(ordersToDisplay);
+        // Only update if the filtered result actually changed
+        setFilteredOrders(prev => {
+            const stringifyOrders = (orders: PurchaseOrder[]) =>
+                orders.map(o => `${o._id}-${o.status}`).join(',');
+
+            if (stringifyOrders(prev) === stringifyOrders(ordersToDisplay)) {
+                return prev;
+            }
+            return ordersToDisplay;
+        });
 
     }, [purchaseOrders, searchTerm, viewMode]);
 
-    useEffect(() => {
-        fetchPurchaseOrders();
-    }, [fetchPurchaseOrders]);
+    //useEffect(() => {
+    //    fetchPurchaseOrders();
+    //}, [fetchPurchaseOrders]);
 
     // Handlers remain the same...
     const handleAddOrder = () => onOpen();
-
+    const handleCreateOrders = async (items: OrderItem[], siteId?: string) => {
+        createPOMutation.mutate({ items, siteId });
+    };
+    {/*
     const handleCreateOrders = async (items: OrderItem[], siteId?: string) => {
         try {
             const totalAmount = items.reduce((sum, item) => sum + (item.orderedQuantity * item.unitPrice), 0);
@@ -248,50 +389,7 @@ export default function PurchasesPage() {
                 isClosable: true,
             });
         }
-    };
-
-    const handleSaveOrder = async () => {
-        if (!poDetails) return;
-        setIsSaving(true);
-        try {
-            const updates = poDetails.orderedItems?.map((item: any) => {
-                const newPrice = editedPrices[item._key];
-                const newQuantity = editedQuantities[item._key];
-                if (newPrice !== undefined || newQuantity !== undefined) {
-                    return fetch('/api/purchase-orders/update-item', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            poId: poDetails._id,
-                            itemKey: item._key,
-                            newPrice,
-                            newQuantity,
-                        }),
-                    });
-                }
-                return Promise.resolve();
-            });
-            if (updates) await Promise.all(updates);
-
-            toast({
-                title: 'Order Saved',
-                status: 'success',
-                duration: 3000,
-                isClosable: true,
-            });
-            onOrderModalClose();
-            fetchPurchaseOrders();
-        } catch (error) {
-            toast({
-                title: 'Save Failed',
-                status: 'error',
-                duration: 5000,
-                isClosable: true,
-            });
-        } finally {
-            setIsSaving(false);
-        }
-    };
+    };*/}
 
     const handleApprovePO = async (action: PurchaseOrderDetails | PendingAction) => {
         try {
@@ -317,7 +415,7 @@ export default function PurchasesPage() {
                 isClosable: true,
             });
 
-            fetchPurchaseOrders();
+            //fetchPurchaseOrders();
             onOrderModalClose();
 
         } catch (error: any) {
@@ -333,6 +431,7 @@ export default function PurchasesPage() {
 
     const handleViewOrder = async (order: PurchaseOrder) => {
         try {
+            // Use React Query to fetch the detailed PO
             const response = await fetch(`/api/purchase-orders?id=${order._id}`);
             if (!response.ok) throw new Error('Failed to fetch PO details');
             const data = await response.json();
@@ -348,6 +447,9 @@ export default function PurchasesPage() {
                 actionType: 'PurchaseOrder',
                 evidenceRequired: false,
             };
+
+            // Pre-populate the query cache for this specific PO
+            queryClient.setQueryData(['purchaseOrder', order._id], detailedAction);
 
             setPoDetails(detailedAction);
             setEditedPrices({});
@@ -407,7 +509,7 @@ export default function PurchasesPage() {
     const proceedWithOrderUpdate = async () => {
         setIsConfirmDialogOpen(false);
         setIsZeroPriceDialogOpen(false);
-        setIsSaving(true);
+        setIsModalSaving(true);
         try {
             await handleSaveOrder();
             if (poDetails) {
@@ -417,7 +519,13 @@ export default function PurchasesPage() {
         } catch (error) {
             // Errors are handled in the specific functions, toast will be shown
         } finally {
+<<<<<<< HEAD
             setIsSaving(false);
+=======
+            setIsModalSaving(false);
+            onOrderModalClose();
+            //fetchPurchaseOrders();
+>>>>>>> dev
         }
     };
 
@@ -495,6 +603,28 @@ export default function PurchasesPage() {
         },
     ];
 
+<<<<<<< HEAD
+=======
+    if (error) {
+        return (
+            <Flex justify="center" align="center" minH="70vh" direction="column">
+                <Text color="red.500">Error loading purchase orders: {error.message}</Text>
+                <Button onClick={() => refetch()} mt={4}>
+                    Try Again
+                </Button>
+            </Flex>
+        );
+    }
+
+    if (isLoading && purchaseOrders.length === 0) {
+        return (
+            <Flex justify="center" align="center" minH="70vh">
+                <Spinner size="xl" />
+            </Flex>
+        );
+    }
+
+>>>>>>> dev
     return (
         <Box p={{ base: 2, md: 4 }}>
             <Flex
@@ -550,7 +680,7 @@ export default function PurchasesPage() {
                     <DataTable
                         columns={columns}
                         data={filteredOrders}
-                        loading={loading}
+                        loading={isLoading}
                     />
                 </CardBody>
             </Card>
@@ -575,10 +705,20 @@ export default function PurchasesPage() {
                     setEditedPrices={setEditedPrices}
                     editedQuantities={editedQuantities}
                     setEditedQuantities={setEditedQuantities}
+<<<<<<< HEAD
                     isSaving={isSaving}
                     onSave={handleSaveOrder}
                     onApproveRequest={handleConfirmOrderUpdate} // Changed prop name here
+=======
+                    isSaving={isModalSaving}
+                    onApprove={handleConfirmOrderUpdate}
+>>>>>>> dev
                     onRemoveItem={handleRemoveItem}
+                    onSaveSuccess={() => {
+                        // Refresh data after successful save
+                        // queryClient.invalidateQueries({ queryKey: ['purchaseOrders'] });
+                        onOrderModalClose();
+                    }}
                 />
             )}
 

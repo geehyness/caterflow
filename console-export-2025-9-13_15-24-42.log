@@ -1,0 +1,130 @@
+Download the React DevTools for a better development experience: https://react.dev/link/react-devtools react-dom-client.development.js:25631:17
+Sidebar component - isMobile: true isOpen: false 2 Sidebar.tsx:566:13
+The resource at “http://localhost:3000/_next/static/media/e4af272ccee01ff0-s.p.woff2” preloaded with link preload was not used within a few seconds. Make sure all attributes of the preload tag are set correctly. purchases
+Sidebar component - isMobile: false isOpen: false Sidebar.tsx:566:13
+Sidebar component - isMobile: false isOpen: false Sidebar.tsx:566:13
+Image with src "/icons/icon-512x512.png" was detected as the Largest Contentful Paint (LCP). Please add the "priority" property if this image is above the fold.
+Read more: https://nextjs.org/docs/api-reference/next/image#priority warn-once.js:16:21
+🚪 MODAL RENDERED: 
+Object { isOpen: true, hasPoDetails: true, poDetailsId: "h5VnHE-XrPUXWXHiN4yUB", editedPricesCount: 0, editedQuantitiesCount: 0 }
+PurchaseOrderModal.tsx:52:13
+🚪 MODAL RENDERED: 
+Object { isOpen: true, hasPoDetails: true, poDetailsId: "h5VnHE-XrPUXWXHiN4yUB", editedPricesCount: 0, editedQuantitiesCount: 0 }
+PurchaseOrderModal.tsx:52:13
+📦 Quantity change: 
+Object { itemKey: "zw9o7c13z", newValue: 5, oldValue: undefined, inputValue: "5" }
+PurchaseOrderModal.tsx:299:17
+🚪 MODAL RENDERED: 
+Object { isOpen: true, hasPoDetails: true, poDetailsId: "h5VnHE-XrPUXWXHiN4yUB", editedPricesCount: 0, editedQuantitiesCount: 1 }
+PurchaseOrderModal.tsx:52:13
+🚪 MODAL RENDERED: 
+Object { isOpen: true, hasPoDetails: true, poDetailsId: "h5VnHE-XrPUXWXHiN4yUB", editedPricesCount: 0, editedQuantitiesCount: 1 }
+PurchaseOrderModal.tsx:52:13
+📦 Quantity change: 
+Object { itemKey: "zw9o7c13z", newValue: 6, oldValue: 5, inputValue: "6" }
+PurchaseOrderModal.tsx:299:17
+🚪 MODAL RENDERED: 
+Object { isOpen: true, hasPoDetails: true, poDetailsId: "h5VnHE-XrPUXWXHiN4yUB", editedPricesCount: 0, editedQuantitiesCount: 1 }
+PurchaseOrderModal.tsx:52:13
+🚪 MODAL RENDERED: 
+Object { isOpen: true, hasPoDetails: true, poDetailsId: "h5VnHE-XrPUXWXHiN4yUB", editedPricesCount: 0, editedQuantitiesCount: 1 }
+PurchaseOrderModal.tsx:52:13
+📦 Quantity change: 
+Object { itemKey: "zw9o7c13z", newValue: 6, oldValue: 6, inputValue: "6" }
+PurchaseOrderModal.tsx:299:17
+🚪 MODAL RENDERED: 
+Object { isOpen: true, hasPoDetails: true, poDetailsId: "h5VnHE-XrPUXWXHiN4yUB", editedPricesCount: 0, editedQuantitiesCount: 1 }
+PurchaseOrderModal.tsx:52:13
+🚪 MODAL RENDERED: 
+Object { isOpen: true, hasPoDetails: true, poDetailsId: "h5VnHE-XrPUXWXHiN4yUB", editedPricesCount: 0, editedQuantitiesCount: 1 }
+PurchaseOrderModal.tsx:52:13
+Modal saving updates: 
+Array [ {…} ]
+PurchaseOrderModal.tsx:329:21
+PO ID: h5VnHE-XrPUXWXHiN4yUB PurchaseOrderModal.tsx:330:21
+XHRPOST
+http://localhost:3000/api/purchase-orders/update-items
+[HTTP/1.1 500 Internal Server Error 8660ms]
+
+🚪 MODAL RENDERED: 
+Object { isOpen: true, hasPoDetails: true, poDetailsId: "h5VnHE-XrPUXWXHiN4yUB", editedPricesCount: 0, editedQuantitiesCount: 1 }
+PurchaseOrderModal.tsx:52:13
+🚪 MODAL RENDERED: 
+Object { isOpen: true, hasPoDetails: true, poDetailsId: "h5VnHE-XrPUXWXHiN4yUB", editedPricesCount: 0, editedQuantitiesCount: 1 }
+PurchaseOrderModal.tsx:52:13
+🚪 MODAL RENDERED: 
+Object { isOpen: true, hasPoDetails: true, poDetailsId: "h5VnHE-XrPUXWXHiN4yUB", editedPricesCount: 0, editedQuantitiesCount: 1 }
+PurchaseOrderModal.tsx:52:13
+🚪 MODAL RENDERED: 
+Object { isOpen: true, hasPoDetails: true, poDetailsId: "h5VnHE-XrPUXWXHiN4yUB", editedPricesCount: 0, editedQuantitiesCount: 1 }
+PurchaseOrderModal.tsx:52:13
+Sidebar component - isMobile: false isOpen: false 2 Sidebar.tsx:566:13
+🚪 MODAL RENDERED: 
+Object { isOpen: true, hasPoDetails: true, poDetailsId: "h5VnHE-XrPUXWXHiN4yUB", editedPricesCount: 0, editedQuantitiesCount: 1 }
+PurchaseOrderModal.tsx:52:13
+🚪 MODAL RENDERED: 
+Object { isOpen: true, hasPoDetails: true, poDetailsId: "h5VnHE-XrPUXWXHiN4yUB", editedPricesCount: 0, editedQuantitiesCount: 1 }
+PurchaseOrderModal.tsx:52:13
+🚪 MODAL RENDERED: 
+Object { isOpen: true, hasPoDetails: true, poDetailsId: "h5VnHE-XrPUXWXHiN4yUB", editedPricesCount: 0, editedQuantitiesCount: 1 }
+PurchaseOrderModal.tsx:52:13
+🚪 MODAL RENDERED: 
+Object { isOpen: true, hasPoDetails: true, poDetailsId: "h5VnHE-XrPUXWXHiN4yUB", editedPricesCount: 0, editedQuantitiesCount: 1 }
+PurchaseOrderModal.tsx:52:13
+Sidebar component - isMobile: false isOpen: false 2 Sidebar.tsx:566:13
+🚪 MODAL RENDERED: 
+Object { isOpen: true, hasPoDetails: true, poDetailsId: "h5VnHE-XrPUXWXHiN4yUB", editedPricesCount: 0, editedQuantitiesCount: 1 }
+PurchaseOrderModal.tsx:52:13
+🚪 MODAL RENDERED: 
+Object { isOpen: true, hasPoDetails: true, poDetailsId: "h5VnHE-XrPUXWXHiN4yUB", editedPricesCount: 0, editedQuantitiesCount: 1 }
+PurchaseOrderModal.tsx:52:13
+XHRPOST
+http://localhost:3000/api/purchase-orders/update-items
+[HTTP/1.1 500 Internal Server Error 2551ms]
+
+Modal save failed: Error: Failed to update items
+    updatePOItems webpack-internal:///(app-pages-browser)/./src/hooks/useMutations.ts:24
+    fn webpack-internal:///(app-pages-browser)/./node_modules/@tanstack/query-core/build/modern/mutation.js:75
+    run webpack-internal:///(app-pages-browser)/./node_modules/@tanstack/query-core/build/modern/retryer.js:88
+    run webpack-internal:///(app-pages-browser)/./node_modules/@tanstack/query-core/build/modern/retryer.js:112
+    promise callback*run/< webpack-internal:///(app-pages-browser)/./node_modules/@tanstack/query-core/build/modern/retryer.js:108
+    promise callback*run webpack-internal:///(app-pages-browser)/./node_modules/@tanstack/query-core/build/modern/retryer.js:92
+    start webpack-internal:///(app-pages-browser)/./node_modules/@tanstack/query-core/build/modern/retryer.js:130
+    execute webpack-internal:///(app-pages-browser)/./node_modules/@tanstack/query-core/build/modern/mutation.js:110
+    mutate webpack-internal:///(app-pages-browser)/./node_modules/@tanstack/query-core/build/modern/mutationObserver.js:69
+    handleSaveOrder webpack-internal:///(app-pages-browser)/./src/app/actions/PurchaseOrderModal.tsx:332
+    executeDispatch webpack-internal:///(app-pages-browser)/./node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.development.js:16971
+    runWithFiberInDEV webpack-internal:///(app-pages-browser)/./node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.development.js:875
+    processDispatchQueue webpack-internal:///(app-pages-browser)/./node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.development.js:17021
+    dispatchEventForPluginEventSystem webpack-internal:///(app-pages-browser)/./node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.development.js:17622
+    batchedUpdates$1 webpack-internal:///(app-pages-browser)/./node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.development.js:3312
+    dispatchEventForPluginEventSystem webpack-internal:///(app-pages-browser)/./node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.development.js:17175
+    dispatchEvent webpack-internal:///(app-pages-browser)/./node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.development.js:21358
+    dispatchDiscreteEvent webpack-internal:///(app-pages-browser)/./node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.development.js:21326
+    addTrappedEventListener webpack-internal:///(app-pages-browser)/./node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.development.js:17122
+    listenToNativeEvent webpack-internal:///(app-pages-browser)/./node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.development.js:17057
+    listenToAllSupportedEvents webpack-internal:///(app-pages-browser)/./node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.development.js:17070
+    listenToAllSupportedEvents webpack-internal:///(app-pages-browser)/./node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.development.js:17067
+    completeWork webpack-internal:///(app-pages-browser)/./node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.development.js:11993
+    runWithFiberInDEV webpack-internal:///(app-pages-browser)/./node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.development.js:875
+    completeUnitOfWork webpack-internal:///(app-pages-browser)/./node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.development.js:15863
+    performUnitOfWork webpack-internal:///(app-pages-browser)/./node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.development.js:15744
+    workLoopSync webpack-internal:///(app-pages-browser)/./node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.development.js:15547
+    renderRootSync webpack-internal:///(app-pages-browser)/./node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.development.js:15527
+    performWorkOnRoot webpack-internal:///(app-pages-browser)/./node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.development.js:14991
+    performSyncWorkOnRoot webpack-internal:///(app-pages-browser)/./node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.development.js:16831
+    flushSyncWorkAcrossRoots_impl webpack-internal:///(app-pages-browser)/./node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.development.js:16677
+    flushSpawnedWork webpack-internal:///(app-pages-browser)/./node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.development.js:16274
+    commitRoot webpack-internal:///(app-pages-browser)/./node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.development.js:15998
+    commitRootWhenReady webpack-internal:///(app-pages-browser)/./node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.development.js:15228
+    performWorkOnRoot webpack-internal:///(app-pages-browser)/./node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.development.js:15147
+    performWorkOnRootViaSchedulerTask webpack-internal:///(app-pages-browser)/./node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.development.js:16816
+    performWorkUntilDeadline webpack-internal:///(app-pages-browser)/./node_modules/next/dist/compiled/scheduler/cjs/scheduler.development.js:45
+intercept-console-error.js:57:32
+Error details: Failed to update items intercept-console-error.js:57:32
+🚪 MODAL RENDERED: 
+Object { isOpen: true, hasPoDetails: true, poDetailsId: "h5VnHE-XrPUXWXHiN4yUB", editedPricesCount: 0, editedQuantitiesCount: 1 }
+PurchaseOrderModal.tsx:52:13
+🚪 MODAL RENDERED: 
+Object { isOpen: true, hasPoDetails: true, poDetailsId: "h5VnHE-XrPUXWXHiN4yUB", editedPricesCount: 0, editedQuantitiesCount: 1 }
+PurchaseOrderModal.tsx:52:13

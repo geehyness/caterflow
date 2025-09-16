@@ -10,7 +10,11 @@ import NextLink from 'next/link';
 import Image from 'next/image';
 import { useRouter, usePathname } from 'next/navigation';
 import { FiLogOut, FiBarChart2, FiBox, FiMapPin, FiTruck, FiUsers, FiSettings, FiBell, FiClock, FiActivity, FiChevronDown, FiChevronUp, FiUser } from 'react-icons/fi';
+<<<<<<< HEAD
 import { useSession, signOut } from 'next-auth/react'; // Changed import
+=======
+import { useAuth } from '@/context/AuthContext';
+>>>>>>> dev
 import { useLoading } from '@/context/LoadingContext';
 import { FaCheckCircle } from 'react-icons/fa';
 import { useSidebar } from '@/context/SidebarContext';

@@ -31,6 +31,7 @@ export default withAuth(
       (route) => pathname === route || pathname.startsWith(route + '/')
     );
 
+<<<<<<< HEAD
     if (isProtectedRoute) {
       if (!token) {
         const url = new URL('/login', req.url);
@@ -38,6 +39,25 @@ export default withAuth(
         console.log(`[Middleware] ACTION: Redirecting to login from ${pathname} (no token).`);
         return NextResponse.redirect(url);
       }
+=======
+  // Define protected routes and their required roles for Caterflow
+  const protectedRoutes = {
+    '/': ['admin', 'siteManager', 'stockController', 'dispatchStaff', 'auditor'],
+    '/actions': ['admin', 'siteManager', 'stockController', 'dispatchStaff'],
+    '/approvals': ['admin', 'siteManager'],
+    '/activity': ['admin', 'siteManager', 'stockController', 'auditor'],
+    '/low-stock': ['admin', 'siteManager', 'stockController', 'auditor'],
+    '/inventory': ['admin', 'siteManager', 'stockController', 'auditor'],
+    '/operations/purchases': ['admin', 'siteManager', 'auditor'],
+    '/operations/receipts': ['admin', 'siteManager', 'auditor'],
+    '/operations/dispatches': ['admin', 'dispatchStaff', 'auditor'],
+    '/operations/transfers': ['admin', 'siteManager', 'dispatchStaff', 'auditor'],
+    '/operations/adjustments': ['admin', 'siteManager', 'stockController', 'auditor'],
+    '/operations/counts': ['admin', 'siteManager', 'stockController', 'auditor'],
+    '/admin': ['admin'],
+    '/profile': ['admin', 'siteManager', 'stockController', 'dispatchStaff', 'auditor'],
+  };
+>>>>>>> dev
 
       const userRole = (token as any)?.role;
       const requiredRoles = Object.keys(protectedRoutes).find(route => pathname.startsWith(route))
@@ -75,8 +95,13 @@ export const config = {
     '/low-stock',
     '/inventory',
     '/operations/:path*',
+<<<<<<< HEAD
     '/reporting',
     '/admin',
     // Removed '/login' from here
+=======
+    '/admin/:path*',
+    '/profile',
+>>>>>>> dev
   ],
 };

@@ -47,11 +47,18 @@ import {
     Checkbox,
     useColorModeValue,
 } from '@chakra-ui/react';
+<<<<<<< HEAD
 import { FiCheck, FiSave, FiUpload, FiX, FiCheckCircle } from 'react-icons/fi';
 import FileUploadModal from '@/components/FileUploadModal';
 import { Reference } from 'sanity';
 
 import BinSelectorModal from '@/components/BinSelectorModal';
+=======
+import { FiCheck, FiX } from 'react-icons/fi';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { PurchaseOrder } from './types';
+import DataTable, { Column } from './DataTable';
+>>>>>>> dev
 
 // Interfaces for the data received from the API endpoint
 interface ReceivedItemData {
@@ -131,6 +138,7 @@ export default function GoodsReceiptModal({
     approvedPurchaseOrders = [],
     preSelectedPO = null
 }: GoodsReceiptModalProps) {
+<<<<<<< HEAD
     const toast = useToast();
     const [isSaving, setIsSaving] = useState(false);
     const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
@@ -143,6 +151,9 @@ export default function GoodsReceiptModal({
     const [receivedItems, setReceivedItems] = useState<ReceivedItemData[]>([]);
     const [selectedPOId, setSelectedPOId] = useState<string | null>(preSelectedPO);
     const [isLoadingItems, setIsLoadingItems] = useState(false);
+=======
+    const queryClient = useQueryClient();
+>>>>>>> dev
     const [receiptNumber, setReceiptNumber] = useState('');
     const [receiptDate, setReceiptDate] = useState('');
     const [selectedBin, setSelectedBin] = useState<string>('');
@@ -322,6 +333,14 @@ export default function GoodsReceiptModal({
             return;
         }
 
+<<<<<<< HEAD
+=======
+        await saveReceipt(finalStatus);
+    };
+    {/*}
+    const saveReceipt = async (finalStatus: 'draft' | 'partial' | 'completed') => {
+        setLoading(true);
+>>>>>>> dev
         try {
             const itemsToSave = receivedItems.map(item => ({
                 _key: item._key,
@@ -447,6 +466,137 @@ export default function GoodsReceiptModal({
             }
         }
         return '';
+    };*/}
+
+    // Add the missing function here
+    const getItemListForPO = (po: PurchaseOrder) => {
+        const itemNames = po.orderedItems?.map(item => item.stockItem?.name || 'Unknown Item');
+        const maxItemsToShow = 2;
+        if (itemNames && itemNames.length > 0) {
+            if (itemNames.length <= maxItemsToShow) {
+                return itemNames.join(', ');
+            } else {
+                return `${itemNames.slice(0, maxItemsToShow).join(', ')} +${itemNames.length - maxItemsToShow} more`;
+            }
+        }
+        return '';
+    };
+
+    // Mutation for saving goods receipt
+    const saveGoodsReceiptMutation = useMutation({
+        mutationFn: async (receiptData: any) => {
+            const url = '/api/goods-receipts';
+            const method = receipt ? 'PATCH' : 'POST';
+
+            const response = await fetch(url, {
+                method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(receiptData),
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Failed to save goods receipt');
+            }
+            return response.json();
+        },
+        onMutate: async (receiptData) => {
+            // Optimistically update the goods receipts list
+            queryClient.setQueryData(['goodsReceipts'], (old: any[] | undefined) => {
+                if (receipt) {
+                    // Update existing receipt
+                    return old?.map(r => r._id === receiptData._id ? { ...r, ...receiptData } : r);
+                } else {
+                    // Add new receipt
+                    return [...(old || []), { ...receiptData, _id: `temp-${Date.now()}` }];
+                }
+            });
+        },
+        onError: (err) => {
+            toast({
+                title: 'Error',
+                description: err.message || 'Failed to save goods receipt. Please try again.',
+                status: 'error',
+                duration: 5000,
+                isClosable: true,
+            });
+        },
+        onSuccess: (savedReceipt) => {
+            toast({
+                title: receipt ? 'Receipt updated.' : 'Receipt created.',
+                description: `Goods receipt "${savedReceipt.receiptNumber}" has been saved.`,
+                status: 'success',
+                duration: 3000,
+                isClosable: true,
+            });
+
+            // Update PO status if completed
+            if (savedReceipt.status === 'completed' && savedReceipt.purchaseOrder) {
+                updatePOStatusMutation.mutate({
+                    poId: savedReceipt.purchaseOrder,
+                    status: 'completed'
+                });
+            }
+
+            onSave();
+            onClose();
+        },
+        onSettled: () => {
+            queryClient.invalidateQueries({ queryKey: ['goodsReceipts'] });
+            queryClient.invalidateQueries({ queryKey: ['purchaseOrders'] });
+        },
+    });
+
+    // Mutation for updating PO status
+    const updatePOStatusMutation = useMutation({
+        mutationFn: async ({ poId, status }: { poId: string; status: string }) => {
+            const response = await fetch('/api/purchase-orders/update-status', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ poId, status }),
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to update purchase order status');
+            }
+            return response.json();
+        },
+        onMutate: async ({ poId, status }) => {
+            // Optimistically update PO status
+            queryClient.setQueryData(['purchaseOrders'], (old: any[] | undefined) =>
+                old?.map(po => po._id === poId ? { ...po, status } : po)
+            );
+        },
+        onError: (err) => {
+            console.warn('Error updating purchase order status:', err);
+        },
+        onSettled: () => {
+            queryClient.invalidateQueries({ queryKey: ['purchaseOrders'] });
+        },
+    });
+
+    const saveReceipt = async (finalStatus: 'draft' | 'partial' | 'completed') => {
+        setLoading(true);
+
+        const selectedOrder = approvedPurchaseOrders?.find(po => po._id === selectedPO);
+        const receiptData = {
+            ...(receipt && { _id: receipt._id }),
+            receiptNumber: receiptNumber || `GR-${Date.now()}`,
+            purchaseOrder: selectedPO,
+            receivedItems: items,
+            receivedDate: receiptDate,
+            status: finalStatus,
+            notes: notes,
+            createdBy: receipt?.createdBy || user?._id,
+        };
+
+        try {
+            await saveGoodsReceiptMutation.mutateAsync(receiptData);
+        } catch (error) {
+            console.error('Error saving goods receipt:', error);
+        } finally {
+            setLoading(false);
+        }
     };
 
     const selectedOrder = approvedPurchaseOrders.find(po => po._id === selectedPOId) || receipt?.purchaseOrder || null;

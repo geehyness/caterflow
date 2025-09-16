@@ -53,7 +53,18 @@ export async function POST(request: NextRequest) {
 
         const result = await patch.commit();
 
-        return NextResponse.json({ success: true, result });
+        // Return the updated document for optimistic updates
+        const updatedDoc = await writeClient.getDocument(id);
+
+        return NextResponse.json({
+            success: true,
+            result: updatedDoc,
+            updatedFields: {
+                ...(completedSteps !== undefined && { completedSteps }),
+                ...(status && { status }),
+                ...(status === 'approved' && approvedBy && approvedAt && { approvedBy, approvedAt })
+            }
+        });
     } catch (error: any) {
         console.error('Failed to update action:', error);
         return NextResponse.json(

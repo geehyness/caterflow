@@ -25,7 +25,11 @@ export async function POST(req: Request) {
         // Generate a 6-digit verification code
         const verificationCode = crypto.randomInt(100000, 999999).toString();
         // Set the expiration for the code (e.g., 15 minutes)
+<<<<<<< HEAD
         const expirationTime = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+=======
+        const expirationTime = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+>>>>>>> dev
 
         // Patch the user document with the new code and expiration
         await writeClient
