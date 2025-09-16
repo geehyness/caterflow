@@ -3,30 +3,61 @@ import { client, writeClient } from '@/lib/sanity';
 import { groq } from 'next-sanity';
 import { logSanityInteraction } from '@/lib/sanityLogger';
 
+// Helper function to generate the next unique dispatch number
+const getNextDispatchNumber = async (): Promise<string> => {
+    try {
+        const query = groq`*[_type == "DispatchLog"] | order(dispatchNumber desc)[0].dispatchNumber`;
+        const lastDispatchNumber = await client.fetch(query);
+
+        if (!lastDispatchNumber) {
+            return 'DISP-00001'; // First dispatch
+        }
+
+        // Extract the numeric part from the dispatch number (e.g., "DISP-00023" -> 23)
+        const match = lastDispatchNumber.match(/DISP-(\d+)/);
+        if (!match) {
+            return 'DISP-00001'; // Fallback if format is unexpected
+        }
+
+        const lastNumber = parseInt(match[1], 10);
+        const nextNumber = lastNumber + 1;
+        return `DISP-${String(nextNumber).padStart(5, '0')}`;
+    } catch (error) {
+        console.error('Error generating dispatch number:', error);
+        // Fallback: generate a timestamp-based ID
+        return `DISP-${Date.now().toString().slice(-5)}`;
+    }
+};
+
 export async function GET() {
     try {
+        // Update the GET query to populate stockItem details
         const query = groq`*[_type == "DispatchLog"] | order(dispatchDate desc) {
-      _id,
-      dispatchNumber,
-      dispatchDate,
-      status,
-      notes,
-      "sourceBin": sourceBin->{
-        _id,
-        name,
-        "site": site->{name}
-      },
-      "destinationSite": destinationSite->{
-        _id,
-        name
-      },
-      "totalItems": count(dispatchedItems),
-      "items": dispatchedItems[]{
-        "stockItem": stockItem._ref,
-        dispatchedQuantity,
-        totalCost
-      }
-    }`;
+            _id,
+            dispatchNumber,
+            dispatchDate,
+            status,
+            notes,
+            "sourceBin": sourceBin->{
+                _id,
+                name,
+                "site": site->{name}
+            },
+            "destinationSite": destinationSite->{
+                _id,
+                name
+            },
+            "totalItems": count(dispatchedItems),
+            "items": dispatchedItems[]{
+                "stockItem": stockItem->{  // Change this line to populate the stockItem
+                    _id,
+                    name,
+                    sku
+                },
+                dispatchedQuantity,
+                totalCost
+            }
+        }`;
 
         const dispatches = await client.fetch(query);
         return NextResponse.json(dispatches);
@@ -39,15 +70,13 @@ export async function GET() {
     }
 }
 
+
 export async function POST(request: Request) {
     try {
         const body = await request.json();
 
-        // Generate a unique dispatch number if not provided
-        if (!body.dispatchNumber) {
-            const count = await client.fetch(groq`count(*[_type == "DispatchLog"])`);
-            body.dispatchNumber = `DISP-${(count + 1).toString().padStart(4, '0')}`;
-        }
+        // Generate a unique dispatch number using the new function
+        const dispatchNumber = await getNextDispatchNumber();
 
         // Create the dispatched items array
         const dispatchedItems = (body.items || []).map((item: any) => ({
@@ -62,7 +91,7 @@ export async function POST(request: Request) {
 
         const dispatch = {
             _type: 'DispatchLog',
-            dispatchNumber: body.dispatchNumber,
+            dispatchNumber,
             dispatchDate: body.dispatchDate || new Date().toISOString().split('T')[0],
             status: body.status || 'pending',
             sourceBin: {
@@ -81,7 +110,7 @@ export async function POST(request: Request) {
 
         await logSanityInteraction(
             'create',
-            `Created dispatch: ${body.dispatchNumber}`,
+            `Created dispatch: ${dispatchNumber}`,
             'DispatchLog',
             result._id,
             'system',

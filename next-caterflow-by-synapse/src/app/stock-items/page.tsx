@@ -9,6 +9,7 @@ import DataTable, { Column } from '@/components/DataTable';
 import { useRouter } from 'next/navigation';
 import StockItemModal from '@/components/StockItemModal';
 import { EditIcon, DeleteIcon } from '@chakra-ui/icons';
+import { useSession } from 'next-auth/react'
 
 interface StockItem {
     _id: string;
@@ -32,6 +33,9 @@ interface StockItem {
 }
 
 export default function InventoryPage() {
+    const { data: session, status } = useSession();
+    const user = session?.user;
+
     const [stockItems, setStockItems] = useState<StockItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [selectedItem, setSelectedItem] = useState<StockItem | null>(null);

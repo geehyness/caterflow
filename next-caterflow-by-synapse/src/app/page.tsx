@@ -27,7 +27,7 @@ import {
   useBreakpointValue,
 } from '@chakra-ui/react';
 import { FiArrowLeft, FiArrowRight } from 'react-icons/fi';
-import { useAuth } from '@/context/AuthContext';
+import { useSession } from 'next-auth/react';
 import { BsBoxSeam, BsArrowRight, BsTruck, BsBuildingAdd, BsExclamationTriangle, BsClipboardData, BsClock } from 'react-icons/bs';
 import Link from 'next/link';
 
@@ -42,6 +42,18 @@ interface Transaction {
   createdAt: string;
   description: string;
   siteName: string;
+}
+
+// Add this interface for your session user
+interface SessionUser {
+  id: string;
+  name?: string | null;
+  email?: string | null;
+  role: string;
+  associatedSite?: {
+    _id: string;
+    name: string;
+  } | null;
 }
 
 interface DashboardStats {
@@ -154,7 +166,7 @@ const StatCard = ({
 };
 
 export default function Home() {
-  const { user, isAuthReady } = useAuth();
+  const { data: session, status } = useSession(); // Use NextAuth's useSession
   const [sites, setSites] = useState<Site[]>([]);
   const [selectedSiteId, setSelectedSiteId] = useState<string | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -162,22 +174,33 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSitesLoading, setIsSitesLoading] = useState(true);
 
+
+
   const toast = useToast();
   const cardBg = useColorModeValue('gray.50', 'gray.700');
   const isMobile = useBreakpointValue({ base: true, md: false });
   const sitesContainerRef = useRef<HTMLDivElement>(null);
 
+  // Extract user data from session with proper typing
+  const user = session?.user as SessionUser | undefined;
+  const userRole = user?.role;
+  const associatedSite = user?.associatedSite;
+  const isAuthReady = status !== 'loading';
+
   // Fetch sites based on user role
   useEffect(() => {
-    if (!isAuthReady) return;
+    if (status === 'loading') return;
 
     const fetchSites = async () => {
       setIsSitesLoading(true);
       try {
         let siteQuery = `*[_type == "Site"] | order(name asc) { _id, name }`;
-        if (user?.role === 'siteManager') {
+        let siteParams = {};
+
+        if (userRole === 'siteManager') {
           siteQuery = `*[_type == "Site" && _id == $siteId] | order(name asc) { _id, name }`;
-        } else if (user?.role === 'admin' || user?.role === 'auditor') {
+          siteParams = associatedSite?._id ? { siteId: associatedSite._id } : {};
+        } else if (userRole === 'admin' || userRole === 'auditor') {
           siteQuery = `*[_type == "Site"] | order(name asc) { _id, name }`;
         } else {
           setSites([]);
@@ -188,7 +211,6 @@ export default function Home() {
           return;
         }
 
-        const siteParams = user?.associatedSite?._id ? { siteId: user.associatedSite._id } : {};
         const response = await fetch('/api/sanity', {
           method: 'POST',
           headers: {
@@ -207,7 +229,7 @@ export default function Home() {
         const fetchedSites: Site[] = await response.json();
         setSites(fetchedSites);
 
-        if (user?.role === 'siteManager' && fetchedSites.length > 0) {
+        if (userRole === 'siteManager' && fetchedSites.length > 0) {
           setSelectedSiteId(fetchedSites[0]._id);
         }
       } catch (error) {
@@ -225,7 +247,7 @@ export default function Home() {
     };
 
     fetchSites();
-  }, [isAuthReady, user, toast]);
+  }, [status, userRole, associatedSite, toast]);
 
   // Fetch dashboard data from API route
   useEffect(() => {

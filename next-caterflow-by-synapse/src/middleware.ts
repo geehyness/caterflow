@@ -1,102 +1,82 @@
-// src/middleware.ts
+import { withAuth } from 'next-auth/middleware';
 import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/server';
 
-export async function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl;
+export default withAuth(
+  async function middleware(req) {
+    const { pathname } = req.nextUrl;
+    const token = req.nextauth.token;
 
-  console.log(`\n--- Middleware Start ---`);
-  console.log(`[Middleware] Current Pathname: ${pathname}`);
+    console.log(`\n--- NextAuth Middleware Start ---`);
+    console.log(`[Middleware] Current Pathname: ${pathname}`);
+    console.log(`[Middleware] Token: ${token ? 'Present' : 'Not Present'}`);
 
-  const authToken = request.cookies.get('auth_token')?.value;
-  const userRole = request.cookies.get('user_role')?.value;
+    const protectedRoutes = {
+      '/': ['admin', 'siteManager', 'stockController', 'dispatchStaff', 'auditor'],
+      '/actions': ['admin', 'siteManager', 'stockController', 'dispatchStaff'],
+      '/approvals': ['admin', 'siteManager'],
+      '/activity': ['admin', 'siteManager', 'stockController', 'auditor'],
+      '/low-stock': ['admin', 'siteManager', 'stockController', 'auditor'],
+      '/inventory': ['admin', 'siteManager', 'stockController', 'auditor'],
+      '/operations/purchases': ['admin', 'siteManager', 'auditor'],
+      '/operations/receipts': ['admin', 'siteManager', 'auditor'],
+      '/operations/dispatches': ['admin', 'dispatchStaff', 'auditor'],
+      '/operations/transfers': ['admin', 'siteManager', 'dispatchStaff', 'auditor'],
+      '/operations/counts': ['admin', 'siteManager', 'stockController', 'auditor'],
+      '/operations/adjustments': ['admin', 'siteManager', 'stockController', 'auditor'],
+      '/reporting': ['admin', 'auditor'],
+      '/admin': ['admin'],
+    };
 
-  console.log(`[Middleware] Auth Token: ${authToken ? 'Present' : 'Not Present'}`);
-  console.log(`[Middleware] User Role: ${userRole || 'N/A'}`);
+    const isProtectedRoute = Object.keys(protectedRoutes).some(
+      (route) => pathname === route || pathname.startsWith(route + '/')
+    );
 
-  // Define protected routes and their required roles for Caterflow
-  const protectedRoutes = {
-    '/': ['admin', 'siteManager', 'stockController', 'dispatchStaff', 'auditor'],
-    '/actions': ['admin', 'siteManager', 'stockController', 'dispatchStaff'],
-    '/approvals': ['admin', 'siteManager'],
-    '/activity': ['admin', 'siteManager', 'stockController', 'auditor'],
-    '/low-stock': ['admin', 'siteManager', 'stockController', 'auditor'],
-    '/inventory': ['admin', 'siteManager', 'stockController', 'auditor'],
-    '/operations/purchases': ['admin', 'siteManager', 'auditor'],
-    '/operations/receipts': ['admin', 'siteManager', 'auditor'],
-    '/operations/dispatches': ['admin', 'dispatchStaff', 'auditor'],
-    '/operations/transfers': ['admin', 'siteManager', 'dispatchStaff', 'auditor'],
-    '/operations/adjustments': ['admin', 'siteManager', 'stockController', 'auditor'],
-    '/operations/counts': ['admin', 'siteManager', 'stockController', 'auditor'],
-    '/admin': ['admin'],
-  };
+    if (isProtectedRoute) {
+      if (!token) {
+        const url = new URL('/login', req.url);
+        url.searchParams.set('redirect', pathname);
+        console.log(`[Middleware] ACTION: Redirecting to login from ${pathname} (no token).`);
+        return NextResponse.redirect(url);
+      }
 
-  // Check if the current path is a protected route
-  let isProtectedRoute = false;
-  console.log(`[Middleware] Checking if ${pathname} is a protected route...`);
+      const userRole = (token as any)?.role;
+      const requiredRoles = Object.keys(protectedRoutes).find(route => pathname.startsWith(route))
+        ? protectedRoutes[Object.keys(protectedRoutes).find(route => pathname.startsWith(route)) as keyof typeof protectedRoutes]
+        : [];
 
-  for (const routePrefix in protectedRoutes) {
-    if (pathname.startsWith(routePrefix)) {
-      isProtectedRoute = true;
-      console.log(`[Middleware] MATCH: Pathname "${pathname}" starts with protected route prefix "${routePrefix}".`);
-      break;
-    } else {
-      console.log(`[Middleware] NO MATCH: Pathname "${pathname}" does NOT start with "${routePrefix}".`);
+      if (requiredRoles.length > 0 && (!userRole || !requiredRoles.includes(userRole))) {
+        const url = new URL('/unauthorized', req.url);
+        console.log(`[Middleware] ACTION: Redirecting to unauthorized from ${pathname} (insufficient role: ${userRole}).`);
+        return NextResponse.redirect(url);
+      }
     }
-  }
 
-  console.log(`[Middleware] Final isProtectedRoute status: ${isProtectedRoute}`);
+    console.log(`[Middleware] Allowing access to ${pathname}.`);
+    console.log(`--- NextAuth Middleware End ---\n`);
 
-  // If accessing the login page, allow it
-  if (pathname === '/login') {
-    console.log('[Middleware] Allowing access to /login page.');
-    console.log(`--- Middleware End ---\n`);
     return NextResponse.next();
+  },
+  {
+    callbacks: {
+      authorized: ({ token }) => !!token,
+    },
+    pages: {
+      signIn: '/login',
+    },
   }
-
-  // If accessing a protected route without an auth token, redirect to login
-  if (isProtectedRoute && !authToken) {
-    const url = request.nextUrl.clone();
-    url.pathname = '/login';
-    // Only set redirect param if we're not already going to login and it's not the dashboard
-    if (pathname !== '/') {
-      url.searchParams.set('redirect', pathname);
-    }
-    console.log(`[Middleware] ACTION: Redirecting to login from ${pathname} (no auth token).`);
-    console.log(`--- Middleware End ---\n`);
-    return NextResponse.redirect(url);
-  }
-
-  // If there's an auth token, validate role for protected routes
-  if (isProtectedRoute && authToken) {
-    const matchedRoutePrefix = Object.keys(protectedRoutes).find(route => pathname.startsWith(route));
-    const requiredRoles = matchedRoutePrefix ? protectedRoutes[matchedRoutePrefix as keyof typeof protectedRoutes] : [];
-
-    console.log(`[Middleware] Required Roles for ${pathname}: ${requiredRoles.join(', ')}`);
-    if (requiredRoles.length > 0 && (!userRole || !requiredRoles.includes(userRole))) {
-      const url = request.nextUrl.clone();
-      url.pathname = '/unauthorized';
-      console.log(`[Middleware] ACTION: Redirecting to unauthorized from ${pathname} (insufficient role: ${userRole}).`);
-      console.log(`--- Middleware End ---\n`);
-      return NextResponse.redirect(url);
-    }
-  }
-
-  console.log(`[Middleware] Allowing access to ${pathname}.`);
-  console.log(`--- Middleware End ---\n`);
-  return NextResponse.next();
-}
+);
 
 export const config = {
   matcher: [
     '/',
-    '/login',
     '/actions',
     '/approvals',
     '/activity',
     '/low-stock',
-    '/inventory/:path*',
+    '/inventory',
     '/operations/:path*',
-    '/admin/:path*',
+    '/reporting',
+    '/admin',
+    // Removed '/login' from here
   ],
 };

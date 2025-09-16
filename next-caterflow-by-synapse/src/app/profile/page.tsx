@@ -29,11 +29,15 @@ import {
     IconButton,
 } from '@chakra-ui/react';
 import { ViewIcon, ViewOffIcon } from '@chakra-ui/icons';
-import { useAuth } from '@/context/AuthContext';
+import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation';
 
 export default function ProfilePage() {
-    const { user, isAuthenticated, isAuthReady } = useAuth();
+    const { data: session, status } = useSession();
+    const user = session?.user;
+    const isAuthenticated = status === 'authenticated';
+    const isAuthReady = status !== 'loading';
+
     const [activeTab, setActiveTab] = useState(0);
     const [isLoading, setIsLoading] = useState(false);
 
@@ -60,7 +64,7 @@ export default function ProfilePage() {
         if (isAuthReady && !isAuthenticated) {
             router.push('/login?redirect=/profile');
         }
-    }, [isAuthReady, isAuthenticated, router]);
+    }, [isAuthReady, isAuthenticated, router, status]);
 
     const handlePasswordChange = async (event: React.FormEvent) => {
         event.preventDefault();

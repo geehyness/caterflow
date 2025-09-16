@@ -1,12 +1,11 @@
-// providers.tsx
 'use client';
 
 import { ChakraProvider } from '@chakra-ui/react';
 import dynamic from 'next/dynamic';
 import themes from './theme/theme';
-import { AuthProvider } from '@/context/AuthContext';
 import { LoadingProvider } from '@/context/LoadingContext';
-import { SidebarProvider } from '@/context/SidebarContext'; // Make sure this import is correct
+import { SidebarProvider } from '@/context/SidebarContext';
+import { SessionProvider } from 'next-auth/react'; // Import the new provider
 
 const ThemeProvider = dynamic(
   () => import('next-themes').then((mod) => mod.ThemeProvider),
@@ -19,21 +18,22 @@ interface ProvidersProps {
 
 export function Providers({ children }: ProvidersProps) {
   return (
-    <ChakraProvider theme={themes}>
-      <ThemeProvider
-        attribute="class"
-        defaultTheme="dark"
-        enableSystem={false}
-        disableTransitionOnChange
-      >
-        <AuthProvider>
+    // SessionProvider must wrap the entire application
+    <SessionProvider>
+      <ChakraProvider theme={themes}>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="dark"
+          enableSystem={false}
+          disableTransitionOnChange
+        >
           <LoadingProvider>
-            <SidebarProvider> {/* Make sure this is properly nested */}
+            <SidebarProvider>
               {children}
             </SidebarProvider>
           </LoadingProvider>
-        </AuthProvider>
-      </ThemeProvider>
-    </ChakraProvider>
+        </ThemeProvider>
+      </ChakraProvider>
+    </SessionProvider>
   );
 }

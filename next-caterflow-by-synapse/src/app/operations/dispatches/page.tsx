@@ -17,10 +17,12 @@ import {
     InputGroup,
     InputLeftElement,
     Badge,
+    Text,
+    Icon,
 } from '@chakra-ui/react';
-import { FiPlus, FiSearch, FiEdit, FiTrash2, FiEye } from 'react-icons/fi';
+import { FiPlus, FiSearch, FiEye, FiFilter, FiEdit } from 'react-icons/fi';
 import DataTable from '@/components/DataTable';
-import { useAuth } from '@/context/AuthContext';
+import { useSession } from 'next-auth/react'
 import DispatchModal from '@/components/DispatchModal';
 
 // Rename the interface to avoid conflict with React's Dispatch type
@@ -33,7 +35,7 @@ interface DispatchRecord {
         _id: string;
         name: string;
         site: {
-            _id: string; // Added _id to match expected type
+            _id: string;
             name: string;
         };
     };
@@ -42,15 +44,21 @@ interface DispatchRecord {
         name: string;
     };
     totalItems: number;
-    // Add items property
     items: Array<{
-        stockItem: string;
+        _key: string; // Add this required property
+        stockItem: {
+            _id: string;
+            name: string;
+        };
         dispatchedQuantity: number;
         totalCost?: number;
     }>;
 }
 
 export default function DispatchesPage() {
+    const { data: session, status } = useSession();
+    const user = session?.user;
+
     const [dispatches, setDispatches] = useState<DispatchRecord[]>([]);
     const [filteredDispatches, setFilteredDispatches] = useState<DispatchRecord[]>([]);
     const [selectedDispatch, setSelectedDispatch] = useState<DispatchRecord | null>(null);
@@ -58,19 +66,29 @@ export default function DispatchesPage() {
     const [searchTerm, setSearchTerm] = useState('');
     const { isOpen, onOpen, onClose } = useDisclosure();
     const toast = useToast();
-    const { user } = useAuth();
+    const [viewMode, setViewMode] = useState<'actionRequired' | 'all'>('actionRequired');
 
     const cardBg = useColorModeValue('white', 'gray.700');
     const borderColor = useColorModeValue('gray.200', 'gray.600');
     const inputBg = useColorModeValue('white', 'gray.800');
+    const secondaryTextColor = useColorModeValue('neutral.light.text-secondary', 'neutral.dark.text-secondary');
+    const searchIconColor = useColorModeValue('gray.300', 'gray.500');
 
-    // Wrap fetchDispatches in useCallback to memoize it
     const fetchDispatches = useCallback(async () => {
+        setLoading(true);
         try {
             const response = await fetch('/api/dispatches');
             if (response.ok) {
                 const data = await response.json();
-                setDispatches(data);
+                // Add _key property if missing
+                const dispatchesWithKeys = data.map((dispatch: DispatchRecord) => ({
+                    ...dispatch,
+                    items: dispatch.items.map((item, index) => ({
+                        ...item,
+                        _key: item._key || `item-${index}-${Date.now()}` // Generate key if missing
+                    }))
+                }));
+                setDispatches(dispatchesWithKeys);
             } else {
                 throw new Error('Failed to fetch dispatches');
             }
@@ -86,73 +104,39 @@ export default function DispatchesPage() {
         } finally {
             setLoading(false);
         }
-    }, [toast]); // Include toast in dependencies if it's used inside
+    }, [toast]);
 
-    // FIX: Add fetchDispatches to the dependency array
+
     useEffect(() => {
         fetchDispatches();
     }, [fetchDispatches]);
 
     useEffect(() => {
-        if (searchTerm) {
-            const term = searchTerm.toLowerCase();
-            setFilteredDispatches(
-                dispatches.filter(dispatch =>
-                    dispatch.dispatchNumber.toLowerCase().includes(term) ||
-                    dispatch.sourceBin.name.toLowerCase().includes(term) ||
-                    dispatch.destinationSite.name.toLowerCase().includes(term)
-                )
-            );
-        } else {
-            setFilteredDispatches(dispatches);
-        }
-    }, [dispatches, searchTerm]);
+        const filtered = searchTerm
+            ? dispatches.filter(dispatch => {
+                const term = searchTerm.toLowerCase();
+                const dispatchNumberMatch = dispatch.dispatchNumber.toLowerCase().includes(term);
+                const sourceBinMatch = dispatch.sourceBin.name.toLowerCase().includes(term);
+                const destinationSiteMatch = dispatch.destinationSite.name.toLowerCase().includes(term);
+                return dispatchNumberMatch || sourceBinMatch || destinationSiteMatch;
+            })
+            : dispatches;
+
+        const dispatchesToDisplay = viewMode === 'actionRequired'
+            ? filtered.filter(dispatch => dispatch.status === 'pending')
+            : filtered;
+
+        setFilteredDispatches(dispatchesToDisplay);
+    }, [dispatches, searchTerm, viewMode]);
 
     const handleAddDispatch = () => {
         setSelectedDispatch(null);
         onOpen();
     };
 
-    const handleEditDispatch = (dispatch: DispatchRecord) => {
+    const handleViewDispatch = (dispatch: DispatchRecord) => {
         setSelectedDispatch(dispatch);
         onOpen();
-    };
-
-    const handleViewDispatch = (dispatch: DispatchRecord) => {
-        // Navigate to detail page or open a view modal
-        console.log('View dispatch:', dispatch);
-    };
-
-    const handleDeleteDispatch = async (dispatchId: string) => {
-        if (window.confirm('Are you sure you want to delete this dispatch?')) {
-            try {
-                const response = await fetch(`/api/dispatches?id=${dispatchId}`, {
-                    method: 'DELETE'
-                });
-
-                if (!response.ok) {
-                    throw new Error('Failed to delete dispatch');
-                }
-
-                setDispatches(dispatches.filter(dispatch => dispatch._id !== dispatchId));
-                toast({
-                    title: 'Dispatch deleted.',
-                    description: 'The dispatch has been successfully deleted.',
-                    status: 'success',
-                    duration: 3000,
-                    isClosable: true,
-                });
-            } catch (error) {
-                console.error('Error deleting dispatch:', error);
-                toast({
-                    title: 'Error',
-                    description: 'Failed to delete dispatch. Please try again.',
-                    status: 'error',
-                    duration: 5000,
-                    isClosable: true,
-                });
-            }
-        }
     };
 
     const handleSaveSuccess = () => {
@@ -170,81 +154,84 @@ export default function DispatchesPage() {
         }
     };
 
+    // Update the getItemList function to handle string references
+    const getItemList = (dispatch: DispatchRecord) => {
+        if (!dispatch.items || dispatch.items.length === 0) return 'No items';
+
+        const items = dispatch.items.slice(0, 3).map(item =>
+            `${item.stockItem?.name || 'Unknown'} (${item.dispatchedQuantity})`
+        );
+
+        return items.join(', ') + (dispatch.items.length > 3 ? '...' : '');
+    };
+
     const columns = [
         {
-            accessorKey: 'actions',
-            header: 'Actions',
-            cell: (row: DispatchRecord) => (
-                <Flex>
-                    <IconButton
-                        aria-label="View dispatch"
-                        icon={<FiEye />}
-                        size="sm"
-                        colorScheme="blue"
-                        variant="ghost"
-                        mr={2}
-                        onClick={() => handleViewDispatch(row)}
-                    />
-                    <IconButton
-                        aria-label="Edit dispatch"
-                        icon={<FiEdit />}
-                        size="sm"
-                        colorScheme="green"
-                        variant="ghost"
-                        mr={2}
-                        onClick={() => handleEditDispatch(row)}
-                    />
-                    <IconButton
-                        aria-label="Delete dispatch"
-                        icon={<FiTrash2 />}
-                        size="sm"
-                        colorScheme="red"
-                        variant="ghost"
-                        onClick={() => handleDeleteDispatch(row._id)}
-                    />
-                </Flex>
+            accessorKey: 'workflowAction',
+            header: 'Action',
+            cell: (row: any) => (
+                <Button
+                    size="sm"
+                    colorScheme={row.status === 'pending' ? 'brand' : 'gray'}
+                    variant={row.status === 'pending' ? 'solid' : 'outline'}
+                    onClick={() => handleViewDispatch(row)}
+                    leftIcon={<Icon as={row.status === 'pending' ? FiEdit : FiEye} />}
+                >
+                    {row.status === 'pending' ? 'Edit' : 'View'}
+                </Button>
             ),
         },
         {
             accessorKey: 'dispatchNumber',
             header: 'Dispatch Number',
-            isSortable: true,
         },
         {
             accessorKey: 'dispatchDate',
             header: 'Dispatch Date',
-            isSortable: true,
             cell: (row: DispatchRecord) => new Date(row.dispatchDate).toLocaleDateString(),
         },
         {
-            accessorKey: 'sourceBin.name',
+            accessorKey: 'sourceBin',
             header: 'Source Bin',
-            isSortable: true,
-            cell: (row: DispatchRecord) => `${row.sourceBin.name} (${row.sourceBin.site.name})`,
+            cell: (row: DispatchRecord) => (
+                <Box>
+                    <Text fontWeight="bold">{row.sourceBin.name}</Text>
+                    <Text fontSize="sm" color={secondaryTextColor}>{row.sourceBin.site.name}</Text>
+                </Box>
+            ),
         },
         {
-            accessorKey: 'destinationSite.name',
+            accessorKey: 'destinationSite',
             header: 'Destination Site',
-            isSortable: true,
+            cell: (row: DispatchRecord) => (
+                <Box>
+                    <Text fontWeight="bold">{row.destinationSite.name}</Text>
+                </Box>
+            ),
         },
         {
-            accessorKey: 'totalItems',
-            header: 'Total Items',
-            isSortable: true,
+            accessorKey: 'description',
+            header: 'Items',
+            cell: (row: DispatchRecord) => (
+                <Box>
+                    <Text fontSize="sm" color={secondaryTextColor} noOfLines={2}>
+                        {getItemList(row)}
+                    </Text>
+                </Box>
+            )
         },
         {
             accessorKey: 'status',
             header: 'Status',
-            isSortable: true,
             cell: (row: DispatchRecord) => (
-                <Badge colorScheme={getStatusColor(row.status || '')}>
-                    {(row.status || 'N/A').toUpperCase()}
+                <Badge colorScheme={getStatusColor(row.status)} variant="subtle">
+                    {row.status.replace('-', ' ').toUpperCase()}
                 </Badge>
             ),
         },
     ];
 
-    if (loading) {
+    if (loading || status === 'loading') {
         return (
             <Box p={4}>
                 <Flex justifyContent="center" alignItems="center" height="50vh">
@@ -255,34 +242,56 @@ export default function DispatchesPage() {
     }
 
     return (
-        <Box p={4}>
-            <Flex justifyContent="space-between" alignItems="center" mb={6}>
+        <Box p={{ base: 2, md: 4 }}>
+            <Flex
+                justifyContent="space-between"
+                alignItems={{ base: 'flex-start', md: 'center' }}
+                mb={6}
+                flexDirection={{ base: 'column', md: 'row' }}
+                gap={4}
+            >
                 <Heading as="h1" size="lg">Dispatches</Heading>
-                <Button
-                    leftIcon={<FiPlus />}
-                    colorScheme="blue"
-                    onClick={handleAddDispatch}
-                >
-                    New Dispatch
-                </Button>
+                <Flex gap={3} flexWrap="wrap" justifyContent={{ base: 'flex-start', md: 'flex-end' }}>
+                    <Button
+                        leftIcon={<FiFilter />}
+                        colorScheme={viewMode === 'actionRequired' ? 'brand' : 'gray'}
+                        onClick={() => setViewMode('actionRequired')}
+                    >
+                        Action Required
+                    </Button>
+                    <Button
+                        leftIcon={<FiEye />}
+                        colorScheme={viewMode === 'all' ? 'brand' : 'gray'}
+                        onClick={() => setViewMode('all')}
+                    >
+                        View All
+                    </Button>
+                    <Button
+                        leftIcon={<FiPlus />}
+                        colorScheme="brand"
+                        onClick={handleAddDispatch}
+                    >
+                        New Dispatch
+                    </Button>
+                </Flex>
             </Flex>
 
-            {/* Search */}
-            <Card bg={cardBg} border="1px" borderColor={borderColor} borderRadius="md" mb={4} p={4}>
-                <InputGroup>
-                    <InputLeftElement pointerEvents="none">
-                        <FiSearch color="gray.300" />
-                    </InputLeftElement>
-                    <Input
-                        placeholder="Search dispatches..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        bg={inputBg}
-                    />
-                </InputGroup>
+            <Card bg={cardBg} border="1px" borderColor={borderColor} borderRadius="md" mb={4}>
+                <CardBody>
+                    <InputGroup>
+                        <InputLeftElement pointerEvents="none">
+                            <Icon as={FiSearch} color={searchIconColor} />
+                        </InputLeftElement>
+                        <Input
+                            placeholder="Search by dispatch number, source bin, or destination site..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            bg={inputBg}
+                        />
+                    </InputGroup>
+                </CardBody>
             </Card>
 
-            {/* Dispatches Table */}
             <Card bg={cardBg} border="1px" borderColor={borderColor} borderRadius="md">
                 <CardBody p={0}>
                     <DataTable

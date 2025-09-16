@@ -112,10 +112,10 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   );
 };
 
-export const useAuth = () => {
+export const useSession = () => {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    throw new Error('useSession must be used within an AuthProvider');
   }
   return context;
 };

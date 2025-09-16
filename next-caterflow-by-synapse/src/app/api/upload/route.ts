@@ -1,6 +1,9 @@
 // src/app/api/upload/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { writeClient } from '@/lib/sanity';
+import { getServerSession } from 'next-auth';
+import { groq } from 'next-sanity';
+import { authOptions } from '@/lib/auth';
 
 // Maximum file size (10MB)
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -18,103 +21,141 @@ const ALLOWED_FILE_TYPES = [
 
 export async function POST(request: NextRequest) {
     try {
-        const formData = await request.formData();
-        const file = formData.get('file') as File;
-        const fileName = formData.get('fileName') as string;
-        const fileType = formData.get('fileType') as string;
-        const description = formData.get('description') as string;
-        const relatedTo = formData.get('relatedTo') as string;
-        const relatedType = formData.get('relatedType') as string;
+        const session = await getServerSession(authOptions);
 
-        // Validate required fields
-        if (!file || !fileName || !fileType || !relatedTo || !relatedType) {
+        if (!session || !session.user) {
+            console.log('User not authenticated');
             return NextResponse.json(
-                { error: 'Missing required fields' },
-                { status: 400 }
+                { error: 'User not authenticated' },
+                { status: 401 }
             );
         }
 
-        // Validate file size
-        if (file.size > MAX_FILE_SIZE) {
-            return NextResponse.json(
-                { error: 'File size exceeds 10MB limit' },
-                { status: 400 }
-            );
-        }
+        // Get the user's ID from Sanity based on their email
+        const userQuery = groq`*[_type == "AppUser" && email == $email][0] {
+            _id
+        }`;
 
-        // Validate file type
-        if (!ALLOWED_FILE_TYPES.includes(file.type)) {
-            return NextResponse.json(
-                { error: 'File type not allowed' },
-                { status: 400 }
-            );
-        }
-
-        // Convert file to buffer
-        const bytes = await file.arrayBuffer();
-        const buffer = Buffer.from(bytes);
-
-        // Upload file to Sanity
-        const asset = await writeClient.assets.upload('file', buffer, {
-            filename: fileName,
+        const user = await writeClient.fetch(userQuery, {
+            email: session.user.email
         });
 
-        // Get user from session (you'll need to implement authentication)
-        // For now, we'll use a placeholder user ID
-        const uploadedBy = 'placeholder-user-id';
+        if (!user) {
+            console.log('User not found in database for email:', session.user.email);
+            return NextResponse.json(
+                { error: 'User not found in database' },
+                { status: 404 }
+            );
+        }
 
-        // Create file attachment document
-        const fileAttachment = {
+        const formData = await request.formData();
+        const file = formData.get('file') as File | null; // Change from Blob to File
+        const relatedToId = formData.get('relatedTo');
+        const fileType = formData.get('fileType');
+        const description = formData.get('description');
+
+        // **Log the received form data**
+        console.log('--- Server-side Received Data ---');
+        console.log('Received File:', file ? file.name : 'No file received');
+        console.log('Received Related To ID:', relatedToId);
+        console.log('Received File Type:', fileType);
+        console.log('Received Description:', description);
+        console.log('---------------------------------');
+
+        if (!file || !relatedToId) {
+            console.log('Missing file or related document ID');
+            return NextResponse.json(
+                { error: 'File and related document ID are required' },
+                { status: 400 }
+            );
+        }
+
+        if (file.size > MAX_FILE_SIZE) {
+            console.log(`File size too large: ${file.size}`);
+            return NextResponse.json(
+                { error: `File size exceeds the limit of ${MAX_FILE_SIZE / 1024 / 1024}MB` },
+                { status: 400 }
+            );
+        }
+
+        if (!ALLOWED_FILE_TYPES.includes(file.type)) {
+            console.log(`Unsupported file type: ${file.type}`);
+            return NextResponse.json(
+                { error: 'Unsupported file type' },
+                { status: 400 }
+            );
+        }
+
+        // Upload file to Sanity
+        console.log('Uploading file to Sanity...');
+        const fileAsset = await writeClient.assets.upload('file', file, {
+            filename: file.name,
+            contentType: file.type,
+        });
+        console.log('Sanity asset upload successful:', fileAsset._id);
+
+        // Create a new FileAttachment document
+        console.log('Creating new FileAttachment document...');
+        const newAttachment = await writeClient.create({
             _type: 'FileAttachment',
-            fileName,
-            fileType,
+            fileName: file.name,
+            fileType: fileType,
             file: {
                 _type: 'file',
                 asset: {
                     _type: 'reference',
-                    _ref: asset._id,
+                    _ref: fileAsset._id,
                 },
             },
             uploadedBy: {
                 _type: 'reference',
-                _ref: uploadedBy,
+                _ref: user._id,
             },
             uploadedAt: new Date().toISOString(),
-            description: description || undefined,
+            description: description,
             relatedTo: {
                 _type: 'reference',
-                _ref: relatedTo,
-                _weak: true,
+                _ref: relatedToId,
             },
-        };
+            isArchived: false,
+        });
+        console.log('FileAttachment document created:', newAttachment._id);
 
-        const result = await writeClient.create(fileAttachment);
 
-        // Update the related document with the attachment reference
-        await writeClient
-            .patch(relatedTo)
-            .setIfMissing({ attachments: [] })
-            .append('attachments', [{ _type: 'reference', _ref: result._id }])
-            .commit();
-
-        // Update evidence status if needed
-        const relatedDoc = await writeClient.getDocument(relatedTo);
-        if (relatedDoc && relatedDoc.evidenceStatus === 'pending') {
-            await writeClient
-                .patch(relatedTo)
-                .set({ evidenceStatus: 'partial' })
-                .commit();
+        // Validate types
+        if (!file || !relatedToId || typeof relatedToId !== 'string') {
+            console.log('Missing file or related document ID');
+            return NextResponse.json(
+                { error: 'File and related document ID are required' },
+                { status: 400 }
+            );
         }
+
+
+        // Link the attachment to the related document
+        console.log(`Patching document ${relatedToId} to add attachment reference...`);
+        await writeClient
+            .patch(relatedToId)
+            .setIfMissing({ attachments: [] })
+            .insert('after', 'attachments[-1]', [
+                {
+                    _key: newAttachment._id,
+                    _ref: newAttachment._id,
+                    _type: 'reference',
+                },
+            ])
+            .commit();
+        console.log('Patch operation successful.');
 
         return NextResponse.json({
             success: true,
-            attachment: result,
             message: 'File uploaded successfully',
+            attachment: newAttachment,
         });
-    } catch (error) {
+    } catch (error: any) {
         console.error('File upload error:', error);
         return NextResponse.json(
-            { error: 'Failed to upload file' },
+            { error: 'Failed to upload file', details: error.message },
             { status: 500 }
         );
     }
@@ -122,6 +163,15 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
     try {
+        const session = await getServerSession(authOptions);
+
+        if (!session || !session.user) {
+            return NextResponse.json(
+                { error: 'User not authenticated' },
+                { status: 401 }
+            );
+        }
+
         const { searchParams } = new URL(request.url);
         const id = searchParams.get('id');
         const relatedTo = searchParams.get('relatedTo');
@@ -144,11 +194,14 @@ export async function DELETE(request: NextRequest) {
         // Delete the attachment document
         await writeClient.delete(id);
 
-        return NextResponse.json({ success: true, message: 'Attachment deleted successfully' });
-    } catch (error) {
+        return NextResponse.json({
+            success: true,
+            message: 'Attachment deleted successfully'
+        });
+    } catch (error: any) {
         console.error('File deletion error:', error);
         return NextResponse.json(
-            { error: 'Failed to delete attachment' },
+            { error: 'Failed to delete attachment', details: error.message },
             { status: 500 }
         );
     }

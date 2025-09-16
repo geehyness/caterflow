@@ -32,7 +32,7 @@ import {
 } from '@chakra-ui/react';
 import { ViewIcon, ViewOffIcon } from '@chakra-ui/icons';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useAuth } from '@/context/AuthContext';
+import { signIn, useSession } from 'next-auth/react'; // Changed import
 import { motion } from 'framer-motion';
 
 export default function LoginPage() {
@@ -46,7 +46,7 @@ export default function LoginPage() {
   const toast = useToast();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { login, isAuthenticated, isAuthReady } = useAuth();
+  const { data: session, status } = useSession(); // Use NextAuth's useSession
   const { isOpen, onOpen, onClose } = useDisclosure();
 
   const cardWidth = useBreakpointValue({ base: '90%', sm: '400px' });
@@ -56,19 +56,23 @@ export default function LoginPage() {
 
   useEffect(() => {
     // Redirect if already logged in
-    if (isAuthReady && isAuthenticated) {
+    if (status === 'authenticated') {
       router.push(redirect);
     }
-  }, [isAuthenticated, isAuthReady, router, redirect]);
+  }, [status, router, redirect]);
 
   const handleLogin = async (event: React.FormEvent) => {
     event.preventDefault();
     setIsLoading(true);
 
     try {
-      const success = await login(email, password);
+      const result = await signIn('credentials', {
+        email,
+        password,
+        redirect: false,
+      });
 
-      if (!success) {
+      if (result?.error) {
         toast({
           title: 'Login failed.',
           description: 'Invalid email or password.',
@@ -120,7 +124,7 @@ export default function LoginPage() {
       const response = await fetch('/api/auth/send-verification-code', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: "godlinessdongorere@gmail.com" }), /*resetEmail*/
+        body: JSON.stringify({ email: resetEmail }),
       });
 
       const data = await response.json();
@@ -158,7 +162,7 @@ export default function LoginPage() {
     }
   };
 
-  if (!isAuthReady || (isAuthReady && isAuthenticated)) {
+  if (status === 'loading') {
     return (
       <Box minH="100vh" display="flex" justifyContent="center" alignItems="center">
         <Spinner size="xl" color="brand.500" />

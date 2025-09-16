@@ -19,7 +19,7 @@ import {
     NumberInputField,
     NumberInputStepper,
 } from '@chakra-ui/react';
-import { useAuth } from '@/context/AuthContext';
+import { useSession } from 'next-auth/react'
 import { FiPlusCircle, FiArrowLeft, FiArrowRight } from 'react-icons/fi';
 import DataTable, { Column } from '@/components/DataTable';
 import CreatePurchaseOrderModal from '@/app/actions/CreatePurchaseOrderModal';
@@ -47,7 +47,11 @@ interface PurchaseOrderGroup {
 }
 
 export default function LowStockPage() {
-    const { isAuthenticated, isAuthReady, user } = useAuth();
+    const { data: session, status } = useSession();
+    const user = session?.user;
+    const isAuthenticated = status === 'authenticated';
+    const isAuthReady = status !== 'loading';
+
     const [lowStockItems, setLowStockItems] = useState<LowStockItem[]>([]);
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
     const [sites, setSites] = useState<Site[]>([]);
@@ -124,7 +128,7 @@ export default function LowStockPage() {
             fetchSuppliers();
             fetchSites();
         }
-    }, [isAuthReady, isAuthenticated, selectedSiteId]);
+    }, [isAuthReady, isAuthenticated, selectedSiteId, status]);
 
     const handleSiteClick = (siteId: string) => {
         setSelectedSiteId(siteId);
@@ -178,7 +182,7 @@ export default function LowStockPage() {
                 body: JSON.stringify({
                     poNumber: `PO-${Date.now()}`,
                     orderDate: new Date().toISOString(),
-                    orderedBy: user?._id,
+                    orderedBy: user?.id, // Changed from user?._id to user?.id
                     orderedItems: items,
                     totalAmount,
                     status: 'draft',
@@ -293,7 +297,7 @@ export default function LowStockPage() {
         setSelectedItems(updatedItems);
     };
 
-    if (!isAuthReady) {
+    if (status === 'loading') {
         return (
             <Flex justifyContent="center" alignItems="center" minH="100vh">
                 <Spinner size="xl" />

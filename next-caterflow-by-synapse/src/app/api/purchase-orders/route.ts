@@ -39,7 +39,6 @@ export async function GET(request: Request) {
         const status = searchParams.get('status');
 
         // GROQ query projection for purchase order details
-        // ADDED -> to dereference the site and orderedBy fields
         const purchaseOrderProjection = `{
             _id,
             _type,
@@ -55,7 +54,6 @@ export async function GET(request: Request) {
                     sku,
                     unitOfMeasure
                 },
-                // ADDED -> to dereference the supplier field
                 supplier->{
                     _id,
                     name
@@ -64,7 +62,6 @@ export async function GET(request: Request) {
             status,
             orderDate,
             _createdAt,
-            // ADDED -> to dereference the orderedBy field
             orderedBy->{ name },
             totalAmount,
             "hasReceipts": count(*[_type == "GoodsReceipt" && purchaseOrder._ref == ^._id]) > 0
@@ -94,7 +91,7 @@ export async function GET(request: Request) {
         }
 
         // Build the base query - only filter by status if provided
-        let baseQuery = '*[_type == "PurchaseOrder"]';
+        let baseQuery = '*[_type == "PurchaseOrder"';
         const queryParams: any = {};
 
         // Add status filter if provided
@@ -103,8 +100,9 @@ export async function GET(request: Request) {
             queryParams.status = status;
         }
 
-        // Complete query with ordering and projection
-        const allQuery = groq`${baseQuery} | order(orderDate desc) ${purchaseOrderProjection}`;
+        // Complete the query with a closing bracket, ordering, and projection
+        const allQuery = groq`${baseQuery}] | order(orderDate desc) ${purchaseOrderProjection}`;
+
         let purchaseOrders = await client.fetch(allQuery, queryParams);
 
         // Manually process all purchase orders to add the unique supplier names
@@ -128,6 +126,8 @@ export async function GET(request: Request) {
         return setNoCache(res);
     }
 }
+
+
 
 /**
  * POST handler to create a new purchase order.

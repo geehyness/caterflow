@@ -28,7 +28,7 @@ import { FiPlus, FiSearch, FiFilter } from 'react-icons/fi';
 import DataTable from '@/components/DataTable';
 import UserManagementModal from '@/components/UserManagementModal';
 import { AppUser, Site, Reference } from '@/lib/sanityTypes';
-import { useAuth } from '@/context/AuthContext';
+import { useSession } from 'next-auth/react'
 import { EditIcon } from '@chakra-ui/icons';
 
 // Interface for display with expanded site reference
@@ -46,6 +46,9 @@ interface AppUserWithSite {
 }
 
 export default function UsersPage() {
+    const { data: session, status } = useSession();
+    const currentUser = session?.user;
+
     const [users, setUsers] = useState<AppUserWithSite[]>([]);
     const [filteredUsers, setFilteredUsers] = useState<AppUserWithSite[]>([]);
     const [sites, setSites] = useState<Site[]>([]);
@@ -56,7 +59,6 @@ export default function UsersPage() {
     const [statusFilter, setStatusFilter] = useState<string>('all');
     const { isOpen, onOpen, onClose } = useDisclosure();
     const toast = useToast();
-    const { user: currentUser } = useAuth();
 
     const cardBg = useColorModeValue('white', 'gray.700');
     const borderColor = useColorModeValue('gray.200', 'gray.600');
@@ -353,7 +355,7 @@ export default function UsersPage() {
                         colorScheme={getStatusColor(row.isActive)}
                         size="md"
                         mr={2}
-                        isDisabled={row._id === currentUser?._id}
+                        isDisabled={row._id === currentUser?.id} // Changed from currentUser?._id to currentUser?.id
                     />
                     <Badge colorScheme={getStatusColor(row.isActive)}>
                         {row.isActive ? 'Active' : 'Inactive'}
@@ -363,7 +365,7 @@ export default function UsersPage() {
         },
     ];
 
-    if (loading) {
+    if (loading || status === 'loading') {
         return (
             <Box p={4}>
                 <Flex justifyContent="center" alignItems="center" height="50vh">

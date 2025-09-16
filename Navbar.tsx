@@ -11,7 +11,7 @@ import NextLink from 'next/link';
 import { useRouter } from 'next/navigation';
 import { usePageTransition } from './PageTransitionProvider';
 import { FiLogOut } from 'react-icons/fi';
-import { useAuth } from '@/context/AuthContext';
+import { useSession } from 'next-auth/react'
 
 interface NavbarProps {
   type: 'dashboard';
@@ -25,7 +25,7 @@ export function Navbar({ type, appName = 'Caterflow', siteLogoUrl }: NavbarProps
 
   const router = useRouter();
   const { startTransition } = usePageTransition();
-  const { isAuthenticated, logout, user } = useAuth();
+  const { isAuthenticated, logout, user } = useSession();
 
   const [isOpen, setIsOpen] = useState(false);
 

@@ -25,13 +25,25 @@ import {
     Box,
     Flex,
     Icon,
+    Spinner,
+    Grid,
+    GridItem
 } from '@chakra-ui/react';
 import { FiPlus, FiTrash2, FiSearch } from 'react-icons/fi';
 import BinSelectorModal from './BinSelectorModal';
 import StockItemSelectorModal from './StockItemSelectorModal';
+import { nanoid } from 'nanoid';
 
+// Enhanced DispatchedItem interface to include the full stock item details and a unique key
 interface DispatchedItem {
-    stockItem: string;
+    _key: string;
+    stockItem: {
+        _id: string;
+        name: string;
+        sku?: string;
+        unitOfMeasure?: string;
+        currentStock?: number;
+    };
     dispatchedQuantity: number;
     totalCost?: number;
 }
@@ -58,13 +70,13 @@ interface Dispatch {
     notes?: string;
 }
 
-// Fixed StockItem interface - removed categoryId to match StockItemSelectorModal
 interface StockItem {
     _id: string;
     name: string;
     sku: string;
     unitOfMeasure: string;
     itemType: 'food' | 'nonFood';
+    currentStock?: number;
 }
 
 interface DispatchModalProps {
@@ -88,76 +100,162 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
     const toast = useToast();
 
     const [isStockItemModalOpen, setIsStockItemModalOpen] = useState(false);
-    const [currentItemIndex, setCurrentItemIndex] = useState<number | null>(null);
+    const [currentEditingItemIndex, setCurrentEditingItemIndex] = useState<number | null>(null);
     const [stockItemsCache, setStockItemsCache] = useState<Map<string, StockItem>>(new Map());
+    const [isInitialLoading, setIsInitialLoading] = useState(true);
 
+    // Fetch sites on component mount
     useEffect(() => {
-        if (dispatch) {
-            setDispatchNumber(dispatch.dispatchNumber || '');
-            setDispatchDate(dispatch.dispatchDate || '');
-            setStatus(dispatch.status || 'pending');
-            setSourceBin(dispatch.sourceBin || null);
-            setDestinationSite(dispatch.destinationSite || null);
-            setNotes(dispatch.notes || '');
-            setItems(dispatch.items || []);
-
-            const fetchItemDetails = async (itemId: string) => {
-                if (!stockItemsCache.has(itemId)) {
-                    try {
-                        const res = await fetch(`/api/stock-items/${itemId}`);
-                        if (res.ok) {
-                            const itemData: StockItem = await res.json();
-                            setStockItemsCache(prev => new Map(prev).set(itemId, itemData));
-                        }
-                    } catch (error) {
-                        console.error(`Failed to fetch stock item ${itemId}`, error);
-                    }
+        const fetchSites = async () => {
+            try {
+                const response = await fetch('/api/sites');
+                if (response.ok) {
+                    const data = await response.json();
+                    setSites(data);
                 }
-            };
-
-            dispatch.items.forEach(item => {
-                if (item.stockItem) {
-                    fetchItemDetails(item.stockItem);
-                }
-            });
-
-        } else {
-            setDispatchNumber('');
-            setDispatchDate(new Date().toISOString().split('T')[0]);
-            setStatus('pending');
-            setSourceBin(null);
-            setDestinationSite(null);
-            setNotes('');
-            setItems([]);
-        }
+            } catch (error) {
+                console.error('Failed to fetch sites:', error);
+                toast({
+                    title: 'Error',
+                    description: 'Failed to load sites. Please try again.',
+                    status: 'error',
+                    duration: 3000,
+                    isClosable: true,
+                });
+            }
+        };
 
         fetchSites();
-    }, [dispatch, stockItemsCache]);
+    }, [toast]);
 
-    const fetchSites = async () => {
-        try {
-            const response = await fetch('/api/sites');
-            if (response.ok) {
-                const data = await response.json();
-                setSites(data);
-            }
-        } catch (error) {
-            console.error('Failed to fetch sites:', error);
+    // Reset form when modal opens/closes
+    useEffect(() => {
+        if (isOpen) {
+            setIsInitialLoading(true);
+            const initializeForm = async () => {
+                if (dispatch) {
+                    // Edit mode
+                    setDispatchNumber(dispatch.dispatchNumber || '');
+                    setDispatchDate(dispatch.dispatchDate.split('T')[0] || '');
+                    setStatus(dispatch.status || 'pending');
+                    setSourceBin(dispatch.sourceBin || null);
+                    setDestinationSite(dispatch.destinationSite || null);
+                    setNotes(dispatch.notes || '');
+
+                    // Update the initialItems mapping to ensure _key exists
+                    const initialItems = dispatch.items.map((item) => ({
+                        _key: item._key || nanoid(),
+                        stockItem: {
+                            _id: item.stockItem._id,
+                            name: item.stockItem.name || '',
+                            sku: item.stockItem.sku || '',
+                            unitOfMeasure: '',
+                            currentStock: 0
+                        },
+                        dispatchedQuantity: item.dispatchedQuantity,
+                        totalCost: item.totalCost || 0,
+                    }));
+                    setItems(initialItems);
+
+                    // Fetch details for each stock item
+                    const fetchItemDetails = async (itemId: string) => {
+                        if (!stockItemsCache.has(itemId)) {
+                            try {
+                                const res = await fetch(`/api/stock-items/${itemId}`);
+                                if (res.ok) {
+                                    const itemData: StockItem = await res.json();
+                                    setStockItemsCache(prev => new Map(prev).set(itemId, itemData));
+                                    setItems(prevItems => prevItems.map(item =>
+                                        item.stockItem._id === itemId ?
+                                            {
+                                                ...item,
+                                                stockItem: {
+                                                    _id: itemData._id,
+                                                    name: itemData.name,
+                                                    sku: itemData.sku,
+                                                    unitOfMeasure: itemData.unitOfMeasure,
+                                                    currentStock: itemData.currentStock || 0
+                                                }
+                                            } :
+                                            item
+                                    ));
+                                }
+                            } catch (error) {
+                                console.error(`Failed to fetch stock item ${itemId}`, error);
+                            }
+                        }
+                    };
+
+                    dispatch.items.forEach(item => {
+                        if (item.stockItem._id) {
+                            fetchItemDetails(item.stockItem._id);
+                        }
+                    });
+
+                } else {
+                    // Create mode
+                    const fetchDispatchNumber = async () => {
+                        try {
+                            const res = await fetch('/api/dispatches/next-number');
+                            if (res.ok) {
+                                const { dispatchNumber: newNumber } = await res.json();
+                                setDispatchNumber(newNumber);
+                            } else {
+                                throw new Error('Failed to fetch dispatch number');
+                            }
+                        } catch (error) {
+                            toast({
+                                title: 'Error',
+                                description: 'Failed to get a new dispatch number. Please try again.',
+                                status: 'error',
+                                duration: 5000,
+                                isClosable: true,
+                            });
+                            console.error('Failed to get new dispatch number:', error);
+                        }
+                    };
+
+                    fetchDispatchNumber();
+                    setDispatchDate(new Date().toISOString().split('T')[0]);
+                    setStatus('pending');
+                    setSourceBin(null);
+                    setDestinationSite(null);
+                    setNotes('');
+                    setItems([]);
+                }
+                setIsInitialLoading(false);
+            };
+
+            initializeForm();
         }
-    };
+    }, [isOpen, dispatch, stockItemsCache, toast]);
 
     const handleAddItem = () => {
-        setItems([...items, { stockItem: '', dispatchedQuantity: 0 }]);
+        const newItem = {
+            _key: nanoid(),
+            stockItem: {
+                _id: '',
+                name: 'Select a stock item',
+                sku: '',
+                unitOfMeasure: '',
+                currentStock: 0
+            },
+            dispatchedQuantity: 0,
+            totalCost: 0
+        };
+        setItems(prevItems => [...prevItems, newItem]);
+        setCurrentEditingItemIndex(items.length);
+        setIsStockItemModalOpen(true);
     };
 
-    const handleRemoveItem = (index: number) => {
-        setItems(items.filter((_, i) => i !== index));
+    const handleRemoveItem = (key: string) => {
+        setItems(prevItems => prevItems.filter(item => item._key !== key));
     };
 
-    const handleItemChange = (index: number, field: keyof DispatchedItem, value: any) => {
-        const newItems = [...items];
-        newItems[index] = { ...newItems[index], [field]: value };
-        setItems(newItems);
+    const handleItemChange = (key: string, field: keyof DispatchedItem, value: any) => {
+        setItems(prevItems => prevItems.map(item =>
+            item._key === key ? { ...item, [field]: value } : item
+        ));
     };
 
     const handleBinSelect = (bin: Bin) => {
@@ -165,50 +263,134 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
         setIsBinModalOpen(false);
     };
 
-    const openStockItemModal = (index: number) => {
-        setCurrentItemIndex(index);
-        setIsStockItemModalOpen(true);
-    };
-
     const handleStockItemSelect = (item: StockItem) => {
-        if (currentItemIndex !== null) {
+        if (currentEditingItemIndex !== null) {
+            setItems(prevItems => prevItems.map((prevItem, index) =>
+                index === currentEditingItemIndex ?
+                    {
+                        ...prevItem,
+                        stockItem: {
+                            _id: item._id,
+                            name: item.name,
+                            sku: item.sku,
+                            unitOfMeasure: item.unitOfMeasure,
+                            currentStock: item.currentStock || 0
+                        }
+                    }
+                    : prevItem
+            ));
             setStockItemsCache(prev => new Map(prev).set(item._id, item));
-            handleItemChange(currentItemIndex, 'stockItem', item._id);
         }
         setIsStockItemModalOpen(false);
     };
 
-    const getStockItemName = (id: string): string => {
-        return stockItemsCache.get(id)?.name || id;
+    const openStockItemModal = (index: number) => {
+        setCurrentEditingItemIndex(index);
+        setIsStockItemModalOpen(true);
     };
 
-    const getStockItemSKU = (id: string): string => {
-        return stockItemsCache.get(id)?.sku || '';
+    const validateForm = () => {
+        if (!sourceBin) {
+            toast({
+                title: 'Error',
+                description: 'Please select a source bin',
+                status: 'error',
+                duration: 3000,
+                isClosable: true,
+            });
+            return false;
+        }
+
+        if (!destinationSite) {
+            toast({
+                title: 'Error',
+                description: 'Please select a destination site',
+                status: 'error',
+                duration: 3000,
+                isClosable: true,
+            });
+            return false;
+        }
+
+        if (items.length === 0) {
+            toast({
+                title: 'Error',
+                description: 'Please add at least one item',
+                status: 'error',
+                duration: 3000,
+                isClosable: true,
+            });
+            return false;
+        }
+
+        for (const item of items) {
+            if (!item.stockItem._id) {
+                toast({
+                    title: 'Error',
+                    description: 'Please select a stock item for all entries',
+                    status: 'error',
+                    duration: 3000,
+                    isClosable: true,
+                });
+                return false;
+            }
+
+            if (item.dispatchedQuantity <= 0) {
+                toast({
+                    title: 'Error',
+                    description: `Please enter a valid quantity for ${item.stockItem.name}`,
+                    status: 'error',
+                    duration: 3000,
+                    isClosable: true,
+                });
+                return false;
+            }
+
+            // Check if dispatched quantity exceeds available stock
+            if (item.stockItem.currentStock !== undefined &&
+                item.dispatchedQuantity > item.stockItem.currentStock) {
+                toast({
+                    title: 'Insufficient Stock',
+                    description: `Not enough stock available for ${item.stockItem.name}. Available: ${item.stockItem.currentStock}`,
+                    status: 'error',
+                    duration: 5000,
+                    isClosable: true,
+                });
+                return false;
+            }
+        }
+
+        return true;
     };
 
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
+
+        if (!validateForm()) return;
+
         setLoading(true);
 
         try {
-            const url = '/api/dispatches';
+            const url = dispatch ? `/api/dispatches/${dispatch._id}` : '/api/dispatches';
             const method = dispatch ? 'PATCH' : 'POST';
 
-            if (!sourceBin) throw new Error('Please select a source bin');
-            if (!destinationSite) throw new Error('Please select a destination site');
+            const itemsForApi = items.map(item => ({
+                stockItem: item.stockItem._id,
+                dispatchedQuantity: item.dispatchedQuantity,
+                totalCost: item.totalCost || 0,
+            }));
 
             const response = await fetch(url, {
                 method,
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    _id: dispatch?._id,
                     dispatchNumber,
                     dispatchDate,
                     status,
-                    sourceBin: sourceBin._id,
-                    destinationSite: destinationSite._id,
+                    sourceBin: sourceBin?._id,
+                    destinationSite: destinationSite?._id,
                     notes: notes || undefined,
-                    items,
+                    items: itemsForApi,
                 }),
             });
 
@@ -240,164 +422,234 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
         }
     };
 
+    const existingItemIds = items.map(item => item.stockItem._id).filter(id => id);
+
     return (
         <>
-            <Modal isOpen={isOpen} onClose={onClose} size="6xl">
+            <Modal isOpen={isOpen} onClose={onClose} size="6xl" closeOnOverlayClick={!loading}>
                 <ModalOverlay />
                 <ModalContent>
                     <ModalHeader>{dispatch ? 'Edit Dispatch' : 'Create Dispatch'}</ModalHeader>
-                    <ModalCloseButton />
-                    <form onSubmit={handleSave}>
-                        <ModalBody pb={6}>
-                            <VStack spacing={4} align="stretch">
-                                <HStack>
-                                    <FormControl isRequired>
-                                        <FormLabel>Dispatch Number</FormLabel>
-                                        <Input
-                                            value={dispatchNumber}
-                                            onChange={(e) => setDispatchNumber(e.target.value)}
-                                            placeholder="e.g., DISP-001"
-                                        />
-                                    </FormControl>
-                                    <FormControl isRequired>
-                                        <FormLabel>Dispatch Date</FormLabel>
-                                        <Input
-                                            type="date"
-                                            value={dispatchDate}
-                                            onChange={(e) => setDispatchDate(e.target.value)}
-                                        />
-                                    </FormControl>
-                                    <FormControl isRequired>
-                                        <FormLabel>Status</FormLabel>
-                                        <Select value={status} onChange={(e) => setStatus(e.target.value)}>
-                                            <option value="pending">Pending</option>
-                                            <option value="completed">Completed</option>
-                                            <option value="cancelled">Cancelled</option>
-                                        </Select>
-                                    </FormControl>
-                                </HStack>
-
-                                <HStack>
-                                    <FormControl isRequired>
-                                        <FormLabel>Source Bin</FormLabel>
-                                        <Input
-                                            value={sourceBin ? `${sourceBin.name} (${sourceBin.site.name})` : ''}
-                                            placeholder="Select a bin"
-                                            readOnly
-                                            onClick={() => setIsBinModalOpen(true)}
-                                            cursor="pointer"
-                                        />
-                                    </FormControl>
-                                    <FormControl isRequired>
-                                        <FormLabel>Destination Site</FormLabel>
-                                        <Select
-                                            value={destinationSite?._id || ''}
-                                            onChange={(e) => {
-                                                const site = sites.find(s => s._id === e.target.value);
-                                                setDestinationSite(site || null);
-                                            }}
-                                            placeholder="Select destination site"
-                                        >
-                                            {sites.map(site => (
-                                                <option key={site._id} value={site._id}>
-                                                    {site.name}
-                                                </option>
-                                            ))}
-                                        </Select>
-                                    </FormControl>
-                                </HStack>
-
-                                <FormControl>
-                                    <FormLabel>Notes</FormLabel>
-                                    <Input
-                                        value={notes}
-                                        onChange={(e) => setNotes(e.target.value)}
-                                        placeholder="Additional notes or comments"
-                                    />
-                                </FormControl>
-
-                                <Text fontSize="lg" fontWeight="bold">Dispatched Items</Text>
-                                {items.map((item, index) => (
-                                    <HStack key={index} align="flex-end" spacing={4}>
-                                        <FormControl isRequired>
-                                            <FormLabel>Stock Item</FormLabel>
-                                            <Box
-                                                as="button"
-                                                type="button"
-                                                onClick={() => openStockItemModal(index)}
-                                                borderWidth="1px"
-                                                borderColor="inherit"
-                                                borderRadius="md"
-                                                px={3}
-                                                h={10}
-                                                width="100%"
-                                                textAlign="left"
-                                            >
-                                                <Flex justify="space-between" align="center" h="100%">
-                                                    {item.stockItem ? (
-                                                        <Text>
-                                                            {getStockItemName(item.stockItem)} ({getStockItemSKU(item.stockItem)})
-                                                        </Text>
-                                                    ) : (
-                                                        <Text color="gray.500">Select a stock item</Text>
-                                                    )}
-                                                    <Icon as={FiSearch} color="gray.500" />
-                                                </Flex>
-                                            </Box>
-                                        </FormControl>
-                                        <FormControl isRequired>
-                                            <FormLabel>Quantity</FormLabel>
-                                            <NumberInput
-                                                value={item.dispatchedQuantity}
-                                                onChange={(valStr, valNum) => handleItemChange(index, 'dispatchedQuantity', valNum)}
-                                                min={0}
-                                            >
-                                                <NumberInputField />
-                                                <NumberInputStepper>
-                                                    <NumberIncrementStepper />
-                                                    <NumberDecrementStepper />
-                                                </NumberInputStepper>
-                                            </NumberInput>
-                                        </FormControl>
-                                        <FormControl>
-                                            <FormLabel>Total Cost</FormLabel>
-                                            <NumberInput
-                                                value={item.totalCost || 0}
-                                                onChange={(valStr, valNum) => handleItemChange(index, 'totalCost', valNum)}
-                                                min={0}
-                                                step={0.01}
-                                                precision={2}
-                                            >
-                                                <NumberInputField />
-                                                <NumberInputStepper>
-                                                    <NumberIncrementStepper />
-                                                    <NumberDecrementStepper />
-                                                </NumberInputStepper>
-                                            </NumberInput>
-                                        </FormControl>
-                                        <IconButton
-                                            aria-label="Remove item"
-                                            icon={<FiTrash2 />}
-                                            colorScheme="red"
-                                            onClick={() => handleRemoveItem(index)}
-                                        />
-                                    </HStack>
-                                ))}
-                                <Button leftIcon={<FiPlus />} onClick={handleAddItem} alignSelf="start">
-                                    Add Item
-                                </Button>
+                    <ModalCloseButton isDisabled={loading} />
+                    {isInitialLoading ? (
+                        <ModalBody display="flex" justifyContent="center" alignItems="center" height="200px">
+                            <VStack>
+                                <Spinner size="xl" />
+                                <Text mt={4}>Loading dispatch data...</Text>
                             </VStack>
                         </ModalBody>
+                    ) : (
+                        <form onSubmit={handleSave}>
+                            <ModalBody pb={6}>
+                                <VStack spacing={4} align="stretch">
+                                    <Grid templateColumns="repeat(3, 1fr)" gap={4}>
+                                        <FormControl isRequired>
+                                            <FormLabel>Dispatch Number</FormLabel>
+                                            {dispatch ? (
+                                                <Text
+                                                    p={3}
+                                                    borderRadius="md"
+                                                    bg="gray.100"
+                                                    fontWeight="bold"
+                                                    _dark={{ bg: 'gray.700' }}
+                                                >
+                                                    {dispatchNumber}
+                                                </Text>
+                                            ) : (
+                                                <Input
+                                                    value={dispatchNumber}
+                                                    onChange={(e) => setDispatchNumber(e.target.value)}
+                                                    placeholder="e.g., DISP-001"
+                                                    isReadOnly
+                                                />
+                                            )}
+                                        </FormControl>
+                                        <FormControl isRequired>
+                                            <FormLabel>Dispatch Date</FormLabel>
+                                            <Input
+                                                type="date"
+                                                value={dispatchDate}
+                                                onChange={(e) => setDispatchDate(e.target.value)}
+                                                isDisabled={loading}
+                                            />
+                                        </FormControl>
+                                        <FormControl isRequired>
+                                            <FormLabel>Status</FormLabel>
+                                            <Select
+                                                value={status}
+                                                onChange={(e) => setStatus(e.target.value)}
+                                                isDisabled={loading}
+                                            >
+                                                <option value="pending">Pending</option>
+                                                <option value="completed">Completed</option>
+                                                <option value="cancelled">Cancelled</option>
+                                            </Select>
+                                        </FormControl>
+                                    </Grid>
 
-                        <ModalFooter>
-                            <Button colorScheme="gray" mr={3} onClick={onClose} isDisabled={loading}>
-                                Cancel
-                            </Button>
-                            <Button colorScheme="blue" type="submit" isLoading={loading}>
-                                {dispatch ? 'Update Dispatch' : 'Create Dispatch'}
-                            </Button>
-                        </ModalFooter>
-                    </form>
+                                    <Grid templateColumns="repeat(2, 1fr)" gap={4}>
+                                        <FormControl isRequired>
+                                            <FormLabel>Source Bin</FormLabel>
+                                            <Input
+                                                value={sourceBin ? `${sourceBin.name} (${sourceBin.site.name})` : ''}
+                                                placeholder="Select a bin"
+                                                readOnly
+                                                onClick={() => setIsBinModalOpen(true)}
+                                                cursor="pointer"
+                                                isDisabled={loading}
+                                            />
+                                        </FormControl>
+                                        <FormControl isRequired>
+                                            <FormLabel>Destination Site</FormLabel>
+                                            <Select
+                                                value={destinationSite?._id || ''}
+                                                onChange={(e) => {
+                                                    const site = sites.find(s => s._id === e.target.value);
+                                                    setDestinationSite(site || null);
+                                                }}
+                                                placeholder="Select destination site"
+                                                isDisabled={loading}
+                                            >
+                                                {sites.map(site => (
+                                                    <option key={site._id} value={site._id}>
+                                                        {site.name}
+                                                    </option>
+                                                ))}
+                                            </Select>
+                                        </FormControl>
+                                    </Grid>
+
+                                    <FormControl>
+                                        <FormLabel>Notes</FormLabel>
+                                        <Input
+                                            value={notes}
+                                            onChange={(e) => setNotes(e.target.value)}
+                                            placeholder="Additional notes or comments"
+                                            isDisabled={loading}
+                                        />
+                                    </FormControl>
+
+                                    <Text fontSize="lg" fontWeight="bold">Dispatched Items</Text>
+
+                                    {items.length === 0 ? (
+                                        <Text color="gray.500" fontStyle="italic" textAlign="center" py={4}>
+                                            No items added yet. Click "Add Item" to get started.
+                                        </Text>
+                                    ) : (
+                                        <Grid templateColumns="1fr" gap={3}>
+                                            {items.map((item, index) => (
+                                                <GridItem
+                                                    key={item._key}
+                                                    p={3}
+                                                    borderWidth="1px"
+                                                    borderRadius="md"
+                                                    borderColor="gray.200"
+                                                    _dark={{ borderColor: "gray.600" }}
+                                                >
+                                                    <Grid templateColumns="1fr auto" gap={2} alignItems="center">
+                                                        <Grid templateColumns="repeat(3, 1fr)" gap={3}>
+                                                            <FormControl isRequired>
+                                                                <FormLabel>Stock Item</FormLabel>
+                                                                <Button
+                                                                    variant="outline"
+                                                                    justifyContent="space-between"
+                                                                    onClick={() => openStockItemModal(index)}
+                                                                    px={3}
+                                                                    h={10}
+                                                                    width="100%"
+                                                                    textAlign="left"
+                                                                    isDisabled={loading}
+                                                                    rightIcon={<Icon as={FiSearch} color="gray.500" />}
+                                                                >
+                                                                    <Flex justify="space-between" align="center" h="100%">
+                                                                        {item.stockItem.name && item.stockItem.name !== 'Select a stock item' ? (
+                                                                            <VStack align="start" spacing={0}>
+                                                                                <Text fontSize="sm" fontWeight="medium">{item.stockItem.name}</Text>
+                                                                                {item.stockItem.sku && (
+                                                                                    <Text fontSize="xs" color="gray.500">SKU: {item.stockItem.sku}</Text>
+                                                                                )}
+                                                                                {item.stockItem.currentStock !== undefined && (
+                                                                                    <Text fontSize="xs" color="gray.500">
+                                                                                        Available: {item.stockItem.currentStock} {item.stockItem.unitOfMeasure}
+                                                                                    </Text>
+                                                                                )}
+                                                                            </VStack>
+                                                                        ) : (
+                                                                            <Text color="gray.500">Select a stock item</Text>
+                                                                        )}
+                                                                        <Icon as={FiSearch} color="gray.500" />
+                                                                    </Flex>
+                                                                </Button>
+                                                            </FormControl>
+                                                            <FormControl isRequired>
+                                                                <FormLabel>Quantity</FormLabel>
+                                                                <NumberInput
+                                                                    value={item.dispatchedQuantity}
+                                                                    onChange={(valStr, valNum) => handleItemChange(item._key, 'dispatchedQuantity', valNum)}
+                                                                    min={0}
+                                                                    max={item.stockItem.currentStock || undefined}
+                                                                    isDisabled={loading || !item.stockItem._id}
+                                                                >
+                                                                    <NumberInputField />
+                                                                    <NumberInputStepper>
+                                                                        <NumberIncrementStepper />
+                                                                        <NumberDecrementStepper />
+                                                                    </NumberInputStepper>
+                                                                </NumberInput>
+                                                            </FormControl>
+                                                            <FormControl>
+                                                                <FormLabel>Total Cost</FormLabel>
+                                                                <NumberInput
+                                                                    value={item.totalCost || 0}
+                                                                    onChange={(valStr, valNum) => handleItemChange(item._key, 'totalCost', valNum)}
+                                                                    min={0}
+                                                                    step={0.01}
+                                                                    precision={2}
+                                                                    isDisabled={loading}
+                                                                >
+                                                                    <NumberInputField />
+                                                                    <NumberInputStepper>
+                                                                        <NumberIncrementStepper />
+                                                                        <NumberDecrementStepper />
+                                                                    </NumberInputStepper>
+                                                                </NumberInput>
+                                                            </FormControl>
+                                                        </Grid>
+                                                        <IconButton
+                                                            aria-label="Remove item"
+                                                            icon={<FiTrash2 />}
+                                                            colorScheme="red"
+                                                            onClick={() => handleRemoveItem(item._key)}
+                                                            isDisabled={loading}
+                                                            mt={6}
+                                                        />
+                                                    </Grid>
+                                                </GridItem>
+                                            ))}
+                                        </Grid>
+                                    )}
+
+                                    <Button
+                                        leftIcon={<FiPlus />}
+                                        onClick={handleAddItem}
+                                        alignSelf="start"
+                                        isDisabled={loading}
+                                    >
+                                        Add Item
+                                    </Button>
+                                </VStack>
+                            </ModalBody>
+
+                            <ModalFooter>
+                                <Button colorScheme="gray" mr={3} onClick={onClose} isDisabled={loading}>
+                                    Cancel
+                                </Button>
+                                <Button colorScheme="blue" type="submit" isLoading={loading}>
+                                    {dispatch ? 'Update Dispatch' : 'Create Dispatch'}
+                                </Button>
+                            </ModalFooter>
+                        </form>
+                    )}
                 </ModalContent>
             </Modal>
 
@@ -411,6 +663,7 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
                 isOpen={isStockItemModalOpen}
                 onClose={() => setIsStockItemModalOpen(false)}
                 onSelect={handleStockItemSelect}
+                existingItemIds={existingItemIds}
             />
         </>
     );

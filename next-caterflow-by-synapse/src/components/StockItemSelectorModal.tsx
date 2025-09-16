@@ -30,6 +30,10 @@ interface StockItem {
     itemType: 'food' | 'nonFood';
     unitOfMeasure: string;
     description?: string;
+    category?: { // Updated to match expected data structure
+        _id: string;
+        title: string;
+    };
 }
 
 interface Category {
@@ -41,9 +45,10 @@ interface StockItemSelectorModalProps {
     isOpen: boolean;
     onClose: () => void;
     onSelect: (item: StockItem) => void;
+    existingItemIds: string[]; // This is the new prop
 }
 
-export default function StockItemSelectorModal({ isOpen, onClose, onSelect }: StockItemSelectorModalProps) {
+export default function StockItemSelectorModal({ isOpen, onClose, onSelect, existingItemIds }: StockItemSelectorModalProps) {
     const [stockItems, setStockItems] = useState<StockItem[]>([]);
     const [filteredItems, setFilteredItems] = useState<StockItem[]>([]);
     const [categories, setCategories] = useState<Category[]>([]);
@@ -86,21 +91,24 @@ export default function StockItemSelectorModal({ isOpen, onClose, onSelect }: St
     const filterItems = useCallback(() => {
         let filtered = stockItems;
 
-        // Filter by category
-        if (selectedCategory) {
-            filtered = filtered.filter(item => {
-                // Assuming items have a category reference
-                // You might need to adjust this based on your data structure
-                return true; // Placeholder - implement actual filtering
-            });
+        // Step 1: Filter out items that are already counted
+        // Safely check if existingItemIds is an array and has items.
+        // Use a defensive check to handle cases where the prop might be undefined.
+        if (existingItemIds && existingItemIds.length > 0) {
+            filtered = filtered.filter(item => !existingItemIds.includes(item._id));
         }
 
-        // Filter by item type
+        // Step 2: Filter by category
+        if (selectedCategory) {
+            filtered = filtered.filter(item => item.category?._id === selectedCategory);
+        }
+
+        // Step 3: Filter by item type
         if (selectedItemType) {
             filtered = filtered.filter(item => item.itemType === selectedItemType);
         }
 
-        // Filter by search term
+        // Step 4: Filter by search term
         if (searchTerm) {
             const term = searchTerm.toLowerCase();
             filtered = filtered.filter(item =>
@@ -111,7 +119,7 @@ export default function StockItemSelectorModal({ isOpen, onClose, onSelect }: St
         }
 
         setFilteredItems(filtered);
-    }, [stockItems, selectedCategory, selectedItemType, searchTerm]);
+    }, [stockItems, existingItemIds, selectedCategory, selectedItemType, searchTerm]);
 
     useEffect(() => {
         if (isOpen) {

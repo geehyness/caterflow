@@ -22,7 +22,7 @@ import {
     Icon,
     useColorModeValue,
 } from '@chakra-ui/react';
-import { useAuth } from '@/context/AuthContext';
+import { useSession } from 'next-auth/react'; // Keep this import
 import { FiBox, FiTruck, FiRefreshCw, FiBarChart2, FiCalendar, FiClock } from 'react-icons/fi';
 
 interface ActivityItem {
@@ -35,7 +35,13 @@ interface ActivityItem {
 }
 
 export default function ActivityPage() {
-    const { user, isAuthReady } = useAuth();
+    // Replace this:
+    // const { user, isAuthReady } = useSession();
+
+    // With this:
+    const { data: session, status } = useSession();
+    const isAuthReady = status !== 'loading';
+
     const [activities, setActivities] = useState<ActivityItem[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [timeframe, setTimeframe] = useState('week');
@@ -66,9 +72,9 @@ export default function ActivityPage() {
     }, [toast, timeframe]);
 
     useEffect(() => {
-        if (!isAuthReady) return;
+        if (status === 'loading') return; // Wait for auth to be ready
         fetchActivities();
-    }, [isAuthReady, timeframe, fetchActivities]);
+    }, [status, timeframe, fetchActivities]); // Use status instead of isAuthReady
 
     const getActivityIcon = (type: string) => {
         switch (type) {
@@ -117,7 +123,8 @@ export default function ActivityPage() {
         }
     };
 
-    if (!isAuthReady) {
+    // Update the loading check to use status
+    if (status === 'loading') {
         return (
             <Flex justify="center" align="center" height="100vh">
                 <Spinner size="xl" />

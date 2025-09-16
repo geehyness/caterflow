@@ -19,7 +19,7 @@ import {
 } from '@chakra-ui/react';
 import { FiPlus, FiSearch, FiEdit, FiTrash2 } from 'react-icons/fi';
 import DataTable from '@/components/DataTable';
-import { useAuth } from '@/context/AuthContext';
+import { useSession } from 'next-auth/react'
 import SupplierModal from '@/components/SupplierModal';
 
 interface Supplier {
@@ -33,6 +33,9 @@ interface Supplier {
 }
 
 export default function SuppliersPage() {
+    const { data: session, status } = useSession();
+    const user = session?.user;
+
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
     const [filteredSuppliers, setFilteredSuppliers] = useState<Supplier[]>([]);
     const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
@@ -40,7 +43,6 @@ export default function SuppliersPage() {
     const [searchTerm, setSearchTerm] = useState('');
     const { isOpen, onOpen, onClose } = useDisclosure();
     const toast = useToast();
-    const { user } = useAuth();
 
     const cardBg = useColorModeValue('white', 'gray.700');
     const borderColor = useColorModeValue('gray.200', 'gray.600');
@@ -183,7 +185,7 @@ export default function SuppliersPage() {
         },
     ];
 
-    if (loading) {
+    if (loading || status === 'loading') {
         return (
             <Box p={4}>
                 <Flex justifyContent="center" alignItems="center" height="50vh">

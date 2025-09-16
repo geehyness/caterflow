@@ -20,7 +20,7 @@ import {
 } from '@chakra-ui/react';
 import DataTable, { Column } from '@/components/DataTable';
 import { EditIcon, DeleteIcon } from '@chakra-ui/icons';
-import { useAuth } from '@/context/AuthContext';
+import { useSession } from 'next-auth/react'
 import SiteModal from '@/components/SiteModal';
 import BinModal from '@/components/BinModal';
 
@@ -50,6 +50,11 @@ interface Site {
 }
 
 export default function LocationsPage() {
+    const { data: session, status } = useSession();
+    const user = session?.user;
+    const isAuthenticated = status === 'authenticated';
+    const isAuthReady = status !== 'loading';
+
     const [sites, setSites] = useState<Site[]>([]);
     const [bins, setBins] = useState<Bin[]>([]);
     const [loading, setLoading] = useState(true);
@@ -62,7 +67,6 @@ export default function LocationsPage() {
     const { isOpen: isBinModalOpen, onOpen: onBinModalOpen, onClose: onBinModalClose } = useDisclosure();
 
     const toast = useToast();
-    const { user, isAuthReady } = useAuth();
     const isSiteManagerOrAdmin = user?.role === 'siteManager' || user?.role === 'admin';
 
     // Fetch all sites and bins using API
@@ -100,10 +104,10 @@ export default function LocationsPage() {
     }, [toast]);
 
     useEffect(() => {
-        if (isAuthReady) {
+        if (status !== 'loading') {
             fetchLocations();
         }
-    }, [isAuthReady, fetchLocations]);
+    }, [status, fetchLocations]);
 
     // Handlers for Site actions
     const handleAddSite = () => {
@@ -210,7 +214,7 @@ export default function LocationsPage() {
                         aria-label="Edit site"
                         icon={<EditIcon />}
                         size="sm"
-                        colorScheme="blue"
+                        colorScheme="brand" // Using the custom brand color
                         onClick={(e) => {
                             e.stopPropagation();
                             handleEditSite(row);
@@ -246,7 +250,7 @@ export default function LocationsPage() {
                         aria-label="Edit bin"
                         icon={<EditIcon />}
                         size="sm"
-                        colorScheme="blue"
+                        colorScheme="brand" // Using the custom brand color
                         onClick={(e) => {
                             e.stopPropagation();
                             handleEditBin(row);
@@ -271,7 +275,7 @@ export default function LocationsPage() {
         { accessorKey: 'locationDescription', header: 'Description', isSortable: false },
     ];
 
-    if (!isAuthReady) {
+    if (status === 'loading') {
         return (
             <Flex justify="center" align="center" height="80vh">
                 <Spinner size="xl" />
@@ -281,8 +285,8 @@ export default function LocationsPage() {
 
     if (!isSiteManagerOrAdmin) {
         return (
-            <Box p={8}>
-                <Text color="red.500">You do not have permission to view this page.</Text>
+            <Box p={8} flex="1" textAlign="center">
+                <Text color="red.500" fontSize="lg" fontWeight="semibold">You do not have permission to view this page.</Text>
             </Box>
         );
     }
@@ -306,7 +310,7 @@ export default function LocationsPage() {
                             <Heading as="h2" size="lg">
                                 Sites
                             </Heading>
-                            <Button colorScheme="blue" onClick={handleAddSite}>
+                            <Button colorScheme="brand" onClick={handleAddSite}>
                                 Add New Site
                             </Button>
                         </Flex>
@@ -326,7 +330,7 @@ export default function LocationsPage() {
                             <Heading as="h2" size="lg">
                                 Storage Bins
                             </Heading>
-                            <Button colorScheme="blue" onClick={handleAddBin}>
+                            <Button colorScheme="brand" onClick={handleAddBin}>
                                 Add New Bin
                             </Button>
                         </Flex>

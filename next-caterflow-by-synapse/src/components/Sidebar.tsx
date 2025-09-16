@@ -1,4 +1,3 @@
-// src/components/Sidebar.tsx
 'use client'
 
 import React, { useState } from 'react';
@@ -11,7 +10,7 @@ import NextLink from 'next/link';
 import Image from 'next/image';
 import { useRouter, usePathname } from 'next/navigation';
 import { FiLogOut, FiBarChart2, FiBox, FiMapPin, FiTruck, FiUsers, FiSettings, FiBell, FiClock, FiActivity, FiChevronDown, FiChevronUp, FiUser } from 'react-icons/fi';
-import { useAuth } from '@/context/AuthContext';
+import { useSession, signOut } from 'next-auth/react'; // Changed import
 import { useLoading } from '@/context/LoadingContext';
 import { FaCheckCircle } from 'react-icons/fa';
 import { useSidebar } from '@/context/SidebarContext';
@@ -26,7 +25,7 @@ const SidebarContent = ({ onItemClick }: { onItemClick?: () => void }) => {
     const theme = useTheme();
     const router = useRouter();
     const pathname = usePathname();
-    const { isAuthenticated, logout, userRole, isAuthReady } = useAuth();
+    const { data: session, status } = useSession(); // Use NextAuth's useSession
     const [expandedGroups, setExpandedGroups] = useState<string[]>(['Main', 'Operations', 'Admin']);
     const { setLoading } = useLoading();
 
@@ -59,7 +58,7 @@ const SidebarContent = ({ onItemClick }: { onItemClick?: () => void }) => {
                 { label: 'Dispatches', href: '/operations/dispatches', icon: FiTruck, roles: ['admin', 'siteManager', 'dispatchStaff', 'auditor'] },
                 { label: 'Transfers', href: '/operations/transfers', icon: FiTruck, roles: ['admin', 'siteManager', 'stockController', 'dispatchStaff', 'auditor'] },
                 { label: 'Adjustments', href: '/operations/adjustments', icon: FiBox, roles: ['admin', 'siteManager', 'stockController', 'auditor'] },
-                { label: 'Counts', href: '/operations/counts', icon: FiBox, roles: ['admin', 'siteManager', 'stockController', 'auditor'] },
+                { label: 'Counts', href: '/operations/bin-counts', icon: FiBox, roles: ['admin', 'siteManager', 'stockController', 'auditor'] },
             ],
         },
         {
@@ -72,6 +71,11 @@ const SidebarContent = ({ onItemClick }: { onItemClick?: () => void }) => {
             ],
         },
     ];
+
+    // Get user role from session
+    const userRole = session?.user?.role;
+    const isAuthenticated = status === 'authenticated';
+    const isAuthReady = status !== 'loading';
 
     // Filter menu items based on the user's role
     const filteredMenuGroups = userRole ? menuGroups
@@ -96,7 +100,12 @@ const SidebarContent = ({ onItemClick }: { onItemClick?: () => void }) => {
         onItemClick?.();
     };
 
-    if (!isAuthReady) {
+    const handleLogout = async () => {
+        await signOut({ redirect: false });
+        router.push('/login');
+    };
+
+    if (status === 'loading') {
         return (
             <Flex
                 p={4}
@@ -132,6 +141,7 @@ const SidebarContent = ({ onItemClick }: { onItemClick?: () => void }) => {
                     alignItems="center"
                     justifyContent="center"
                     onClick={() => handleItemClick('/')}
+                    cursor="pointer"
                 >
                     <Image
                         src="/icons/icon-512x512.png"
@@ -236,7 +246,7 @@ const SidebarContent = ({ onItemClick }: { onItemClick?: () => void }) => {
                         variant="ghost"
                         justifyContent="flex-start"
                         leftIcon={<Icon as={FiLogOut} />}
-                        onClick={logout}
+                        onClick={handleLogout}
                     >
                         Logout
                     </Button>
@@ -252,8 +262,6 @@ export function Sidebar({ appName = 'Caterflow' }: SidebarProps) {
     const theme = useTheme();
     // Use the same theme color for the main sidebar background
     const sidebarBg = useColorModeValue(theme.colors.neutral.light['bg-secondary'], theme.colors.neutral.dark['bg-secondary']);
-
-    console.log('Sidebar component - isMobile:', isMobile, 'isOpen:', isOpen); // Debug log
 
     if (isMobile) {
         return (

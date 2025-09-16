@@ -34,7 +34,7 @@ import {
     HStack,
     VStack,
 } from '@chakra-ui/react';
-import { useAuth } from '@/context/AuthContext';
+import { useSession } from 'next-auth/react'
 import { FiCheckCircle, FiXCircle } from 'react-icons/fi';
 import { FaBoxes } from 'react-icons/fa';
 import { useRouter } from 'next/navigation';
@@ -74,7 +74,15 @@ interface ApprovalAction {
 }
 
 export default function ApprovalsPage() {
-    const { isAuthenticated, isAuthReady, user } = useAuth();
+    // Replace this:
+    // const { isAuthenticated, isAuthReady, user } = useSession();
+
+    // With this:
+    const { data: session, status } = useSession();
+    const isAuthReady = status !== 'loading';
+    const isAuthenticated = status === 'authenticated';
+    const user = session?.user;
+
     const [pendingApprovals, setPendingApprovals] = useState<ApprovalAction[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -88,7 +96,6 @@ export default function ApprovalsPage() {
     const actionTypes = ['PurchaseOrder', 'GoodsReceipt', 'InternalTransfer', 'StockAdjustment'];
     const actionTypeTitles: { [key: string]: string } = {
         'PurchaseOrder': 'Purchase Orders',
-        'GoodsReceipt': 'Goods Receipts',
         'InternalTransfer': 'Internal Transfers',
         'StockAdjustment': 'Stock Adjustments',
     };
@@ -143,10 +150,12 @@ export default function ApprovalsPage() {
     }, [user, router, toast]);
 
     useEffect(() => {
-        if (isAuthReady && isAuthenticated) {
+        if (status === 'loading') return; // Wait for auth to be ready
+
+        if (isAuthenticated) {
             fetchPendingApprovals();
         }
-    }, [isAuthReady, isAuthenticated, user, fetchPendingApprovals]);
+    }, [status, isAuthenticated, fetchPendingApprovals]);
 
     const handleOpenReview = (action: ApprovalAction) => {
         setSelectedApproval(action);
@@ -167,7 +176,7 @@ export default function ApprovalsPage() {
                 body: JSON.stringify({
                     id: selectedApproval._id,
                     status: 'approved',
-                    approvedBy: user?._id,
+                    approvedBy: user?.id, // Use user.id instead of user._id
                     approvedAt: new Date().toISOString(),
                 }),
             });
@@ -208,7 +217,7 @@ export default function ApprovalsPage() {
                 body: JSON.stringify({
                     id: selectedApproval._id,
                     status: 'rejected',
-                    rejectedBy: user?._id,
+                    rejectedBy: user?.id, // Use user.id instead of user._id
                     rejectedAt: new Date().toISOString(),
                 }),
             });
@@ -256,7 +265,8 @@ export default function ApprovalsPage() {
         return uniqueSuppliers.join(', ');
     };
 
-    if (!isAuthReady || loading) {
+    // Update loading check to use status
+    if (status === 'loading' || loading) {
         return (
             <Flex justifyContent="center" alignItems="center" minH="100vh">
                 <Spinner size="xl" />

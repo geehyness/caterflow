@@ -1,4 +1,5 @@
-'use client';
+// src/components/DataTable.tsx
+
 import React, { useState, useMemo, ChangeEvent } from 'react';
 import {
     Table,
@@ -23,6 +24,7 @@ import { ChevronLeftIcon, ChevronRightIcon, ChevronUpIcon, ChevronDownIcon } fro
 import { FiPackage } from 'react-icons/fi';
 
 // Define a flexible column type for better control over rendering
+// Now explicitly stating that the cell function receives a 'row' object
 export interface Column {
     accessorKey: string;
     header: string | React.ReactNode;

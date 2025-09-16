@@ -2,7 +2,7 @@
 'use client'
 
 import { Box, Spinner } from '@chakra-ui/react';
-import { useAuth } from '@/context/AuthContext';
+import { useSession } from 'next-auth/react'
 import LoginPage from './login/page';
 import { useEffect, useState } from 'react';
 
@@ -11,7 +11,7 @@ interface AuthWrapperProps {
 }
 
 export default function AuthWrapper({ children }: AuthWrapperProps) {
-    const { isAuthenticated, isAuthReady } = useAuth();
+    const { data: session, status } = useSession();
     const [mounted, setMounted] = useState(false);
 
     useEffect(() => {
@@ -27,7 +27,7 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
         );
     }
 
-    if (!isAuthReady) {
+    if (status === 'loading') {
         return (
             <Box display="flex" justifyContent="center" alignItems="center" minH="100vh">
                 <Spinner size="xl" />
@@ -35,7 +35,7 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
         );
     }
 
-    if (!isAuthenticated) {
+    if (status !== 'authenticated' || !session) {
         return <LoginPage />;
     }
 

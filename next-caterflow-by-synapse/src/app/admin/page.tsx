@@ -22,7 +22,7 @@ import {
 } from '@chakra-ui/react';
 import { client } from '@/lib/sanity';
 import { groq } from 'next-sanity';
-import { useAuth } from '@/context/AuthContext';
+import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation';
 import { FiEdit } from 'react-icons/fi';
 import { AppUser, Site } from '@/lib/sanityTypes';
@@ -33,7 +33,14 @@ interface UserWithSiteName extends AppUser {
 }
 
 export default function AdminPage() {
-  const { isAuthenticated, user, isAuthReady } = useAuth();
+  // Replace this:
+  // const { isAuthenticated, user, isAuthReady } = useSession();
+
+  // With this:
+  const { data: session, status } = useSession();
+  const isAuthReady = status !== 'loading';
+  const isAuthenticated = status === 'authenticated';
+  const user = session?.user;
   const isAdmin = user?.role === 'admin';
 
   const router = useRouter();
@@ -102,9 +109,11 @@ export default function AdminPage() {
   }, [toast]);
 
   useEffect(() => {
-    if (isAuthReady && isAuthenticated && isAdmin) {
+    if (status === 'loading') return; // Wait for auth to be ready
+
+    if (isAuthenticated && isAdmin) {
       fetchData();
-    } else if (isAuthReady && !isAdmin) {
+    } else if (isAuthenticated && !isAdmin) {
       toast({
         title: "Access Denied",
         description: "You do not have permission to view this page.",
@@ -114,7 +123,7 @@ export default function AdminPage() {
       });
       router.push('/');
     }
-  }, [isAuthenticated, isAuthReady, isAdmin, router, toast, fetchData]);
+  }, [isAuthenticated, isAdmin, router, toast, fetchData, status]);
 
   const handleEditUserClick = (user: UserWithSiteName | null) => {
     setUserToEdit(user);
@@ -136,7 +145,8 @@ export default function AdminPage() {
     fetchData(); // Refresh data after saving
   };
 
-  if (isLoadingData && isAuthReady) {
+  // Update loading check to use status
+  if (status === 'loading') {
     return (
       <Box p={4}>
         <Flex justifyContent="center" alignItems="center" height="50vh">
@@ -146,7 +156,7 @@ export default function AdminPage() {
     );
   }
 
-  if (!isAuthenticated && isAuthReady) {
+  if (!isAuthenticated) {
     return (
       <Box p={4}>
         <Text>Please log in to view this page.</Text>

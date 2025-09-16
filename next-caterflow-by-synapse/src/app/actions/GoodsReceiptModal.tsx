@@ -1,6 +1,7 @@
+// Please replace the entire file content with this code block
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     Modal,
     ModalOverlay,
@@ -32,11 +33,7 @@ import {
     TableContainer,
     Badge,
     Spinner,
-    InputGroup,
-    InputRightElement,
     Flex,
-    useColorModeValue,
-    Checkbox,
     Box,
     AlertDialog,
     AlertDialogBody,
@@ -44,39 +41,78 @@ import {
     AlertDialogHeader,
     AlertDialogContent,
     AlertDialogOverlay,
+    Icon,
+    InputGroup,
+    InputRightElement,
+    Checkbox,
+    useColorModeValue,
 } from '@chakra-ui/react';
-import { FiCheck, FiX } from 'react-icons/fi';
+import { FiCheck, FiSave, FiUpload, FiX, FiCheckCircle } from 'react-icons/fi';
+import FileUploadModal from '@/components/FileUploadModal';
+import { Reference } from 'sanity';
 
-import { PurchaseOrder } from './types';
-import DataTable, { Column } from './DataTable';
+import BinSelectorModal from '@/components/BinSelectorModal';
 
-// Define the interface for an item within the goods receipt
-interface ReceivedItem {
-    stockItem: string;
-    stockItemName: string;
-    orderedQuantity: number;
+// Interfaces for the data received from the API endpoint
+interface ReceivedItemData {
+    _key: string;
+    stockItem: {
+        _id: string;
+        name: string;
+        sku?: string;
+        unitOfMeasure?: string;
+    };
+    orderedQuantity?: number;
     receivedQuantity: number;
     batchNumber?: string;
     expiryDate?: string;
-    condition: 'good' | 'damaged' | 'short-shipped' | 'over-shipped';
-    _key: string;
+    condition: string;
 }
 
-// Define the interface for the goods receipt document
-interface GoodsReceipt {
+// Interface for the goods receipt data object
+interface GoodsReceiptData {
     _id: string;
     receiptNumber: string;
     receiptDate: string;
-    purchaseOrder: string;
-    purchaseOrderNumber: string;
-    receivingBin: string;
-    receivingBinName: string;
-    items: ReceivedItem[];
-    status: 'draft' | 'partial' | 'completed';
+    status: string;
     notes?: string;
+    purchaseOrder?: {
+        _id: string;
+        poNumber: string;
+        status: string;
+        orderDate: string;
+        supplier?: {
+            _id: string;
+            name: string;
+        };
+        site?: {
+            _id: string;
+            name: string;
+        };
+    };
+    receivingBin?: {
+        _id: string;
+        name: string;
+        site?: {
+            _id: string;
+            name: string;
+        };
+    };
+    receivedItems: ReceivedItemData[];
+    attachments?: any[];
 }
 
-// Define the interface for a bin location
+// Define the component's props with the new interface
+interface GoodsReceiptModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    receipt: GoodsReceiptData | null;
+    onSave: () => void;
+    approvedPurchaseOrders?: any[];
+    preSelectedPO?: string | null;
+}
+
+// Interface for a bin location
 interface Bin {
     _id: string;
     name: string;
@@ -87,69 +123,48 @@ interface Bin {
     };
 }
 
-// Define the component props
-interface GoodsReceiptModalProps {
-    isOpen: boolean;
-    onClose: () => void;
-    receipt: GoodsReceipt | null;
-    onSave: () => void;
-    approvedPurchaseOrders: PurchaseOrder[];
-    preSelectedPO?: string | null;
-}
-
-// The main GoodsReceiptModal component
 export default function GoodsReceiptModal({
     isOpen,
     onClose,
     receipt,
     onSave,
-    approvedPurchaseOrders,
-    preSelectedPO
+    approvedPurchaseOrders = [],
+    preSelectedPO = null
 }: GoodsReceiptModalProps) {
+    const toast = useToast();
+    const [isSaving, setIsSaving] = useState(false);
+    const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+    const cancelRef = useRef<HTMLButtonElement>(null);
+
+    const isNewReceipt = !receipt || receipt._id.startsWith('temp-');
+
+    const [isBinSelectorOpen, setIsBinSelectorOpen] = useState(false);
+
+    const [receivedItems, setReceivedItems] = useState<ReceivedItemData[]>([]);
+    const [selectedPOId, setSelectedPOId] = useState<string | null>(preSelectedPO);
+    const [isLoadingItems, setIsLoadingItems] = useState(false);
     const [receiptNumber, setReceiptNumber] = useState('');
     const [receiptDate, setReceiptDate] = useState('');
-    const [selectedPO, setSelectedPO] = useState<string>('');
     const [selectedBin, setSelectedBin] = useState<string>('');
-    const [status, setStatus] = useState<'draft' | 'partial' | 'completed'>('draft');
     const [notes, setNotes] = useState('');
-    const [items, setItems] = useState<ReceivedItem[]>([]);
-    const [loading, setLoading] = useState(false);
-    const [poDataLoading, setPoDataLoading] = useState(false);
     const [availableBins, setAvailableBins] = useState<Bin[]>([]);
     const [selectedItemsKeys, setSelectedItemsKeys] = useState<string[]>([]);
     const [isConfirmOpen, setIsConfirmOpen] = useState(false);
-    const cancelRef = React.useRef<HTMLButtonElement>(null);
-    const toast = useToast();
 
-    // Effect to preselect the PO if a value is passed
     useEffect(() => {
-        if (preSelectedPO) {
-            setSelectedPO(preSelectedPO);
-        }
-    }, [preSelectedPO, isOpen]);
-
-    // Effect to populate the form when editing an existing receipt
-    useEffect(() => {
-        if (receipt) {
+        if (receipt && !isNewReceipt) {
+            setReceivedItems(receipt.receivedItems || []);
+            setSelectedPOId(receipt.purchaseOrder?._id || null);
             setReceiptNumber(receipt.receiptNumber || '');
             setReceiptDate(receipt.receiptDate || '');
-            setSelectedPO(receipt.purchaseOrder || '');
-            setSelectedBin(receipt.receivingBin || '');
-            setStatus(receipt.status || 'draft');
+            setSelectedBin(receipt.receivingBin?._id || '');
             setNotes(receipt.notes || '');
-            setItems(receipt.items || []);
-        } else {
-            setReceiptNumber('');
+        } else if (isNewReceipt && preSelectedPO) {
+            setSelectedPOId(preSelectedPO);
             setReceiptDate(new Date().toISOString().split('T')[0]);
-            setSelectedPO('');
-            setSelectedBin('');
-            setStatus('draft');
-            setNotes('');
-            setItems([]);
         }
-    }, [receipt]);
+    }, [receipt, isNewReceipt, preSelectedPO]);
 
-    // Effect to generate a new receipt number for new receipts
     useEffect(() => {
         if (!receiptNumber && !receipt) {
             const timestamp = new Date().getTime();
@@ -157,102 +172,122 @@ export default function GoodsReceiptModal({
         }
     }, [receiptNumber, receipt]);
 
-    // Effect to fetch bins and PO items when a purchase order is selected
     useEffect(() => {
-        const fetchBins = async () => {
-            if (selectedPO) {
-                setPoDataLoading(true);
-                const selectedOrder = approvedPurchaseOrders?.find(po => po._id === selectedPO);
+        const loadItemsFromPO = async () => {
+            if (isNewReceipt && selectedPOId) {
+                setIsLoadingItems(true);
+                try {
+                    const response = await fetch(`/api/purchase-orders?id=${selectedPOId}`);
+                    if (response.ok) {
+                        const poData = await response.json();
 
-                if (selectedOrder) {
-                    try {
-                        // Fetch bins for the selected PO's site
-                        const response = await fetch(`/api/bins?siteName=${selectedOrder.site?.name || ''}`);
-                        if (response.ok) {
-                            const bins: Bin[] = await response.json();
-                            setAvailableBins(bins);
-                            const mainBin = bins.find(bin => bin.binType === 'main-storage');
-                            if (mainBin) {
-                                setSelectedBin(mainBin._id);
-                            } else if (bins.length > 0) {
-                                setSelectedBin(bins[0]._id);
+                        if (poData.orderedItems) {
+                            const initialItems: ReceivedItemData[] = poData.orderedItems.map((item: any) => ({
+                                _key: item._key || Math.random().toString(36).substr(2, 9),
+                                stockItem: {
+                                    _id: item.stockItem?._id || item.stockItem?._ref || '',
+                                    name: item.stockItem?.name || 'Unknown Item',
+                                    sku: item.stockItem?.sku,
+                                    unitOfMeasure: item.stockItem?.unitOfMeasure
+                                },
+                                orderedQuantity: item.orderedQuantity || 0,
+                                receivedQuantity: 0,
+                                condition: 'good',
+                                batchNumber: '',
+                                expiryDate: ''
+                            }));
+                            setReceivedItems(initialItems);
+                        }
+
+                        if (poData.site?._id) {
+                            const binsResponse = await fetch(`/api/bins?siteId=${poData.site._id}`);
+                            if (binsResponse.ok) {
+                                const bins: Bin[] = await binsResponse.json();
+                                setAvailableBins(bins);
                             }
                         }
-                    } catch (error) {
-                        console.error('Failed to fetch bins:', error);
-                        toast({
-                            title: 'Error',
-                            description: 'Failed to fetch bin information.',
-                            status: 'error',
-                            duration: 5000,
-                            isClosable: true,
-                        });
+                    } else {
+                        throw new Error('Failed to fetch purchase order details');
                     }
-
-                    // Populate items for the goods receipt based on the selected PO
-                    // Update the mapping to ensure stockItem is always a string
-                    if (selectedOrder.orderedItems) {
-
-                        const receiptItems: ReceivedItem[] = selectedOrder.orderedItems
-                            .filter(item => item.stockItem && item.stockItem._id) // Filter out items without stockItem._id
-                            .map(item => ({
-                                stockItem: item.stockItem!._id as string, // Use non-null assertion since we filtered
-                                stockItemName: item.stockItem.name,
-                                orderedQuantity: item.orderedQuantity,
-                                receivedQuantity: 0,
-                                condition: 'good' as const,
-                                _key: item._key || Math.random().toString(36).substr(2, 9)
-                            }));
-                        setItems(receiptItems);
-                    }
-
+                } catch (error) {
+                    toast({
+                        title: 'Error',
+                        description: 'Failed to load purchase order items',
+                        status: 'error',
+                        duration: 5000,
+                        isClosable: true,
+                    });
+                    setReceivedItems([]);
+                } finally {
+                    setIsLoadingItems(false);
                 }
-                setPoDataLoading(false);
+            } else if (isNewReceipt && !selectedPOId) {
+                setReceivedItems([]);
+                setAvailableBins([]);
+                setSelectedBin('');
             }
         };
 
-        // Only fetch bins and items if it's a new receipt, not when editing
-        if (!receipt) {
-            fetchBins();
-        }
-    }, [selectedPO, approvedPurchaseOrders, toast, receipt]);
+        loadItemsFromPO();
+    }, [selectedPOId, isNewReceipt, toast]);
 
-    // Handler for changing an individual item's details
-    const handleItemChange = (index: number, field: keyof ReceivedItem, value: any) => {
-        const newItems = [...items];
-        newItems[index] = { ...newItems[index], [field]: value };
-        setItems(newItems);
+
+    const handleBinSelect = (bin: Bin) => {
+        setSelectedBin(bin._id);
     };
 
-    // Handler for marking selected items as fully received
+
+    const handleQuantityChange = (key: string, valueAsString: string, valueAsNumber: number) => {
+        setReceivedItems(items => items.map(item =>
+            item._key === key ? { ...item, receivedQuantity: valueAsNumber } : item
+        ));
+    };
+
+    const handleConditionChange = (key: string, newCondition: string) => {
+        setReceivedItems(items => items.map(item =>
+            item._key === key ? { ...item, condition: newCondition } : item
+        ));
+    };
+
+    const handleUpdateBatchNumber = (key: string, value: string) => {
+        setReceivedItems(items => items.map(item =>
+            item._key === key ? { ...item, batchNumber: value } : item
+        ));
+    };
+
+    const handleUpdateExpiryDate = (key: string, value: string) => {
+        setReceivedItems(items => items.map(item =>
+            item._key === key ? { ...item, expiryDate: value } : item
+        ));
+    };
+
     const markSelectedAsReceived = () => {
-        const newItems = items.map(item => {
+        const newItems = receivedItems.map(item => {
             if (selectedItemsKeys.includes(item._key)) {
                 return {
                     ...item,
-                    receivedQuantity: item.orderedQuantity,
-                    condition: 'good' as const // Explicitly type as 'good'
+                    receivedQuantity: item.orderedQuantity || 0,
+                    condition: 'good'
                 };
             }
             return item;
         });
-        setItems(newItems);
+        setReceivedItems(newItems);
         setSelectedItemsKeys([]);
     };
 
-    // Handler for marking selected items as not received
     const markSelectedAsNotReceived = () => {
-        const newItems = items.map(item => {
+        const newItems = receivedItems.map(item => {
             if (selectedItemsKeys.includes(item._key)) {
                 return {
                     ...item,
                     receivedQuantity: 0,
-                    condition: 'good' as const // Explicitly type as 'good'
+                    condition: 'good'
                 };
             }
             return item;
         });
-        setItems(newItems);
+        setReceivedItems(newItems);
         setSelectedItemsKeys([]);
     };
 
@@ -260,118 +295,151 @@ export default function GoodsReceiptModal({
         setSelectedItemsKeys(selectedData.map(item => item._key));
     };
 
-    // Determine status based on received items
     const determineStatus = () => {
-        if (items.length === 0) return 'draft';
+        if (receivedItems.length === 0) return 'draft';
 
-        const allReceived = items.every(item => item.receivedQuantity === item.orderedQuantity && item.condition === 'good');
-        const someReceived = items.some(item => item.receivedQuantity > 0);
+        const allReceived = receivedItems.every(item =>
+            item.receivedQuantity === (item.orderedQuantity || 0) && item.condition === 'good'
+        );
+        const someReceived = receivedItems.some(item => item.receivedQuantity > 0);
 
         if (allReceived) return 'completed';
-        if (someReceived) return 'partial';
+        if (someReceived) return 'partially-received';
         return 'draft';
     };
 
-    const handleSave = async (e: React.FormEvent) => {
-        e.preventDefault();
-
-        const finalStatus = determineStatus();
-
-        // Show confirmation if all items are received
-        if (finalStatus === 'completed') {
-            setIsConfirmOpen(true);
+    const saveReceipt = async (status: string, attachmentId?: string) => {
+        setIsSaving(true);
+        if (!selectedPOId || !selectedBin) {
+            toast({
+                title: 'Missing Information',
+                description: 'Please select a purchase order and a receiving bin.',
+                status: 'warning',
+                duration: 5000,
+                isClosable: true,
+            });
+            setIsSaving(false);
             return;
         }
 
-        await saveReceipt(finalStatus);
-    };
-
-    const saveReceipt = async (finalStatus: 'draft' | 'partial' | 'completed') => {
-        setLoading(true);
         try {
-            const url = '/api/goods-receipts';
-            const method = receipt ? 'PATCH' : 'POST';
-            const selectedOrder = approvedPurchaseOrders?.find(po => po._id === selectedPO);
-            const selectedBinObj = availableBins.find(bin => bin._id === selectedBin);
+            const itemsToSave = receivedItems.map(item => ({
+                _key: item._key,
+                stockItem: {
+                    _type: 'reference',
+                    _ref: item.stockItem._id,
+                },
+                orderedQuantity: item.orderedQuantity || 0,
+                receivedQuantity: item.receivedQuantity,
+                condition: item.condition,
+                batchNumber: item.batchNumber || '',
+                expiryDate: item.expiryDate || '',
+            }));
+
+            let url = '/api/goods-receipts';
+            let method = 'POST';
+            const payload: any = {
+                receiptNumber,
+                status,
+                receiptDate: receiptDate || new Date().toISOString().split('T')[0],
+                notes: notes,
+                purchaseOrder: { _type: 'reference', _ref: selectedPOId },
+                receivingBin: { _type: 'reference', _ref: selectedBin },
+                receivedItems: itemsToSave,
+            };
+
+            if (!isNewReceipt && receipt?._id) {
+                // This is an update, so use the dynamic route
+                url = `/api/goods-receipts/${receipt._id}`;
+                method = 'POST';
+                payload._id = receipt._id;
+
+                // Only send the fields that can be updated
+                payload.status = status;
+                payload.notes = notes;
+                payload.receivingBin = { _type: 'reference', _ref: selectedBin };
+                payload.receivedItems = itemsToSave;
+
+                if (attachmentId) {
+                    payload.attachments = [...(receipt?.attachments || []), { _type: 'reference', _ref: attachmentId }];
+                }
+            }
 
             const response = await fetch(url, {
                 method,
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({
-                    _id: receipt?._id,
-                    receiptNumber,
-                    receiptDate,
-                    purchaseOrder: selectedPO,
-                    purchaseOrderNumber: selectedOrder?.poNumber || '',
-                    supplierName: selectedOrder?.supplier?.name || '', // Fixed this line
-                    siteName: selectedOrder?.site?.name || '',
-                    receivingBin: selectedBin,
-                    receivingBinName: selectedBinObj?.name || '',
-                    status: finalStatus,
-                    notes: notes || undefined,
-                    items,
-                }),
+                body: JSON.stringify(payload),
             });
 
-            if (!response.ok) {
+            if (response.ok) {
+                toast({
+                    title: `Receipt ${status === 'draft' ? 'saved' : 'completed'}`,
+                    description: `Goods receipt has been ${status === 'draft' ? 'saved' : 'completed'} successfully.`,
+                    status: 'success',
+                    duration: 5000,
+                    isClosable: true,
+                });
+                onSave();
+            } else {
                 const errorData = await response.json();
                 throw new Error(errorData.error || 'Failed to save goods receipt');
             }
-
-            // If goods receipt is completed, update the purchase order status
-            if (finalStatus === 'completed' && selectedPO) {
-                try {
-                    const poResponse = await fetch('/api/purchase-orders/update-status', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            poId: selectedPO,
-                            status: 'completed',
-                        }),
-                    });
-
-                    if (!poResponse.ok) {
-                        console.warn('Failed to update purchase order status, but goods receipt was saved');
-                    }
-                } catch (poError) {
-                    console.warn('Error updating purchase order status:', poError);
-                    // Don't throw error here - goods receipt was saved successfully
-                }
-            }
-
-            toast({
-                title: receipt ? 'Receipt updated.' : 'Receipt created.',
-                description: `Goods receipt "${receiptNumber}" has been saved with status: ${finalStatus}.`,
-                status: 'success',
-                duration: 3000,
-                isClosable: true,
-            });
-            onSave();
-            onClose();
-        } catch (error: any) {
-            console.error('Failed to save goods receipt:', error);
+        } catch (error) {
+            console.error('Save error:', error);
             toast({
                 title: 'Error',
-                description: error.message || 'Failed to save goods receipt. Please try again.',
+                description: `Failed to save goods receipt. ${error instanceof Error ? error.message : ''}`,
                 status: 'error',
                 duration: 5000,
                 isClosable: true,
             });
         } finally {
-            setLoading(false);
-            setIsConfirmOpen(false);
+            setIsSaving(false);
         }
     };
 
-    // Helper to generate a truncated list of items for the dropdown
-    const getItemListForPO = (po: PurchaseOrder) => {
-        const itemNames = po.orderedItems?.map(item => item.stockItem.name);
+    const handleSaveDraft = () => {
+        const status = determineStatus();
+        if (status === 'completed') {
+            setIsConfirmOpen(true);
+        } else {
+            saveReceipt(status);
+        }
+    };
+
+    const handleCompleteReceipt = () => {
+        if (!isFullyReceived) {
+            toast({
+                title: 'Incomplete Receipt',
+                description: 'You must receive all items before completing the receipt.',
+                status: 'error',
+                duration: 5000,
+                isClosable: true,
+            });
+            return;
+        }
+        setIsUploadModalOpen(true);
+    };
+
+    const handleFinalizeReceipt = async (attachmentId: string) => {
+        setIsUploadModalOpen(false);
+        saveReceipt('completed', attachmentId);
+    };
+
+    const getStatusColor = (status: string) => {
+        switch (status) {
+            case 'completed': return 'green';
+            case 'partially-received': return 'orange';
+            default: return 'gray';
+        }
+    };
+
+    const getItemListForPO = (po: any) => {
+        const itemNames = po.orderedItems?.map((item: any) => item.stockItem?.name);
         const maxItemsToShow = 2;
-        if (itemNames != null) {
+        if (itemNames && itemNames.length > 0) {
             if (itemNames.length <= maxItemsToShow) {
                 return itemNames.join(', ');
             } else {
@@ -381,113 +449,19 @@ export default function GoodsReceiptModal({
         return '';
     };
 
-    // Helper to get a color for the status badge
-    const getStatusColor = (status: string) => {
-        switch (status) {
-            case 'completed': return 'green';
-            case 'partial': return 'orange';
-            default: return 'gray';
-        }
-    };
-
-    const isComplete = items.every(item => item.receivedQuantity === item.orderedQuantity && item.condition === 'good');
-
-    const columns: Column[] = [
-        {
-            accessorKey: 'stockItemName',
-            header: 'Item',
-            isSortable: true,
-        },
-        {
-            accessorKey: 'orderedQuantity',
-            header: 'Ordered',
-            cell: (row) => (
-                <NumberInput value={row.orderedQuantity} isReadOnly width="80px" size="sm">
-                    <NumberInputField />
-                </NumberInput>
-            ),
-        },
-        {
-            accessorKey: 'receivedQuantity',
-            header: 'Received',
-            cell: (row, index) => (
-                <NumberInput
-                    value={row.receivedQuantity}
-                    onChange={(_, valueAsNumber) => {
-                        if (index !== undefined) {
-                            handleItemChange(index, 'receivedQuantity', valueAsNumber);
-                        }
-                    }}
-                    min={0}
-                    max={row.orderedQuantity * 2}
-                    width="80px"
-                    size="sm"
-                >
-                    <NumberInputField />
-                    <NumberInputStepper>
-                        <NumberIncrementStepper />
-                        <NumberDecrementStepper />
-                    </NumberInputStepper>
-                </NumberInput>
-            ),
-        },
-        {
-            accessorKey: 'condition',
-            header: 'Condition',
-            cell: (row, index) => (
-                <Select
-                    value={row.condition}
-                    onChange={(e) => {
-                        if (index !== undefined) {
-                            handleItemChange(index, 'condition', e.target.value as 'good' | 'damaged' | 'short-shipped' | 'over-shipped');
-                        }
-                    }}
-                    width="120px"
-                    size="sm"
-                >
-                    <option value="good">Good</option>
-                    <option value="damaged">Damaged</option>
-                    <option value="short-shipped">Short</option>
-                    <option value="over-shipped">Over</option>
-                </Select>
-            ),
-        },
-        {
-            accessorKey: 'batchNumber',
-            header: 'Batch #',
-            cell: (row, index) => (
-                <Input
-                    value={row.batchNumber || ''}
-                    onChange={(e) => {
-                        if (index !== undefined) {
-                            handleItemChange(index, 'batchNumber', e.target.value);
-                        }
-                    }}
-                    placeholder="Batch #"
-                    width="80px"
-                    size="sm"
-                />
-            ),
-        },
-    ];
-
-    const selectedOrder = approvedPurchaseOrders?.find(po => po._id === selectedPO) || null;
+    const selectedOrder = approvedPurchaseOrders.find(po => po._id === selectedPOId) || receipt?.purchaseOrder || null;
     const currentStatus = determineStatus();
+    const isFullyReceived = receivedItems.every(item => item.receivedQuantity >= (item.orderedQuantity || 0));
+    const modalTitle = receipt && !isNewReceipt ? `Goods Receipt: ${receipt.receiptNumber}` : 'New Goods Receipt';
+    const isEditable = !receipt || receipt.status !== 'completed';
 
     return (
         <>
             <Modal isOpen={isOpen} onClose={onClose} size="6xl" scrollBehavior="inside">
                 <ModalOverlay />
                 <ModalContent maxW="1200px" mx="auto" my={8} borderRadius="xl" boxShadow="xl" height="90vh">
-                    <ModalHeader
-                        bg={useColorModeValue('brand.50', 'brand.900')}
-                        borderTopRadius="xl"
-                        py={4}
-                        position="sticky"
-                        top={0}
-                        zIndex={10}
-                    >
-                        {receipt ? 'Edit Goods Receipt' : 'Create Goods Receipt'}
+                    <ModalHeader borderBottomWidth="1px">
+                        {modalTitle}
                     </ModalHeader>
                     <ModalCloseButton position="absolute" right="12px" top="12px" />
 
@@ -500,6 +474,7 @@ export default function GoodsReceiptModal({
                                         value={receiptNumber}
                                         onChange={(e) => setReceiptNumber(e.target.value)}
                                         placeholder="e.g., GR-001"
+                                        isReadOnly={!isNewReceipt}
                                     />
                                 </FormControl>
                                 <FormControl isRequired>
@@ -508,51 +483,54 @@ export default function GoodsReceiptModal({
                                         type="date"
                                         value={receiptDate}
                                         onChange={(e) => setReceiptDate(e.target.value)}
+                                        isReadOnly={!isEditable}
                                     />
                                 </FormControl>
+                                <FormControl>
+                                    <FormLabel>Status</FormLabel>
+                                    <Badge
+                                        colorScheme={getStatusColor(currentStatus)}
+                                        fontSize="md"
+                                        px={3}
+                                        py={1}
+                                        borderRadius="full"
+                                    >
+                                        {currentStatus.toUpperCase()}
+                                    </Badge>
+                                </FormControl>
                             </HStack>
-
-                            <FormControl>
-                                <FormLabel>Status</FormLabel>
-                                <Badge
-                                    colorScheme={getStatusColor(currentStatus)}
-                                    fontSize="md"
-                                    px={3}
-                                    py={1}
-                                    borderRadius="full"
-                                >
-                                    {currentStatus.toUpperCase()}
-                                </Badge>
-                            </FormControl>
 
                             <HStack>
                                 <FormControl isRequired>
                                     <FormLabel>Purchase Order</FormLabel>
-                                    <Select
-                                        value={selectedPO}
-                                        onChange={(e) => setSelectedPO(e.target.value)}
-                                        placeholder="Select Purchase Order"
-                                        width="100%"
-                                        isDisabled={poDataLoading || !!receipt}
-                                    >
-                                        {approvedPurchaseOrders?.map(po => (
-                                            <option key={po._id} value={po._id}>
-                                                {po.poNumber} - {po.supplier?.name}
-                                                {po.orderedItems && po.orderedItems.length > 0 && (
-                                                    ` (${getItemListForPO(po)})`
-                                                )}
-                                            </option>
-                                        ))}
-                                    </Select>
+                                    {isNewReceipt ? (
+                                        <Select
+                                            placeholder="Select a Purchase Order"
+                                            value={selectedPOId || ''}
+                                            onChange={(e) => setSelectedPOId(e.target.value)}
+                                            isDisabled={isLoadingItems || !isEditable}
+                                        >
+                                            {approvedPurchaseOrders.map((po) => (
+                                                <option key={po._id} value={po._id}>
+                                                    {po.poNumber} - {po.supplier?.name}
+                                                    {po.orderedItems && po.orderedItems.length > 0 && (
+                                                        ` (${getItemListForPO(po)})`
+                                                    )}
+                                                </option>
+                                            ))}
+                                        </Select>
+                                    ) : (
+                                        <Input value={receipt?.purchaseOrder?.poNumber || 'N/A'} isReadOnly />
+                                    )}
                                 </FormControl>
                                 <FormControl isRequired>
                                     <FormLabel>Receiving Bin</FormLabel>
-                                    <InputGroup>
+                                    <HStack>
                                         <Select
                                             value={selectedBin}
                                             onChange={(e) => setSelectedBin(e.target.value)}
                                             placeholder="Select Bin"
-                                            isDisabled={poDataLoading}
+                                            isDisabled={isLoadingItems || !isEditable}
                                         >
                                             {availableBins.map(bin => (
                                                 <option key={bin._id} value={bin._id}>
@@ -560,12 +538,17 @@ export default function GoodsReceiptModal({
                                                 </option>
                                             ))}
                                         </Select>
-                                        {poDataLoading && (
-                                            <InputRightElement>
-                                                <Spinner size="sm" />
-                                            </InputRightElement>
+                                        <Button
+                                            onClick={() => setIsBinSelectorOpen(true)}
+                                            isDisabled={isLoadingItems || !isEditable}
+                                            variant="outline"
+                                        >
+                                            Browse Bins
+                                        </Button>
+                                        {isLoadingItems && (
+                                            <Spinner size="sm" />
                                         )}
-                                    </InputGroup>
+                                    </HStack>
                                 </FormControl>
                             </HStack>
 
@@ -595,11 +578,11 @@ export default function GoodsReceiptModal({
                                     value={notes}
                                     onChange={(e) => setNotes(e.target.value)}
                                     placeholder="Additional notes or comments"
-                                    isDisabled={poDataLoading}
+                                    isDisabled={isLoadingItems || !isEditable}
                                 />
                             </FormControl>
 
-                            {poDataLoading ? (
+                            {isLoadingItems ? (
                                 <Flex justifyContent="center" alignItems="center" height="200px">
                                     <Spinner size="xl" />
                                 </Flex>
@@ -610,62 +593,155 @@ export default function GoodsReceiptModal({
                                             <Text fontSize="lg" fontWeight="bold">
                                                 Received Items from PO: {selectedOrder.poNumber}
                                             </Text>
-                                            <HStack>
-                                                <Button size="sm" leftIcon={<FiCheck />} onClick={markSelectedAsReceived} isDisabled={selectedItemsKeys.length === 0}>
-                                                    Mark Selected
-                                                </Button>
-                                                <Button size="sm" leftIcon={<FiX />} onClick={markSelectedAsNotReceived} isDisabled={selectedItemsKeys.length === 0}>
-                                                    Clear Selected
-                                                </Button>
-                                            </HStack>
+                                            {isEditable && (
+                                                <HStack>
+                                                    <Button size="sm" leftIcon={<FiCheck />} onClick={markSelectedAsReceived} isDisabled={selectedItemsKeys.length === 0}>
+                                                        Mark Selected
+                                                    </Button>
+                                                    <Button size="sm" leftIcon={<FiX />} onClick={markSelectedAsNotReceived} isDisabled={selectedItemsKeys.length === 0}>
+                                                        Clear Selected
+                                                    </Button>
+                                                </HStack>
+                                            )}
                                         </HStack>
 
-                                        <Box overflowX="auto" maxW="100%">
-                                            <DataTable
-                                                columns={columns}
-                                                data={items}
-                                                loading={false}
-                                                onSelectionChange={handleSelectionChange}
-                                                actionType='GoodsReceipt'
-                                            />
-                                        </Box>
-
-                                        <Text fontSize="sm" color="gray.500" mt={2}>
-                                            Expiry dates can be added after receiving items.
-                                        </Text>
+                                        <TableContainer w="100%">
+                                            <Table variant="simple" size="sm">
+                                                <Thead>
+                                                    <Tr>
+                                                        <Th>Item</Th>
+                                                        <Th isNumeric>Ordered</Th>
+                                                        <Th isNumeric>Received</Th>
+                                                        <Th>Condition</Th>
+                                                        <Th>Batch No.</Th>
+                                                        <Th>Expiry Date</Th>
+                                                    </Tr>
+                                                </Thead>
+                                                <Tbody>
+                                                    {receivedItems.length === 0 ? (
+                                                        <Tr>
+                                                            <Td colSpan={6} textAlign="center">
+                                                                No items found in this purchase order.
+                                                            </Td>
+                                                        </Tr>
+                                                    ) : (
+                                                        receivedItems.map(item => (
+                                                            <Tr key={item._key}>
+                                                                <Td>{item.stockItem?.name || 'Unknown Item'}</Td>
+                                                                <Td isNumeric>{item.orderedQuantity || 0}</Td>
+                                                                <Td>
+                                                                    <NumberInput
+                                                                        value={item.receivedQuantity}
+                                                                        onChange={(valueAsString, valueAsNumber) =>
+                                                                            handleQuantityChange(item._key, valueAsString, valueAsNumber)
+                                                                        }
+                                                                        size="sm"
+                                                                        min={0}
+                                                                        max={item.orderedQuantity}
+                                                                        isDisabled={!isEditable}
+                                                                    >
+                                                                        <NumberInputField />
+                                                                        <NumberInputStepper>
+                                                                            <NumberIncrementStepper />
+                                                                            <NumberDecrementStepper />
+                                                                        </NumberInputStepper>
+                                                                    </NumberInput>
+                                                                </Td>
+                                                                <Td>
+                                                                    <Select
+                                                                        value={item.condition}
+                                                                        onChange={(e) => handleConditionChange(item._key, e.target.value)}
+                                                                        size="sm"
+                                                                        isDisabled={!isEditable}
+                                                                    >
+                                                                        <option value="good">Good</option>
+                                                                        <option value="damaged">Damaged</option>
+                                                                        <option value="short-shipped">Short-Shipped</option>
+                                                                        <option value="over-shipped">Over-Shipped</option>
+                                                                    </Select>
+                                                                </Td>
+                                                                <Td>
+                                                                    <Input
+                                                                        type="text"
+                                                                        value={item.batchNumber || ''}
+                                                                        onChange={(e) => handleUpdateBatchNumber(item._key, e.target.value)}
+                                                                        size="sm"
+                                                                        isDisabled={!isEditable}
+                                                                    />
+                                                                </Td>
+                                                                <Td>
+                                                                    <Input
+                                                                        type="date"
+                                                                        value={item.expiryDate || ''}
+                                                                        onChange={(e) => handleUpdateExpiryDate(item._key, e.target.value)}
+                                                                        size="sm"
+                                                                        isDisabled={!isEditable}
+                                                                    />
+                                                                </Td>
+                                                            </Tr>
+                                                        ))
+                                                    )}
+                                                </Tbody>
+                                            </Table>
+                                        </TableContainer>
                                     </Box>
                                 </>
                             )}
                         </VStack>
                     </ModalBody>
 
-                    <ModalFooter
-                        bg={useColorModeValue('gray.50', 'gray.800')}
-                        borderBottomRadius="xl"
-                        position="sticky"
-                        bottom={0}
-                        zIndex={10}
-                    >
+                    <ModalFooter borderTopWidth="1px">
                         <Button
                             colorScheme="gray"
                             mr={3}
                             onClick={onClose}
-                            isDisabled={loading || poDataLoading}
+                            isDisabled={isSaving || isLoadingItems}
                             variant="outline"
                         >
                             Cancel
                         </Button>
-                        <Button
-                            colorScheme="blue"
-                            onClick={handleSave}
-                            isLoading={loading}
-                            isDisabled={!selectedPO || items.length === 0 || poDataLoading || !selectedBin}
-                        >
-                            Save Receipt
-                        </Button>
+                        {isEditable && (
+                            <>
+                                <Button
+                                    colorScheme="blue"
+                                    variant="outline"
+                                    onClick={handleSaveDraft}
+                                    isLoading={isSaving}
+                                    leftIcon={<FiSave />}
+                                    isDisabled={!selectedPOId || receivedItems.length === 0 || !selectedBin}
+                                >
+                                    Save Draft
+                                </Button>
+                                <Button
+                                    colorScheme="green"
+                                    onClick={handleCompleteReceipt}
+                                    isLoading={isSaving}
+                                    isDisabled={!isFullyReceived || !selectedPOId || receivedItems.length === 0 || !selectedBin}
+                                    leftIcon={<FiCheckCircle />}
+                                >
+                                    Complete Receipt
+                                </Button>
+                            </>
+                        )}
                     </ModalFooter>
                 </ModalContent>
             </Modal>
+
+            <FileUploadModal
+                isOpen={isUploadModalOpen}
+                onClose={() => setIsUploadModalOpen(false)}
+                onUploadComplete={handleFinalizeReceipt}
+                relatedToId={receipt?._id || ''}
+                fileType="receipt"
+                title="Upload Receipt Photos"
+                description="Please upload photos of the received goods for verification."
+            />
+
+            <BinSelectorModal
+                isOpen={isBinSelectorOpen}
+                onClose={() => setIsBinSelectorOpen(false)}
+                onSelect={handleBinSelect}
+            />
 
             {/* Confirmation Dialog */}
             <AlertDialog

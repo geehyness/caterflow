@@ -38,6 +38,7 @@ interface StockItem {
     unitOfMeasure: string;
 }
 
+// Correct the interface name to match what the component expects
 interface StockItemModalProps {
     isOpen: boolean;
     onClose: () => void;

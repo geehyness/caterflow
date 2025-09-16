@@ -29,7 +29,7 @@ import {
 } from '@chakra-ui/react';
 import { FiPlus, FiSearch, FiEye, FiFilter, FiEdit } from 'react-icons/fi';
 import DataTable from '@/app/actions/DataTable';
-import { useAuth } from '@/context/AuthContext';
+import { useSession } from 'next-auth/react'
 import CreatePurchaseOrderModal from '@/app/actions/CreatePurchaseOrderModal';
 import PurchaseOrderModal, { PurchaseOrderDetails } from '@/app/actions/PurchaseOrderModal';
 import { PendingAction } from '@/app/actions/types';
@@ -85,13 +85,15 @@ interface OrderItem {
 
 
 export default function PurchasesPage() {
+    const { data: session, status } = useSession();
+    const user = session?.user;
+
     const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
     const [filteredOrders, setFilteredOrders] = useState<PurchaseOrder[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const { isOpen, onOpen, onClose } = useDisclosure();
     const toast = useToast();
-    const { user } = useAuth();
     const [viewMode, setViewMode] = useState<'actionRequired' | 'all'>('actionRequired');
 
     const [isConfirmDialogOpen, setIsConfirmDialogOpen] = useState(false);
@@ -215,7 +217,7 @@ export default function PurchasesPage() {
                 body: JSON.stringify({
                     poNumber: `PO-${Date.now()}`,
                     orderDate: new Date().toISOString(),
-                    orderedBy: user?._id,
+                    orderedBy: user?.id, // Changed from user?._id to user?.id
                     orderedItems: items,
                     totalAmount,
                     status: 'draft',

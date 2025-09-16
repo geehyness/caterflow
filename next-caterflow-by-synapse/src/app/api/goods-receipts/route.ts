@@ -1,9 +1,18 @@
-// src/app/api/goods-receipts/route.ts
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { client, writeClient } from '@/lib/sanity';
 import { groq } from 'next-sanity';
 import { logSanityInteraction } from '@/lib/sanityLogger';
 import { v4 as uuidv4 } from 'uuid';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
+
+const getNextReceiptNumber = async (): Promise<string> => {
+    const query = groq`*[_type == "GoodsReceipt"] | order(receiptDate desc)[0].receiptNumber`;
+    const lastReceiptNumber = await client.fetch(query);
+    const lastNumber = lastReceiptNumber ? parseInt(lastReceiptNumber.split('-')[1]) : 0;
+    const nextNumber = lastNumber + 1;
+    return `GR-${String(nextNumber).padStart(5, '0')}`;
+};
 
 export async function GET() {
     try {
@@ -13,16 +22,42 @@ export async function GET() {
             receiptDate,
             status,
             notes,
-            "purchaseOrder": purchaseOrder->{_id, poNumber},
-            "receivingBin": receivingBin->{name},
-            "items": receivedItems[] {
-                "stockItem": stockItem->{name, sku, unitOfMeasure, _id},
+            "purchaseOrder": purchaseOrder->{
+                _id,
+                poNumber,
+                status,
+                orderDate,
+                "supplier": supplier->{
+                    _id,
+                    name
+                }
+            },
+            "receivingBin": receivingBin->{
+                _id,
+                name,
+                "site": site->{
+                    _id,
+                    name
+                }
+            },
+            "receivedItems": receivedItems[] {
+                _key,
                 orderedQuantity,
                 receivedQuantity,
                 batchNumber,
                 expiryDate,
                 condition,
-                _key
+                "stockItem": stockItem->{
+                    _id,
+                    name,
+                    sku,
+                    unitOfMeasure
+                }
+            },
+            attachments[]->{
+                _id,
+                fileName,
+                fileType
             }
         }`;
 
@@ -37,133 +72,45 @@ export async function GET() {
     }
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
     try {
-        const body = await request.json();
+        const session = await getServerSession(authOptions);
 
-        // Generate a unique receipt number if not provided
-        if (!body.receiptNumber) {
-            const count = await client.fetch(groq`count(*[_type == "GoodsReceipt"])`);
-            body.receiptNumber = `GR-${(count + 1).toString().padStart(4, '0')}`;
+        if (!session || !session.user) {
+            return NextResponse.json(
+                { error: 'User not authenticated' },
+                { status: 401 }
+            );
         }
 
-        const goodsReceipt = await writeClient.create({
+        const payload = await request.json();
+        const { _id, ...createData } = payload;
+
+        const newDoc = {
+            ...createData,
             _type: 'GoodsReceipt',
-            receiptNumber: body.receiptNumber,
-            receiptDate: body.receiptDate,
-            purchaseOrder: { _ref: body.purchaseOrder, _type: 'reference' },
-            receivingBin: { _ref: body.receivingBin, _type: 'reference' },
-            status: body.status,
-            notes: body.notes,
-            receivedItems: body.items.map((item: any) => ({
-                _type: 'ReceivedItem',
-                _key: item._key || uuidv4(),
-                stockItem: { _ref: item.stockItem, _type: 'reference' },
-                orderedQuantity: item.orderedQuantity,
-                receivedQuantity: item.receivedQuantity,
-                batchNumber: item.batchNumber,
-                expiryDate: item.expiryDate,
-                condition: item.condition,
-            })),
-        });
+            receiptNumber: await getNextReceiptNumber(),
+            _id: uuidv4(),
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+        };
+
+        const result = await writeClient.create(newDoc);
 
         await logSanityInteraction(
             'create',
-            `Created new goods receipt: ${goodsReceipt.receiptNumber}`,
+            `Created new goods receipt: ${newDoc.receiptNumber}`,
             'GoodsReceipt',
-            goodsReceipt._id,
+            result._id,
             'system',
             true
         );
 
-        return NextResponse.json(goodsReceipt);
+        return NextResponse.json(result);
     } catch (error) {
         console.error('Failed to create goods receipt:', error);
         return NextResponse.json(
-            { error: 'Failed to create goods receipt' },
-            { status: 500 }
-        );
-    }
-}
-
-export async function PATCH(request: Request) {
-    try {
-        const body = await request.json();
-        const { _id, ...updateData } = body;
-
-        if (!_id) {
-            return NextResponse.json(
-                { error: 'Goods receipt ID is required' },
-                { status: 400 }
-            );
-        }
-
-        const goodsReceipt = await writeClient
-            .patch(_id)
-            .set({
-                ...updateData,
-                purchaseOrder: updateData.purchaseOrder ? { _ref: updateData.purchaseOrder, _type: 'reference' } : undefined,
-                receivingBin: updateData.receivingBin ? { _ref: updateData.receivingBin, _type: 'reference' } : undefined,
-                receivedItems: updateData.items ? updateData.items.map((item: any) => ({
-                    _type: 'ReceivedItem',
-                    _key: item._key || uuidv4(),
-                    stockItem: { _ref: item.stockItem, _type: 'reference' },
-                    orderedQuantity: item.orderedQuantity,
-                    receivedQuantity: item.receivedQuantity,
-                    batchNumber: item.batchNumber,
-                    expiryDate: item.expiryDate,
-                    condition: item.condition,
-                })) : undefined,
-            })
-            .commit();
-
-        await logSanityInteraction(
-            'update',
-            `Updated goods receipt: ${updateData.receiptNumber || _id}`,
-            'GoodsReceipt',
-            _id,
-            'system',
-            true
-        );
-
-        return NextResponse.json(goodsReceipt);
-    } catch (error) {
-        console.error('Failed to update goods receipt:', error);
-        return NextResponse.json(
-            { error: 'Failed to update goods receipt' },
-            { status: 500 }
-        );
-    }
-}
-
-export async function DELETE(request: Request) {
-    try {
-        const { searchParams } = new URL(request.url);
-        const id = searchParams.get('id');
-
-        if (!id) {
-            return NextResponse.json(
-                { error: 'Goods receipt ID is required' },
-                { status: 400 }
-            );
-        }
-
-        await writeClient.delete(id);
-
-        await logSanityInteraction(
-            'delete',
-            `Deleted goods receipt: ${id}`,
-            'GoodsReceipt',
-            id,
-            'system',
-            true
-        );
-
-        return NextResponse.json({ success: true });
-    } catch (error) {
-        console.error('Failed to delete goods receipt:', error);
-        return NextResponse.json(
-            { error: 'Failed to delete goods receipt' },
+            { error: 'Failed to create goods receipt', details: error instanceof Error ? error.message : 'Unknown error' },
             { status: 500 }
         );
     }

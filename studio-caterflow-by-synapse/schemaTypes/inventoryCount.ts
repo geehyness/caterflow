@@ -45,9 +45,9 @@ export default defineType({
             readOnly: ({ document }) => !!document.countNumber,
             description: 'Unique Inventory Count identifier.',
             initialValue: async () => {
-                const today = new Date().toISOString().slice(0, 10);
+                const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
                 const query = `
-                    *[_type == "InventoryCount" && _createdAt >= "${today}T00:00:00Z" && _createdAt < "${today}T23:59:59Z"] | order(_createdAt desc)[0] {
+                    *[_type == "InventoryCount" && defined(countNumber) && countNumber match "IC-${today}*"] | order(countNumber desc)[0] {
                         countNumber
                     }
                 `;
@@ -55,7 +55,7 @@ export default defineType({
 
                 let nextNumber = 1;
                 if (lastCount && lastCount.countNumber) {
-                    const lastNumber = parseInt(lastCount.countNumber.split('-').pop());
+                    const lastNumber = parseInt(lastCount.countNumber.split('-').pop() || '0');
                     if (!isNaN(lastNumber)) {
                         nextNumber = lastNumber + 1;
                     }
@@ -93,6 +93,22 @@ export default defineType({
             description: 'The specific storage bin where the physical count was performed.',
         }),
         defineField({
+            name: 'status',
+            title: 'Status',
+            type: 'string',
+            options: {
+                list: [
+                    { title: 'Draft', value: 'draft' },
+                    { title: 'In Progress', value: 'in-progress' },
+                    { title: 'Completed', value: 'completed' },
+                    { title: 'Adjusted', value: 'adjusted' },
+                ],
+                layout: 'radio',
+            },
+            initialValue: 'draft',
+            validation: (Rule) => Rule.required(),
+        }),
+        defineField({
             name: 'countedItems',
             title: 'Counted Items',
             type: 'array',
@@ -112,11 +128,12 @@ export default defineType({
             bin: 'bin.name',
             date: 'countDate',
             countedBy: 'countedBy.name',
+            status: 'status',
         },
-        prepare({ title, bin, date, countedBy }) {
+        prepare({ title, bin, date, countedBy, status }) {
             return {
                 title: `Count: ${title}`,
-                subtitle: `${date ? new Date(date).toLocaleDateString() : 'No date'} | Bin: ${bin || 'No bin'} | by ${countedBy || 'Unknown'}`,
+                subtitle: `${date ? new Date(date).toLocaleDateString() : 'No date'} | Bin: ${bin || 'No bin'} | by ${countedBy || 'Unknown'} | Status: ${status}`,
             };
         },
     },
