@@ -26,27 +26,26 @@ import { useSession } from 'next-auth/react'
 import DispatchModal from '@/components/DispatchModal';
 
 // Rename the interface to avoid conflict with React's Dispatch type
-// In your page.tsx file, update the DispatchRecord interface:
 interface DispatchRecord {
     _id: string;
     dispatchNumber: string;
     dispatchDate: string;
     status: 'pending' | 'completed' | 'cancelled';
-    sourceBin: { // Remove optionality
+    sourceBin: {
         _id: string;
         name: string;
         site: {
             _id: string;
             name: string;
         };
-    } | null; // Keep null but remove undefined
-    destinationSite: { // Remove optionality
+    };
+    destinationSite: {
         _id: string;
         name: string;
-    } | null; // Keep null but remove undefined
+    };
     totalItems: number;
     items: Array<{
-        _key: string;
+        _key: string; // Add this required property
         stockItem: {
             _id: string;
             name: string;
@@ -55,8 +54,6 @@ interface DispatchRecord {
         totalCost?: number;
     }>;
 }
-
-
 
 export default function DispatchesPage() {
     const { data: session, status } = useSession();
@@ -77,21 +74,18 @@ export default function DispatchesPage() {
     const secondaryTextColor = useColorModeValue('neutral.light.text-secondary', 'neutral.dark.text-secondary');
     const searchIconColor = useColorModeValue('gray.300', 'gray.500');
 
-    // In your page.tsx fetchDispatches function, ensure proper handling:
     const fetchDispatches = useCallback(async () => {
         setLoading(true);
         try {
             const response = await fetch('/api/dispatches');
             if (response.ok) {
                 const data = await response.json();
-                // Ensure sourceBin and destinationSite are properly handled
-                const dispatchesWithKeys = data.map((dispatch: any) => ({
+                // Add _key property if missing
+                const dispatchesWithKeys = data.map((dispatch: DispatchRecord) => ({
                     ...dispatch,
-                    sourceBin: dispatch.sourceBin || null, // Ensure not undefined
-                    destinationSite: dispatch.destinationSite || null, // Ensure not undefined
-                    items: dispatch.items.map((item: any, index: number) => ({
+                    items: dispatch.items.map((item, index) => ({
                         ...item,
-                        _key: item._key || `item-${index}-${Date.now()}`
+                        _key: item._key || `item-${index}-${Date.now()}` // Generate key if missing
                     }))
                 }));
                 setDispatches(dispatchesWithKeys);
@@ -121,9 +115,9 @@ export default function DispatchesPage() {
         const filtered = searchTerm
             ? dispatches.filter(dispatch => {
                 const term = searchTerm.toLowerCase();
-                const dispatchNumberMatch = dispatch.dispatchNumber?.toLowerCase().includes(term) || false;
-                const sourceBinMatch = dispatch.sourceBin?.name?.toLowerCase().includes(term) || false;
-                const destinationSiteMatch = dispatch.destinationSite?.name?.toLowerCase().includes(term) || false;
+                const dispatchNumberMatch = dispatch.dispatchNumber.toLowerCase().includes(term);
+                const sourceBinMatch = dispatch.sourceBin.name.toLowerCase().includes(term);
+                const destinationSiteMatch = dispatch.destinationSite.name.toLowerCase().includes(term);
                 return dispatchNumberMatch || sourceBinMatch || destinationSiteMatch;
             })
             : dispatches;
@@ -161,12 +155,11 @@ export default function DispatchesPage() {
     };
 
     // Update the getItemList function to handle string references
-    // Update the getItemList function to handle null/undefined values
     const getItemList = (dispatch: DispatchRecord) => {
         if (!dispatch.items || dispatch.items.length === 0) return 'No items';
 
         const items = dispatch.items.slice(0, 3).map(item =>
-            `${item.stockItem?.name || 'Unknown Item'} (${item.dispatchedQuantity || 0})`
+            `${item.stockItem?.name || 'Unknown'} (${item.dispatchedQuantity})`
         );
 
         return items.join(', ') + (dispatch.items.length > 3 ? '...' : '');
@@ -202,10 +195,8 @@ export default function DispatchesPage() {
             header: 'Source Bin',
             cell: (row: DispatchRecord) => (
                 <Box>
-                    <Text fontWeight="bold">{row.sourceBin?.name || 'N/A'}</Text> {/* Add null check */}
-                    <Text fontSize="sm" color={secondaryTextColor}>
-                        {row.sourceBin?.site?.name || 'N/A'} {/* Add null check */}
-                    </Text>
+                    <Text fontWeight="bold">{row.sourceBin.name}</Text>
+                    <Text fontSize="sm" color={secondaryTextColor}>{row.sourceBin.site.name}</Text>
                 </Box>
             ),
         },
@@ -214,7 +205,7 @@ export default function DispatchesPage() {
             header: 'Destination Site',
             cell: (row: DispatchRecord) => (
                 <Box>
-                    <Text fontWeight="bold">{row.destinationSite?.name || 'N/A'}</Text> {/* Add null check */}
+                    <Text fontWeight="bold">{row.destinationSite.name}</Text>
                 </Box>
             ),
         },
@@ -234,7 +225,7 @@ export default function DispatchesPage() {
             header: 'Status',
             cell: (row: DispatchRecord) => (
                 <Badge colorScheme={getStatusColor(row.status)} variant="subtle">
-                    {row.status?.replace('-', ' ').toUpperCase() || 'UNKNOWN'} {/* Add null check */}
+                    {row.status.replace('-', ' ').toUpperCase()}
                 </Badge>
             ),
         },

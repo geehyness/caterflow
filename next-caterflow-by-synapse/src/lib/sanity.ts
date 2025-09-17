@@ -17,7 +17,7 @@ export const writeClient = createClient({
   dataset: process.env.NEXT_PUBLIC_SANITY_DATASET!,
   apiVersion: process.env.NEXT_PUBLIC_SANITY_API_VERSION || '2025-08-20',
   useCdn: false,
-  token: process.env.SANITY_API_WRITE_TOKEN,
+  token: process.env.SANITY_API_WRITE_TOKEN, // <-- no NEXT_PUBLIC_
 });
 
 // ✅ Image helper
@@ -25,12 +25,3 @@ const builder = imageUrlBuilder(client);
 export function urlFor(source: SanityImageSource) {
   return builder.image(source);
 }
-
-// ✅ Helper function for optimistic updates
-export const createOptimisticPatch = (documentId: string, updates: any) => {
-  return {
-    _id: documentId,
-    ...updates,
-    _updatedAt: new Date().toISOString(),
-  };
-};

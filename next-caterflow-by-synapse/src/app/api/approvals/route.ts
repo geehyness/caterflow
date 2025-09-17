@@ -1,6 +1,5 @@
-// src/app/api/approvals/route.ts
 import { NextResponse } from 'next/server';
-import { client, writeClient } from '@/lib/sanity';
+import { client } from '@/lib/sanity';
 import { groq } from 'next-sanity';
 
 // Corrected GROQ query to fix the syntax error
@@ -13,9 +12,9 @@ const purchaseOrderApprovalQuery = groq`
     "title": "Approve Purchase Order",
     "description": "Purchase order for items",
     "priority": "high",
-    "site": site->{name, _id},
+    "site": site->{name, _id}, // Get the full site object for filtering
     "poNumber": poNumber,
-    "orderedByName": orderedBy->name,
+    "orderedByName": orderedBy->name, // Explicitly name the key for orderedBy
     orderedItems[]{
         _key,
         orderedQuantity,
@@ -26,6 +25,7 @@ const purchaseOrderApprovalQuery = groq`
   }
 `;
 
+// Define a separate GROQ query for Internal Transfers that require approval
 const internalTransferApprovalQuery = groq`
   *[_type == "InternalTransfer" && status == "pending"] {
     _id,
@@ -40,26 +40,6 @@ const internalTransferApprovalQuery = groq`
   }
 `;
 
-const dispatchApprovalQuery = groq`
-  *[_type == "DispatchLog" && status == "pending"] {
-    _id,
-    _type,
-    _createdAt,
-    "createdAt": _createdAt,
-    "title": "Approve Dispatch",
-    "description": "Dispatch request from " + coalesce(sourceBin->site->name, "Unknown") + " to " + coalesce(destinationSite->name, "Unknown"),
-    "priority": "medium",
-    "dispatchNumber": dispatchNumber,
-    "sourceSite": sourceBin->site->{name, _id},
-    "destinationSite": destinationSite->{name, _id},
-    dispatchedItems[]{
-        _key,
-        dispatchedQuantity,
-        "stockItem": stockItem->{name}
-    }
-  }
-`;
-
 export async function GET(request: Request) {
     try {
         const { searchParams } = new URL(request.url);
@@ -69,35 +49,21 @@ export async function GET(request: Request) {
         console.log("➡️ /api/approvals: Request received.");
         console.log("➡️ /api/approvals: Fetching approvals for:", { userRole, userSite });
 
-        const [purchaseOrders, internalTransfers, dispatches] = await Promise.all([
+        const [purchaseOrders, internalTransfers] = await Promise.all([
             client.fetch(purchaseOrderApprovalQuery),
             client.fetch(internalTransferApprovalQuery),
-            client.fetch(dispatchApprovalQuery),
         ]);
 
-        let approvals = [...purchaseOrders, ...internalTransfers, ...dispatches];
+        let approvals = [...purchaseOrders, ...internalTransfers];
         console.log(`✅ /api/approvals: Raw approvals from Sanity fetched. Count: ${approvals.length}`);
 
-        // Format descriptions
+        // Use a more generic description for POs since suppliers are item-specific
         approvals = approvals.map(approval => {
             if (approval._type === 'PurchaseOrder') {
                 const supplierNames = [...new Set(approval.orderedItems.map((item: any) => item.supplier?.name))].filter(Boolean);
                 return {
                     ...approval,
-                    description: supplierNames.length > 0 ? `Purchase order from ${supplierNames.join(', ')}` : 'Purchase order',
-                    siteName: approval.site?.name || 'Unknown',
-                };
-            }
-            if (approval._type === 'InternalTransfer') {
-                return {
-                    ...approval,
-                    siteName: approval.fromSite?.name || 'Unknown',
-                };
-            }
-            if (approval._type === 'DispatchLog') {
-                return {
-                    ...approval,
-                    siteName: approval.sourceSite?.name || 'Unknown',
+                    description: ``,
                 };
             }
             return approval;
@@ -109,8 +75,7 @@ export async function GET(request: Request) {
             approvals = approvals.filter((approval: any) => {
                 const isPurchaseOrderForSite = approval._type === 'PurchaseOrder' && approval.site?._id === userSite;
                 const isInternalTransferForSite = approval._type === 'InternalTransfer' && (approval.fromSite?._id === userSite || approval.toSite?._id === userSite);
-                const isDispatchForSite = approval._type === 'DispatchLog' && approval.sourceSite?._id === userSite;
-                return isPurchaseOrderForSite || isInternalTransferForSite || isDispatchForSite;
+                return isPurchaseOrderForSite || isInternalTransferForSite;
             });
             console.log(`👤 Site Manager. Filtered approvals for site ${userSite}: ${approvals.length}`);
         } else {
@@ -124,47 +89,6 @@ export async function GET(request: Request) {
         return NextResponse.json(approvals);
     } catch (error: any) {
         console.error("❌ Failed to fetch pending approvals:", error);
-        return NextResponse.json(
-            { error: "Failed to fetch pending approvals", details: error.message },
-            { status: 500 }
-        );
-    }
-}
-
-export async function POST(request: Request) {
-    try {
-        const body = await request.json();
-        const { actionId, actionType, status, approvedBy, rejectedBy, rejectionReason } = body;
-
-        // Update the action status in Sanity
-        let updateData: any = { status };
-
-        if (status === 'approved') {
-            updateData.approvedBy = {
-                _type: 'reference',
-                _ref: approvedBy,
-            };
-            updateData.approvedAt = new Date().toISOString();
-        } else if (status === 'rejected') {
-            updateData.rejectedBy = {
-                _type: 'reference',
-                _ref: rejectedBy,
-            };
-            updateData.rejectedAt = new Date().toISOString();
-            updateData.rejectionReason = rejectionReason;
-        }
-
-        const result = await writeClient
-            .patch(actionId)
-            .set(updateData)
-            .commit();
-
-        return NextResponse.json({ success: true, result });
-    } catch (error: any) {
-        console.error("❌ Failed to update approval status:", error);
-        return NextResponse.json(
-            { error: "Failed to update approval status", details: error.message },
-            { status: 500 }
-        );
+        return new NextResponse(JSON.stringify({ error: "Failed to fetch pending approvals", details: error.message }), { status: 500 });
     }
 }

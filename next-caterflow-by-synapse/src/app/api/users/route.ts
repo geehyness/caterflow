@@ -1,5 +1,3 @@
-// src/app/api/users
-
 import { NextRequest, NextResponse } from 'next/server';
 import { writeClient } from '@/lib/sanity';
 import { groq } from 'next-sanity';

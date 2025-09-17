@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 import { client, writeClient } from '@/lib/sanity';
 import { groq } from 'next-sanity';
 import { logSanityInteraction } from '@/lib/sanityLogger';
-import { nanoid } from 'nanoid'; // Add this import
+
 
 export async function GET() {
     try {
@@ -60,18 +60,20 @@ export async function GET() {
     }
 }
 
+// In src/app/api/bin-counts/route.ts, update the getNextCountNumber function:
 const getNextCountNumber = async (): Promise<string> => {
     try {
         const query = groq`*[_type == "InventoryCount"] | order(countNumber desc)[0].countNumber`;
         const lastCountNumber = await client.fetch(query);
 
         if (!lastCountNumber) {
-            return 'BC-00001';
+            return 'BC-00001'; // First count
         }
 
+        // Extract the numeric part from the count number (e.g., "BC-00023" -> 23)
         const match = lastCountNumber.match(/BC-(\d+)/);
         if (!match) {
-            return 'BC-00001';
+            return 'BC-00001'; // Fallback if format is unexpected
         }
 
         const lastNumber = parseInt(match[1], 10);
@@ -79,17 +81,18 @@ const getNextCountNumber = async (): Promise<string> => {
         return `BC-${String(nextNumber).padStart(5, '0')}`;
     } catch (error) {
         console.error('Error generating count number:', error);
+        // Fallback: generate a timestamp-based ID
         return `BC-${Date.now().toString().slice(-5)}`;
     }
 };
 
+// src/app/api/bin-counts/route.ts
 export async function PUT(request: Request) {
     try {
         const body = await request.json();
         const { _id, ...updateData } = body;
 
-        console.log('PUT request received for bin count:', { _id, updateData });
-
+        // Validate that a bin is provided
         if (!updateData.bin) {
             return NextResponse.json(
                 { error: 'Bin is required' },
@@ -101,26 +104,15 @@ export async function PUT(request: Request) {
         if (updateData.countedItems) {
             countedItems = updateData.countedItems.map((item: any) => {
                 console.log('Processing counted item for PUT:', item);
-
-                // Extract stock item ID from object or string
-                const stockItemId = typeof item.stockItem === 'string'
-                    ? item.stockItem
-                    : item.stockItem?._id;
-
-                if (!stockItemId) {
-                    console.error('Invalid stock item reference:', item.stockItem);
-                    throw new Error(`Invalid stock item reference for item: ${item._key}`);
-                }
-
                 return {
                     _type: 'CountedItem',
-                    _key: item._key || nanoid(),
+                    _key: item._key,
                     stockItem: {
                         _type: 'reference',
-                        _ref: stockItemId,
+                        _ref: item.stockItem, // This should be the stock item ID
                     },
-                    countedQuantity: item.countedQuantity || 0,
-                    systemQuantityAtCountTime: item.systemQuantityAtCountTime || 0,
+                    countedQuantity: item.countedQuantity,
+                    systemQuantityAtCountTime: item.systemQuantityAtCountTime,
                     variance: item.variance || 0,
                 };
             });
@@ -131,7 +123,6 @@ export async function PUT(request: Request) {
         let patch = writeClient.patch(_id).set({
             ...updateData,
             ...(countedItems && { countedItems }),
-            updatedAt: new Date().toISOString(),
         });
 
         // Always set the bin reference
@@ -163,10 +154,10 @@ export async function PUT(request: Request) {
         );
 
         return NextResponse.json(result);
-    } catch (error: any) {
+    } catch (error) {
         console.error('Failed to update bin count:', error);
         return NextResponse.json(
-            { error: 'Failed to update bin count', details: error.message },
+            { error: 'Failed to update bin count' },
             { status: 500 }
         );
     }
@@ -177,8 +168,7 @@ export async function POST(request: Request) {
         const newBinCount = await request.json();
         const countNumber = await getNextCountNumber();
 
-        console.log('POST request received for new bin count:', newBinCount);
-
+        // Validate that a bin is provided
         if (!newBinCount.bin) {
             return NextResponse.json(
                 { error: 'Bin is required' },
@@ -188,27 +178,18 @@ export async function POST(request: Request) {
 
         // Process countedItems correctly
         const countedItems = newBinCount.countedItems?.map((item: any) => {
+            // Debug: log the item structure
             console.log('Processing counted item for POST:', item);
-
-            // Extract stock item ID from object or string
-            const stockItemId = typeof item.stockItem === 'string'
-                ? item.stockItem
-                : item.stockItem?._id;
-
-            if (!stockItemId) {
-                console.error('Invalid stock item reference:', item.stockItem);
-                throw new Error(`Invalid stock item reference for item: ${item._key}`);
-            }
 
             return {
                 _type: 'CountedItem',
-                _key: item._key || nanoid(),
+                _key: item._key,
                 stockItem: {
                     _type: 'reference',
-                    _ref: stockItemId,
+                    _ref: item.stockItem, // This should be the stock item ID
                 },
-                countedQuantity: item.countedQuantity || 0,
-                systemQuantityAtCountTime: item.systemQuantityAtCountTime || 0,
+                countedQuantity: item.countedQuantity,
+                systemQuantityAtCountTime: item.systemQuantityAtCountTime,
                 variance: item.variance || 0,
             };
         });
@@ -217,15 +198,14 @@ export async function POST(request: Request) {
             _type: 'InventoryCount',
             ...newBinCount,
             countNumber,
-            status: newBinCount.status || 'in-progress',
-            countDate: newBinCount.countDate || new Date().toISOString(),
+            status: 'in-progress',
+            countDate: new Date().toISOString(),
             bin: {
                 _type: 'reference',
                 _ref: newBinCount.bin,
             },
             countedItems: countedItems || [],
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
+            // Sanity will generate a unique _id for us
         };
 
         console.log('Creating document:', doc);
@@ -242,10 +222,10 @@ export async function POST(request: Request) {
         );
 
         return NextResponse.json(result);
-    } catch (error: any) {
+    } catch (error) {
         console.error('Failed to create new bin count:', error);
         return NextResponse.json(
-            { error: 'Failed to create new bin count', details: error.message },
+            { error: 'Failed to create new bin count' },
             { status: 500 }
         );
     }
@@ -275,10 +255,10 @@ export async function DELETE(request: Request) {
         );
 
         return NextResponse.json({ success: true });
-    } catch (error: any) {
+    } catch (error) {
         console.error('Failed to delete bin count:', error);
         return NextResponse.json(
-            { error: 'Failed to delete bin count', details: error.message },
+            { error: 'Failed to delete bin count' },
             { status: 500 }
         );
     }

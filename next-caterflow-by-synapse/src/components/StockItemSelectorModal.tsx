@@ -45,7 +45,7 @@ interface StockItemSelectorModalProps {
     isOpen: boolean;
     onClose: () => void;
     onSelect: (item: StockItem) => void;
-    existingItemIds?: string[]; // This is the new prop
+    existingItemIds: string[]; // This is the new prop
 }
 
 export default function StockItemSelectorModal({ isOpen, onClose, onSelect, existingItemIds }: StockItemSelectorModalProps) {

@@ -1,4 +1,3 @@
-// src/app/api/dashboard/stats/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { calculateBulkStock } from '@/lib/stockCalculations';
 import { client } from '@/lib/sanity';
@@ -45,12 +44,7 @@ export async function POST(request: NextRequest) {
             pendingTransfersCount,
             draftOrdersCount,
             weeklyActivityCount,
-            todayActivityCount,
-            urgentPendingActionsCount,
-            negativeStockItemsCount,
-            transfersInTransitCount,
-            totalActiveUsers,
-            totalSites
+            todayActivityCount
         ] = await Promise.all([
             fetchTransactions(siteIds),
             fetchStockItems(),
@@ -61,12 +55,7 @@ export async function POST(request: NextRequest) {
             countPendingTransfers(siteIds),
             countDraftOrders(siteIds),
             countWeeklyActivity(siteIds, startOfWeek),
-            countTodayActivity(siteIds, startOfToday),
-            countUrgentPendingActions(siteIds),
-            countNegativeStockItems(siteIds),
-            countTransfersInTransit(siteIds),
-            countTotalActiveUsers(),
-            countTotalSites()
+            countTodayActivity(siteIds, startOfToday)
         ]);
 
         // Calculate low stock items using the original method
@@ -94,14 +83,7 @@ export async function POST(request: NextRequest) {
 
                 // Card 5: Recent Activity
                 weeklyActivityCount,
-                todayActivityCount,
-
-                // New Stats
-                urgentPendingActionsCount,
-                negativeStockItemsCount,
-                transfersInTransitCount,
-                totalActiveUsers,
-                totalSites
+                todayActivityCount
             }
         };
 
@@ -122,99 +104,34 @@ export async function POST(request: NextRequest) {
     }
 }
 
-// --- Helper functions for new stats ---
-
-async function countUrgentPendingActions(siteIds: string[]) {
-    const query = groq`count(*[_type in ["PurchaseOrder", "InternalTransfer"] && status == "pending" && priority == "high" && (toBin->site._ref in $siteIds || fromBin->site._ref in $siteIds || supplier->site._ref in $siteIds)])`;
-    return await client.fetch(query, { siteIds });
-}
-
-async function countNegativeStockItems(siteIds: string[]) {
-    // This requires fetching all stock items and relevant bins to calculate stock
-    const stockItems = await fetchStockItems();
-    const bins = await fetchBins(siteIds);
-
-    // Filter bins to only include those from selected sites
-    const relevantBins = bins.filter((bin: { siteId: string; }) => siteIds.includes(bin.siteId));
-
-    const stockItemIds = stockItems.map((item: { _id: any; }) => item._id);
-    const binIds = relevantBins.map((bin: { _id: any; }) => bin._id);
-
-    // Use bulk calculation from original code
-    const stockQuantities = await calculateBulkStock(stockItemIds, binIds);
-
-    let negativeStockCount = 0;
-
-    // Group stock quantities by stockItemId
-    const groupedStock = stockItems.reduce((acc: { [x: string]: Decimal; }, item: { _id: string | number; }) => {
-        acc[item._id] = new Decimal(0);
-        return acc;
-    }, {});
-
-    for (const key in stockQuantities) {
-        const [stockItemId] = key.split('-');
-        if (groupedStock[stockItemId]) {
-            groupedStock[stockItemId] = groupedStock[stockItemId].plus(new Decimal(stockQuantities[key]));
-        }
-    }
-
-    // Count items with a total negative stock
-    for (const stockItemId in groupedStock) {
-        if (groupedStock[stockItemId].isNegative()) {
-            negativeStockCount++;
-        }
-    }
-
-    return negativeStockCount;
-}
-
-async function countTotalSites() {
-    const query = groq`count(*[_type == "Site"])`;
-    return await client.fetch(query);
-}
-
-async function countTotalActiveUsers() {
-    const query = groq`count(*[_type == "AppUser" && isActive == true])`;
-    return await client.fetch(query);
-}
-
-async function countTransfersInTransit(siteIds: string[]) {
-    const query = groq`count(*[
-        _type == "InternalTransfer" && 
-        (fromBin->site._ref in $siteIds || toBin->site._ref in $siteIds) &&
-        status == "pending"
-    ])`;
-    return await client.fetch(query, { siteIds });
-}
-
-// --- Original helper functions (no changes) ---
-
+// Original low stock calculation method
 async function calculateLowStockCounts(stockItems: any[], bins: any[], siteIds: string[]) {
+    // Filter bins to only include those from selected sites
     const relevantBins = bins.filter(bin => siteIds.includes(bin.siteId));
+
     const stockItemIds = stockItems.map(item => item._id);
     const binIds = relevantBins.map(bin => bin._id);
+
+    // Use bulk calculation from original code
     const stockQuantities = await calculateBulkStock(stockItemIds, binIds);
 
     let lowStockCount = 0;
     let outOfStockCount = 0;
 
-    const groupedStock = stockItems.reduce((acc, item) => {
-        acc[item._id] = new Decimal(0);
-        return acc;
-    }, {});
-
-    for (const key in stockQuantities) {
-        const [stockItemId] = key.split('-');
-        if (groupedStock[stockItemId]) {
-            groupedStock[stockItemId] = groupedStock[stockItemId].plus(new Decimal(stockQuantities[key]));
-        }
-    }
-
     stockItems.forEach(item => {
-        const totalQty = groupedStock[item._id]?.toNumber() || 0;
+        let totalQuantity = new Decimal(0);
+
+        relevantBins.forEach(bin => {
+            const key = `${item._id}-${bin._id}`;
+            totalQuantity = totalQuantity.plus(new Decimal(stockQuantities[key] || 0));
+        });
+
+        const totalQty = totalQuantity.toNumber();
+
         if (totalQty <= item.minimumStockLevel) {
             lowStockCount++;
         }
+
         if (totalQty === 0) {
             outOfStockCount++;
         }
@@ -223,6 +140,7 @@ async function calculateLowStockCounts(stockItems: any[], bins: any[], siteIds: 
     return [lowStockCount, outOfStockCount];
 }
 
+// Helper functions for counting documents
 async function fetchTransactions(siteIds: string[]) {
     const query = groq`*[_type in ["GoodsReceipt", "DispatchLog", "InternalTransfer"] 
         && (receivingBin->site._ref in $siteIds || sourceBin->site._ref in $siteIds || fromBin->site._ref in $siteIds || toBin->site._ref in $siteIds)
@@ -277,7 +195,8 @@ async function countTodaysDispatches(siteIds: string[], startOfToday: string) {
     const query = groq`count(*[
         _type == "DispatchLog" && 
         sourceBin->site._ref in $siteIds &&
-        dispatchDate >= $startOfToday
+        dispatchDate >= $startOfToday &&
+        status != "completed"
     ])`;
     return await client.fetch(query, { siteIds, startOfToday });
 }

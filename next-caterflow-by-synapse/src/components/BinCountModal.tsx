@@ -315,7 +315,7 @@ export default function BinCountModal({ isOpen, onClose, binCount, onSave }: Bin
 
                 if (!systemQuantityRes.ok) {
                     const errorData = await systemQuantityRes.json().catch(() => ({}));
-                    //console.error(`No stock records found for ${item.name} in bin ${selectedBin.name}. This is normal for new items.`, errorData);
+                    console.error(`No stock records found for ${item.name} in bin ${selectedBin.name}. This is normal for new items.`, errorData);
 
                     toast({
                         title: "New Item in Bin",
@@ -383,54 +383,27 @@ export default function BinCountModal({ isOpen, onClose, binCount, onSave }: Bin
         }
     };
 
+    // New useEffect to fetch and update system quantity for draft counts
     useEffect(() => {
         const fetchSystemQuantities = async () => {
             if (binCount && !isViewMode && selectedBin) {
                 setLoading(true);
                 try {
-                    // Create a copy of countedItems to avoid modifying state directly
-                    const itemsToUpdate = [...countedItems];
-                    let needsUpdate = false;
-
-                    // Check which items need system quantities
-                    const itemsWithMissingQuantities = itemsToUpdate.filter(item =>
-                        typeof item.systemQuantityAtCountTime === 'undefined' ||
-                        item.systemQuantityAtCountTime === null
-                    );
-
-                    if (itemsWithMissingQuantities.length === 0) {
-                        setLoading(false);
-                        return;
-                    }
-
-                    // Fetch quantities for items that need them
                     const updatedItems = await Promise.all(
-                        itemsToUpdate.map(async (item) => {
+                        countedItems.map(async (item) => {
                             // Only fetch if systemQuantityAtCountTime is missing
                             if (typeof item.systemQuantityAtCountTime === 'undefined' || item.systemQuantityAtCountTime === null) {
-                                needsUpdate = true;
-                                try {
-                                    const systemQuantityRes = await fetch(`/api/stock-items/${item.stockItem._id}/in-bin/${selectedBin._id}`);
-                                    if (systemQuantityRes.ok) {
-                                        const { inStock } = await systemQuantityRes.json();
-                                        return { ...item, systemQuantityAtCountTime: inStock || 0 };
-                                    } else {
-                                        console.warn(`Failed to fetch system quantity for ${item.stockItem.name}`);
-                                        return { ...item, systemQuantityAtCountTime: 0 };
-                                    }
-                                } catch (error) {
-                                    console.error(`Error fetching quantity for ${item.stockItem.name}:`, error);
-                                    return { ...item, systemQuantityAtCountTime: 0 };
+                                const systemQuantityRes = await fetch(`/api/stock-items/${item.stockItem._id}/in-bin/${selectedBin._id}`);
+                                if (!systemQuantityRes.ok) {
+                                    throw new Error(`Failed to fetch system quantity for ${item.stockItem.name}`);
                                 }
+                                const { inStock } = await systemQuantityRes.json();
+                                return { ...item, systemQuantityAtCountTime: inStock || 0 };
                             }
                             return item; // Return the item as is if it already has the quantity
                         })
                     );
-
-                    // Only update state if we actually made changes
-                    if (needsUpdate) {
-                        setCountedItems(updatedItems);
-                    }
+                    setCountedItems(updatedItems);
                 } catch (error) {
                     console.error("Error fetching system quantities on load:", error);
                     toast({
@@ -447,8 +420,6 @@ export default function BinCountModal({ isOpen, onClose, binCount, onSave }: Bin
         };
 
         fetchSystemQuantities();
-        // Add countedItems to dependencies but use a ref or callback if it causes infinite loops
-        // Alternatively, restructure the logic to avoid the dependency
     }, [binCount, isViewMode, selectedBin, toast, countedItems]);
 
     const handleBinSelect = (bin: Bin) => {
@@ -560,25 +531,16 @@ export default function BinCountModal({ isOpen, onClose, binCount, onSave }: Bin
 
         const itemsWithVariance = countedItems.map(item => {
             console.log('Saving item:', item);
-
-            // Extract the stock item ID regardless of format
-            const stockItemId = typeof item.stockItem === 'string'
-                ? item.stockItem
-                : item.stockItem?._id;
-
-            if (!stockItemId) {
-                throw new Error(`Invalid stock item for ${item.stockItem?.name || 'unknown item'}`);
-            }
+            console.log('Stock item ID:', item.stockItem._id);
 
             return {
                 _key: item._key,
-                stockItem: stockItemId, // Send just the ID string
+                stockItem: item.stockItem._id, // This should be the ID string, not an object
                 countedQuantity: item.countedQuantity || 0,
                 systemQuantityAtCountTime: item.systemQuantityAtCountTime || 0,
                 variance: (item.countedQuantity || 0) - (item.systemQuantityAtCountTime || 0),
             };
         });
-
 
         const payload = {
             countDate: new Date(countDate).toISOString(),

@@ -32,11 +32,7 @@ import {
 } from '@chakra-ui/react';
 import { ViewIcon, ViewOffIcon } from '@chakra-ui/icons';
 import { useRouter, useSearchParams } from 'next/navigation';
-<<<<<<< HEAD
 import { signIn, useSession } from 'next-auth/react'; // Changed import
-=======
-import { useAuth } from '@/context/AuthContext';
->>>>>>> dev
 import { motion } from 'framer-motion';
 
 export default function LoginPage() {
@@ -50,11 +46,7 @@ export default function LoginPage() {
   const toast = useToast();
   const router = useRouter();
   const searchParams = useSearchParams();
-<<<<<<< HEAD
   const { data: session, status } = useSession(); // Use NextAuth's useSession
-=======
-  const { login, isAuthenticated, isAuthReady } = useAuth();
->>>>>>> dev
   const { isOpen, onOpen, onClose } = useDisclosure();
 
   const cardWidth = useBreakpointValue({ base: '90%', sm: '400px' });
@@ -74,7 +66,6 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-<<<<<<< HEAD
       const result = await signIn('credentials', {
         email,
         password,
@@ -82,11 +73,6 @@ export default function LoginPage() {
       });
 
       if (result?.error) {
-=======
-      const success = await login(email, password);
-
-      if (!success) {
->>>>>>> dev
         toast({
           title: 'Login failed.',
           description: 'Invalid email or password.',
@@ -115,67 +101,6 @@ export default function LoginPage() {
       });
     } finally {
       setIsLoading(false);
-<<<<<<< HEAD
-=======
-    }
-  };
-
-  const handlePasswordReset = async (event: React.FormEvent) => {
-    event.preventDefault();
-
-    if (!resetEmail) {
-      toast({
-        title: 'Email required.',
-        description: 'Please enter your email address.',
-        status: 'error',
-        duration: 5000,
-        isClosable: true,
-      });
-      return;
-    }
-
-    setIsResetting(true);
-
-    try {
-      const response = await fetch('/api/auth/send-verification-code', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: resetEmail }),
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        toast({
-          title: 'Reset email sent!',
-          description: 'Check your email for a verification code to reset your password.',
-          status: 'success',
-          duration: 5000,
-          isClosable: true,
-        });
-        onClose();
-        setResetEmail('');
-      } else {
-        toast({
-          title: 'Failed to send reset email.',
-          description: data.message || 'An error occurred.',
-          status: 'error',
-          duration: 5000,
-          isClosable: true,
-        });
-      }
-    } catch (error) {
-      console.error('Password reset error:', error);
-      toast({
-        title: 'Network error.',
-        description: 'Failed to connect to the server.',
-        status: 'error',
-        duration: 5000,
-        isClosable: true,
-      });
-    } finally {
-      setIsResetting(false);
->>>>>>> dev
     }
   };
 

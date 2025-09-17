@@ -56,23 +56,18 @@ import { FiPackage, FiFilter, FiEye, FiSearch, FiPlus } from 'react-icons/fi';
 import ActionCard from './ActionCard';
 import PurchaseOrderModal, { PurchaseOrderDetails } from './PurchaseOrderModal';
 import FileUploadModal from '@/components/FileUploadModal';
+
 import {
     PendingAction,
     ActionStep,
     generateWorkflow,
     actionTypeTitles,
+
 } from './types';
 import DataTable from './DataTable';
 import GoodsReceiptModal from '@/app/actions/GoodsReceiptModal';
-<<<<<<< HEAD
 import { Category, Reference, Site, StockItem } from '@/lib/sanityTypes';
 import CreatePurchaseOrderModal from './CreatePurchaseOrderModal';
-=======
-import { Category, Reference, StockItem } from '@/lib/sanityTypes';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useActionMutations } from '@/hooks/useMutations';
-
->>>>>>> dev
 
 // Interface for items selected in the modal
 interface SelectedItemData {
@@ -98,7 +93,7 @@ export interface OrderedItem {
     };
     orderedQuantity: number;
     unitPrice: number;
-    supplier?: {
+    supplier?: { // Change from | null to optional (| undefined)
         _id?: string;
         name: string;
     };
@@ -132,16 +127,9 @@ interface GoodsReceipt {
 }
 
 export default function ActionsPage() {
-<<<<<<< HEAD
     const { data: session, status } = useSession();
-=======
-    const { isAuthenticated, isAuthReady, user } = useAuth();
-    const queryClient = useQueryClient();
->>>>>>> dev
     const [actions, setActions] = useState<PendingAction[]>([]);
     const [loading, setLoading] = useState(true);
-    const { updateAction } = useActionMutations();
-
     const [error, setError] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState(0);
     const toast = useToast();
@@ -170,182 +158,17 @@ export default function ActionsPage() {
     const [selectedGoodsReceipt, setSelectedGoodsReceipt] = useState<any>(null);
     const [viewMode, setViewMode] = useState<'actionRequired' | 'all'>('actionRequired');
 
-    // Fetch goods receipts using useQuery
-    const { data: goodsReceipts = [], isLoading: loadingReceipts, error: receiptsError } = useQuery<GoodsReceipt[]>({
-        queryKey: ['goodsReceipts'],
-        queryFn: async () => {
-            const response = await fetch('/api/goods-receipts');
-            if (!response.ok) throw new Error('Failed to fetch goods receipts');
-            const data = await response.json();
-            return Array.isArray(data) ? data : [];
-        },
-    });
+    // State for purchase orders and receipts
+    const [allPurchaseOrders, setAllPurchaseOrders] = useState<PurchaseOrder[]>([]);
+    const [goodsReceipts, setGoodsReceipts] = useState<GoodsReceipt[]>([]);
+    const [loadingPOs, setLoadingPOs] = useState(false);
+    const [loadingReceipts, setLoadingReceipts] = useState(false);
 
-<<<<<<< HEAD
     // State for creating new POs
     const [suppliers, setSuppliers] = useState<any[]>([]);
     const [sites, setSites] = useState<Site[]>([]);
     const [selectedItems, setSelectedItems] = useState<any[]>([]); // For CreatePurchaseOrderModal, initially empty
 
-=======
-    // Fetch purchase orders using useQuery
-    const { data: allPurchaseOrders = [], isLoading: loadingPOs, error: poError } = useQuery<PurchaseOrder[]>({
-        queryKey: ['purchaseOrders'],
-        queryFn: async () => {
-            const response = await fetch('/api/purchase-orders');
-            if (!response.ok) throw new Error('Failed to fetch purchase orders');
-            const data = await response.json();
-            return Array.isArray(data) ? data : [];
-        },
-    });
-
-
-    // React Query for fetching actions
-    const { data: actionsData, isLoading: actionsLoading, error: actionsError, refetch: refetchActions } = useQuery({
-        queryKey: ['pendingActions', user?._id],
-        queryFn: async () => {
-            const response = await fetch(`/api/actions?userId=${user?._id}&userRole=${user?.role}&userSite=${user?.associatedSite?._id}`);
-            if (!response.ok) {
-                throw new Error('Failed to fetch actions');
-            }
-            const data = await response.json();
-
-            return data.map((action: PendingAction) => {
-                const workflow = generateWorkflow(action._type, action.status, action.completedSteps || 0);
-                return {
-                    ...action,
-                    actionType: action._type,
-                    workflow: workflow,
-                    completedSteps: action.completedSteps || 0,
-                    evidenceStatus: action.evidenceStatus || 'pending',
-                };
-            });
-        },
-        enabled: !!user && isAuthenticated,
-    });
-
-    // Update local state when query data changes
-    useEffect(() => {
-        if (actionsData) {
-            setActions(actionsData);
-            setLoading(false);
-        }
-    }, [actionsData]);
-
-    // React Query mutation for updating actions
-    const updateActionMutation = useMutation({
-        mutationFn: async (updateData: { id: string; updates: Partial<PendingAction> }) => {
-            const response = await fetch('/api/actions/update', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    id: updateData.id,
-                    ...updateData.updates,
-                }),
-            });
-
-            if (!response.ok) {
-                throw new Error('Failed to update action');
-            }
-            return response.json();
-        },
-        onMutate: async (updateData) => {
-            // Cancel any outgoing refetches
-            await queryClient.cancelQueries({ queryKey: ['pendingActions', user?._id] });
-
-            // Snapshot the previous value
-            const previousActions = queryClient.getQueryData(['pendingActions', user?._id]);
-
-            // Optimistically update to the new value
-            queryClient.setQueryData(['pendingActions', user?._id], (old: PendingAction[] | undefined) =>
-                old?.map(action =>
-                    action._id === updateData.id
-                        ? { ...action, ...updateData.updates }
-                        : action
-                )
-            );
-
-            return { previousActions };
-        },
-        onError: (err, updateData, context) => {
-            // Roll back the optimistic update on failure
-            if (context?.previousActions) {
-                queryClient.setQueryData(['pendingActions', user?._id], context.previousActions);
-            }
-
-            toast({
-                title: 'Error',
-                description: err.message || 'Failed to update action. Please try again.',
-                status: 'error',
-                duration: 5000,
-                isClosable: true,
-            });
-        },
-        onSettled: () => {
-            // Invalidate the cache to ensure the server state is refetched
-            queryClient.invalidateQueries({ queryKey: ['pendingActions', user?._id] });
-        },
-    });
-
-    // Update the handleCompleteStep function to use the mutation
-    const handleCompleteStep = async (stepIndex: number) => {
-        if (selectedAction && selectedAction.actionType !== 'PurchaseOrder') {
-            const newCompletedSteps = stepIndex + 1;
-
-            updateAction.mutate({
-                id: selectedAction._id,
-                updates: { completedSteps: newCompletedSteps }
-            });
-
-            // Update local state optimistically
-            const newWorkflow = selectedAction.workflow?.map((step: any, index: number) => ({
-                ...step,
-                completed: index < newCompletedSteps,
-            }));
-
-            const updatedAction = {
-                ...selectedAction,
-                workflow: newWorkflow,
-                completedSteps: newCompletedSteps,
-            };
-
-            setSelectedAction(updatedAction);
-
-            toast({
-                title: 'Step Completed',
-                description: `Workflow step "${selectedAction.workflow?.[stepIndex].title}" has been marked as complete.`,
-                status: 'success',
-                duration: 3000,
-                isClosable: true,
-            });
-
-            const isEvidenceComplete = !selectedAction.evidenceRequired || selectedAction.evidenceStatus === 'complete';
-            const allRequiredStepsCompleted = newWorkflow?.every((step: { required: any; completed: any; }, index: any) => !step.required || step.completed);
-
-            if (isEvidenceComplete && allRequiredStepsCompleted) {
-                await onCompleteAction(selectedAction);
-            }
-        }
-    };
-
-    // Update onCompleteAction to use mutation
-    const onCompleteAction = async (action: PendingAction) => {
-        updateAction.mutate({
-            id: action._id,
-            updates: { status: 'completed' }
-        });
-
-        toast({
-            title: 'Action Completed',
-            description: `The action "${action.title}" has been successfully completed.`,
-            status: 'success',
-            duration: 5000,
-            isClosable: true,
-        });
-
-        onModalClose();
-    };
->>>>>>> dev
 
     const [isConfirmDialogOpen, setIsConfirmDialogOpen] = useState(false);
     const [isZeroPriceDialogOpen, setIsZeroPriceDialogOpen] = useState(false);
@@ -360,14 +183,11 @@ export default function ActionsPage() {
         goodsReceipts: false
     });
 
-<<<<<<< HEAD
     // Extract user data from session
     const user = session?.user as any; // Temporary any type
     const isAuthenticated = status === 'authenticated';
     const isAuthReady = status !== 'loading';
 
-=======
->>>>>>> dev
     const fetchActions = useCallback(async () => {
         setLoading(true);
         setError(null);
@@ -429,13 +249,44 @@ export default function ActionsPage() {
         }
     };
 
-
-    const refreshData = useCallback(() => {
-        // TanStack Query handles its own cache and invalidation
-        // No need to manually call fetch functions
+    const fetchAllPurchaseOrders = useCallback(async () => {
+        try {
+            setLoadingPOs(true);
+            const response = await fetch('/api/purchase-orders');
+            if (response.ok) {
+                const data = await response.json();
+                setAllPurchaseOrders(Array.isArray(data) ? data : []);
+            } else {
+                setAllPurchaseOrders([]);
+                console.error('Failed to fetch purchase orders:', response.status);
+            }
+        } catch (error) {
+            console.error('Failed to fetch purchase orders:', error);
+            setAllPurchaseOrders([]);
+        } finally {
+            setLoadingPOs(false);
+        }
     }, []);
 
-<<<<<<< HEAD
+    const fetchGoodsReceipts = useCallback(async () => {
+        try {
+            setLoadingReceipts(true);
+            const response = await fetch('/api/goods-receipts');
+            if (response.ok) {
+                const data = await response.json();
+                setGoodsReceipts(Array.isArray(data) ? data : []);
+            } else {
+                setGoodsReceipts([]);
+                console.error('Failed to fetch goods receipts:', response.status);
+            }
+        } catch (error) {
+            console.error('Failed to fetch goods receipts:', error);
+            setGoodsReceipts([]);
+        } finally {
+            setLoadingReceipts(false);
+        }
+    }, []);
+
     // Fetch suppliers and sites for PO creation
     useEffect(() => {
         const fetchSuppliers = async () => {
@@ -486,8 +337,6 @@ export default function ActionsPage() {
     }, [fetchAllPurchaseOrders, fetchGoodsReceipts]);
 
 
-=======
->>>>>>> dev
     // Filter approved POs without receipts
     const getApprovedPOsWithoutReceipts = (): PurchaseOrder[] => {
         // Get all PO IDs that have receipts
@@ -563,15 +412,9 @@ export default function ActionsPage() {
     // Refactored useEffects to be more specific
     useEffect(() => {
         if (isAuthReady && isAuthenticated && user) {
-<<<<<<< HEAD
             refreshActions();
         }
     }, [isAuthReady, isAuthenticated, user, refreshActions]);
-=======
-            refetchActions();
-        }
-    }, [isAuthReady, isAuthenticated, user, refetchActions]);
->>>>>>> dev
 
     useEffect(() => {
         if (isAddItemModalOpen) {
@@ -585,23 +428,10 @@ export default function ActionsPage() {
     }, [isAddItemModalOpen]);
 
     useEffect(() => {
-<<<<<<< HEAD
         if (activeTab === 1) { // Goods Receipt tab
             refreshPOsAndReceipts();
         }
     }, [activeTab, refreshPOsAndReceipts]);
-=======
-        if (activeTab === 1) {
-            // The useQuery hooks for goodsReceipts and purchaseOrders will handle their own refresh
-            // No need to manually call fetch functions
-        }
-    }, [activeTab]);
-
-    const handleOpenWorkflow = (action: PendingAction) => {
-        setSelectedAction(action);
-        onModalOpen();
-    };
->>>>>>> dev
 
     const handleOpenEditPO = async (action: PendingAction) => {
         try {
@@ -665,60 +495,7 @@ export default function ActionsPage() {
         onApprovalModalOpen();
     };
 
-<<<<<<< HEAD
     const handleCompleteStep = async (stepIndex: number) => {
-=======
-    {/*const handleFinalizeOrderStep = async (action: PendingAction) => {
-        try {
-            const response = await fetch(`/api/purchase-orders?id=${action._id}`);
-            if (!response.ok) {
-                throw new Error('Failed to fetch purchase order details');
-            }
-            const data = await response.json();
-
-            // Transform the data to match PurchaseOrderDetails interface
-            const transformedData: PurchaseOrderDetails = {
-                _id: data._id,
-                _type: data._type || 'purchaseOrder', // Add this line
-                poNumber: data.poNumber || '',
-                site: data.site || { name: '', _id: '' },
-                orderedBy: data.orderedBy || { name: '' },
-                orderDate: data.orderDate || '',
-                status: data.status || 'draft',
-                orderedItems: data.orderedItems?.map((item: any) => ({
-                    _key: item._key || Math.random().toString(36).substr(2, 9),
-                    stockItem: {
-                        name: item.stockItem?.name || 'Unknown Item',
-                        _id: item.stockItem?._id || ''
-                    },
-                    orderedQuantity: item.orderedQuantity || 0,
-                    unitPrice: item.unitPrice || 0,
-                    supplier: item.supplier || {
-                        name: data.supplierNames || data.supplierName || 'Unknown Supplier',
-                        _id: item.supplier?._id || ''
-                    }
-                })) || [],
-                supplierNames: data.supplierNames || data.supplierName || '',
-                totalAmount: data.totalAmount || 0
-            };
-
-            setPoDetails(transformedData);
-            setEditedPrices({});
-            setEditedQuantities({});
-            onOrderModalOpen();
-        } catch (err: any) {
-            toast({
-                title: 'Error',
-                description: 'Failed to fetch purchase order details. Please try again.',
-                status: 'error',
-                duration: 5000,
-                isClosable: true,
-            });
-        }
-    };*/}
-
-    {/*const handleCompleteStep = async (stepIndex: number) => {
->>>>>>> dev
         // Only handle non-PO actions
         if (selectedAction && selectedAction.actionType !== 'PurchaseOrder') {
             const newCompletedSteps = stepIndex + 1;
@@ -778,7 +555,7 @@ export default function ActionsPage() {
                 });
             }
         }
-    };*/}
+    };
 
     const handleSaveOrder = async () => {
         if (!poDetails) return;
@@ -893,7 +670,7 @@ export default function ActionsPage() {
         }
     };
 
-    {/*const onCompleteAction = async (action: PendingAction) => {
+    const onCompleteAction = async (action: PendingAction) => {
         try {
             const response = await fetch('/api/actions/update', {
                 method: 'POST',
@@ -924,7 +701,7 @@ export default function ActionsPage() {
                 isClosable: true,
             });
         }
-    };*/}
+    };
 
     const onUploadSuccess = async () => {
         onUploadModalClose();
@@ -935,7 +712,7 @@ export default function ActionsPage() {
             duration: 5000,
             isClosable: true,
         });
-        await refetchActions();
+        await fetchActions();
     };
 
     const handleAddReceipt = () => {
@@ -1401,14 +1178,8 @@ export default function ActionsPage() {
                 receipt={selectedGoodsReceipt}
                 onSave={() => {
                     onGoodsReceiptModalClose();
-<<<<<<< HEAD
                     refreshActions();
                     refreshPOsAndReceipts();
-=======
-                    setPreSelectedPO(null);
-                    setSelectedGoodsReceipt(null);
-                    refetchActions();
->>>>>>> dev
                 }}
                 approvedPurchaseOrders={approvedPOsWithoutReceipts}
                 preSelectedPO={preSelectedPO}

@@ -1,5 +1,5 @@
 // src/components/CreatePurchaseOrderModal.tsx
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     Modal,
     ModalOverlay,
@@ -30,7 +30,6 @@ import { FiPlus, FiX } from 'react-icons/fi';
 import { StockItem, Supplier, Site } from '@/lib/sanityTypes';
 import { client } from '@/lib/sanity';
 import { groq } from 'next-sanity';
-import { useQuery } from '@tanstack/react-query';
 
 // Define the OrderItem interface here instead of importing it
 interface OrderItem {
@@ -69,20 +68,6 @@ interface Category {
     title: string;
 }
 
-// GROQ queries
-const allStockItemsQuery = groq`*[_type == "StockItem"] {
-    _id,
-    name,
-    sku,
-    unitOfMeasure,
-    unitPrice,
-    primarySupplier->{_id, name},
-    suppliers[]->{_id, name},
-    category->{_id, title}
-}`;
-
-const allCategoriesQuery = groq`*[_type == "Category"] { _id, title }`;
-
 export default function CreatePurchaseOrderModal({
     isOpen,
     onClose,
@@ -94,32 +79,17 @@ export default function CreatePurchaseOrderModal({
 }: PurchaseOrderModalProps) {
     const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
     const [isAddItemModalOpen, setIsAddItemModalOpen] = useState(false);
+    const [availableItems, setAvailableItems] = useState<StockItemWithExpandedCategory[]>([]);
+    const [categories, setCategories] = useState<Category[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedCategory, setSelectedCategory] = useState('');
+    const [loadingItems, setLoadingItems] = useState(false);
     const [selectedSite, setSelectedSite] = useState<string>(selectedSiteId || '');
     const toast = useToast();
 
-    // Fetch all stock items using react-query
-    const { data: availableItems = [], isLoading: isLoadingItems } = useQuery<StockItemWithExpandedCategory[]>({
-        queryKey: ['stockItems'],
-        queryFn: async () => {
-            const items = await client.fetch(allStockItemsQuery);
-            return items;
-        },
-    });
-
-    // Fetch all categories using react-query
-    const { data: categories = [], isLoading: isLoadingCategories } = useQuery<Category[]>({
-        queryKey: ['categories'],
-        queryFn: async () => {
-            const categories = await client.fetch(allCategoriesQuery);
-            return categories;
-        },
-    });
-
-    // Use useMemo to initialize orderItems only when selectedItems change
-    useMemo(() => {
+    useEffect(() => {
         if (isOpen && selectedItems.length > 0) {
+            // Initialize with default suppliers
             const initialItems = selectedItems.map(item => ({
                 stockItem: item._id,
                 supplier: item.primarySupplier?._ref ||
@@ -130,16 +100,54 @@ export default function CreatePurchaseOrderModal({
             }));
             setOrderItems(initialItems);
         }
-    }, [isOpen, selectedItems]);
 
-    // Handle site selection reset
-    React.useEffect(() => {
+        // Reset selected site when modal opens if no site was preselected
         if (isOpen && !selectedSiteId) {
             setSelectedSite('');
         }
-    }, [isOpen, selectedSiteId]);
+    }, [isOpen, selectedItems, selectedSiteId]);
 
-    const handleOpenAddItemModal = () => {
+    const fetchAvailableItems = async () => {
+        setLoadingItems(true);
+        try {
+            const query = groq`*[_type == "StockItem"] {
+                _id,
+                name,
+                sku,
+                unitOfMeasure,
+                unitPrice,
+                primarySupplier->{_id, name},
+                suppliers[]->{_id, name},
+                category->{_id, title}
+            }`;
+            const items = await client.fetch(query);
+            setAvailableItems(items);
+        } catch (error) {
+            console.error('Failed to fetch stock items:', error);
+            toast({
+                title: 'Error',
+                description: 'Failed to fetch available items',
+                status: 'error',
+                duration: 3000,
+                isClosable: true,
+            });
+        } finally {
+            setLoadingItems(false);
+        }
+    };
+
+    const fetchCategories = async () => {
+        try {
+            const query = groq`*[_type == "Category"] { _id, title }`;
+            const categories = await client.fetch(query);
+            setCategories(categories);
+        } catch (error) {
+            console.error('Failed to fetch categories:', error);
+        }
+    };
+
+    const handleOpenAddItemModal = async () => {
+        await Promise.all([fetchAvailableItems(), fetchCategories()]);
         setIsAddItemModalOpen(true);
     };
 
@@ -180,6 +188,8 @@ export default function CreatePurchaseOrderModal({
     };
 
     const handleSave = () => {
+        console.log('Saving order items:', orderItems);
+
         // Validate all items have suppliers
         const itemsWithoutSuppliers = orderItems.filter(item => !item.supplier);
         if (itemsWithoutSuppliers.length > 0) {
@@ -205,6 +215,7 @@ export default function CreatePurchaseOrderModal({
             return;
         }
 
+        // Pass the site ID to the onSave callback
         const siteIdToUse = selectedSiteId || selectedSite;
         onSave(orderItems, siteIdToUse);
     };
@@ -217,6 +228,7 @@ export default function CreatePurchaseOrderModal({
                     <ModalHeader>Create Purchase Order</ModalHeader>
                     <ModalCloseButton />
                     <ModalBody>
+                        {/* Site Selection (only show if no preselected site) */}
                         {!selectedSiteId && (
                             <Box mb={4}>
                                 <Text fontWeight="medium" mb={2}>Select Site</Text>
@@ -241,7 +253,7 @@ export default function CreatePurchaseOrderModal({
                             mb={4}
                             colorScheme="blue"
                             variant="outline"
-                            isDisabled={!selectedSiteId && !selectedSite}
+                            isDisabled={!selectedSiteId && !selectedSite} // Disable if site not selected
                         >
                             Add More Items
                         </Button>
@@ -328,7 +340,7 @@ export default function CreatePurchaseOrderModal({
                         <Button
                             onClick={handleSave}
                             colorScheme="blue"
-                            isDisabled={!selectedSiteId && !selectedSite}
+                            isDisabled={!selectedSiteId && !selectedSite} // Disable if site not selected
                         >
                             Create Purchase Order
                         </Button>
@@ -363,7 +375,7 @@ export default function CreatePurchaseOrderModal({
                                 </Select>
                             </HStack>
 
-                            {(isLoadingItems || isLoadingCategories) ? (
+                            {loadingItems ? (
                                 <Flex justifyContent="center" alignItems="center" h="200px">
                                     <Spinner />
                                 </Flex>
