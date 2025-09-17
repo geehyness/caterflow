@@ -1,121 +1,181 @@
-// src/app/api/bin-counts/[id]/route.ts
-import { NextResponse } from 'next/server';
+// src/app/api/goods-receipts/[id]/route.ts
 import { client, writeClient } from '@/lib/sanity';
 import { groq } from 'next-sanity';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
 import { logSanityInteraction } from '@/lib/sanityLogger';
+import { NextResponse } from 'next/server';
 
 export async function GET(
   request: Request,
-  context: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = await context.params;
+    const { id } = await params;
 
-    const query = groq`*[_type == "InventoryCount" && _id == $id][0] {
-          _id,
-          countNumber,
-          countDate,
-          status,
-          notes,
-          "bin": bin->{
-              _id,
-              name,
-              "site": site->{
-                  _id,
-                  name
-              }
-          },
-          "countedBy": countedBy->{
-              _id,
-              name
-          },
-          "countedItems": countedItems[]{
-              _key,
-              "stockItem": stockItem->{
-                  _id,
-                  name,
-                  sku
-              },
-              countedQuantity,
-              systemQuantityAtCountTime,
-              variance
-          }
-      }`;
-
-    const binCount = await client.fetch(query, { id });
-
-    if (!binCount) {
+    if (!id) {
       return NextResponse.json(
-        { error: 'Bin count not found' },
+        { error: 'Goods receipt ID is required' },
+        { status: 400 }
+      );
+    }
+
+    const query = groq`*[_type == "GoodsReceipt" && _id == $id][0] {
+            _id,
+            _type,
+            receiptNumber,
+            receiptDate,
+            purchaseOrder->{
+                _id,
+                poNumber,
+                supplier->{name},
+                site->{name},
+                orderedItems[] {
+                    _key,
+                    orderedQuantity,
+                    unitPrice,
+                    stockItem->{
+                        _id,
+                        name,
+                        sku,
+                        unitOfMeasure
+                    }
+                }
+            },
+            receivingBin->{
+                _id,
+                name,
+                binType,
+                site->{name}
+            },
+            receivedBy->{name},
+            receivedItems[] {
+                _key,
+                stockItem->{
+                    _id,
+                    name,
+                    sku,
+                    unitOfMeasure
+                },
+                orderedQuantity,
+                receivedQuantity,
+                batchNumber,
+                expiryDate,
+                condition
+            },
+            status,
+            notes,
+            evidenceStatus,
+            attachments[]->{
+                _id,
+                name,
+                url
+            }
+        }`;
+
+    const goodsReceipt = await client.fetch(query, { id });
+
+    if (!goodsReceipt) {
+      return NextResponse.json(
+        { error: 'Goods receipt not found' },
         { status: 404 }
       );
     }
 
-    return NextResponse.json(binCount);
-  } catch (error) {
-    console.error('Failed to fetch bin count:', error);
+    return NextResponse.json(goodsReceipt);
+  } catch (error: any) {
+    console.error("Error fetching goods receipt:", error);
     return NextResponse.json(
-      { error: 'Failed to fetch bin count' },
+      { error: "Failed to fetch goods receipt", details: error.message },
       { status: 500 }
     );
   }
 }
 
-export async function PUT(
+export async function POST(
   request: Request,
-  context: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = await context.params;
+    const session = await getServerSession(authOptions);
+
+    if (!session || !session.user) {
+      return NextResponse.json(
+        { error: 'User not authenticated' },
+        { status: 401 }
+      );
+    }
+
+    const { id } = await params;
+
+    if (!id) {
+      return NextResponse.json(
+        { error: 'Goods receipt ID is required' },
+        { status: 400 }
+      );
+    }
+
     const updateData = await request.json();
+
+    console.log('Updating goods receipt:', { id, updateData });
+
+    // Process receivedItems if they exist
+    if (updateData.receivedItems) {
+      const processedItems = updateData.receivedItems.map((item: any) => {
+        // Extract stock item ID from object or string
+        const stockItemId = typeof item.stockItem === 'string'
+          ? item.stockItem
+          : item.stockItem?._id;
+
+        if (!stockItemId) {
+          throw new Error(`Invalid stock item reference for item: ${item._key}`);
+        }
+
+        return {
+          ...item,
+          stockItem: {
+            _type: 'reference',
+            _ref: stockItemId,
+          }
+        };
+      });
+      updateData.receivedItems = processedItems;
+    }
+
+    // Process references
+    if (updateData.purchaseOrder && typeof updateData.purchaseOrder === 'string') {
+      updateData.purchaseOrder = {
+        _type: 'reference',
+        _ref: updateData.purchaseOrder,
+      };
+    }
+
+    if (updateData.receivingBin && typeof updateData.receivingBin === 'string') {
+      updateData.receivingBin = {
+        _type: 'reference',
+        _ref: updateData.receivingBin,
+      };
+    }
 
     const result = await writeClient
       .patch(id)
-      .set(updateData)
+      .set({ ...updateData, updatedAt: new Date().toISOString() })
       .commit();
 
     await logSanityInteraction(
       'update',
-      `Updated bin count: ${id}`,
-      'InventoryCount',
+      `Updated goods receipt: ${id} with new status and attachments`,
+      'GoodsReceipt',
       id,
       'system',
       true
     );
 
     return NextResponse.json(result);
-  } catch (error) {
-    console.error('Failed to update bin count:', error);
+  } catch (error: any) {
+    console.error('Failed to update goods receipt:', error);
     return NextResponse.json(
-      { error: 'Failed to update bin count' },
-      { status: 500 }
-    );
-  }
-}
-
-export async function DELETE(
-  request: Request,
-  context: { params: Promise<{ id: string }> }
-) {
-  try {
-    const { id } = await context.params;
-
-    await writeClient.delete(id);
-
-    await logSanityInteraction(
-      'delete',
-      `Deleted bin count: ${id}`,
-      'InventoryCount',
-      id,
-      'system',
-      true
-    );
-
-    return NextResponse.json({ success: true });
-  } catch (error) {
-    console.error('Failed to delete bin count:', error);
-    return NextResponse.json(
-      { error: 'Failed to delete bin count' },
+      { error: 'Failed to update goods receipt', details: error.message },
       { status: 500 }
     );
   }

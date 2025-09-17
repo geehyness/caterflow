@@ -65,7 +65,6 @@ interface Bin {
     site: Site;
 }
 
-// Update the Transfer interface to match the page's Transfer interface
 interface Transfer {
     _id: string;
     transferNumber: string;
@@ -96,7 +95,7 @@ interface TransferModalProps {
 // Helper function to get bin name
 const getBinName = (bin: Bin | string): string => {
     if (typeof bin === 'object') {
-        return bin.name;
+        return `${bin.name} (${bin.site.name})`;
     }
     return bin;
 };
@@ -113,14 +112,11 @@ export default function TransferModal({ isOpen, onClose, transfer, onSave }: Tra
     const [transferNumber, setTransferNumber] = useState('');
     const [transferDate, setTransferDate] = useState('');
     const [status, setStatus] = useState('pending');
-    const [fromBin, setFromBin] = useState<string>('');
-    const [toBin, setToBin] = useState<string>('');
-    const [fromBinName, setFromBinName] = useState('');
-    const [toBinName, setToBinName] = useState('');
+    const [fromBin, setFromBin] = useState<Bin | null>(null);
+    const [toBin, setToBin] = useState<Bin | null>(null);
     const [notes, setNotes] = useState('');
     const [items, setItems] = useState<TransferredItem[]>([]);
     const [loading, setLoading] = useState(false);
-    const [sites, setSites] = useState<Site[]>([]);
     const [isFromBinModalOpen, setIsFromBinModalOpen] = useState(false);
     const [isToBinModalOpen, setIsToBinModalOpen] = useState(false);
     const toast = useToast();
@@ -163,10 +159,15 @@ export default function TransferModal({ isOpen, onClose, transfer, onSave }: Tra
                     setStatus(transfer.status || 'pending');
 
                     // Handle both string and object types for bins
-                    setFromBin(getBinId(transfer.fromBin));
-                    setToBin(getBinId(transfer.toBin));
-                    setFromBinName(getBinName(transfer.fromBin));
-                    setToBinName(getBinName(transfer.toBin));
+                    const fromBinId = getBinId(transfer.fromBin);
+                    const toBinId = getBinId(transfer.toBin);
+
+                    // Find bin objects from available bins
+                    const fromBinObj = availableBins.find(bin => bin._id === fromBinId);
+                    const toBinObj = availableBins.find(bin => bin._id === toBinId);
+
+                    setFromBin(fromBinObj || null);
+                    setToBin(toBinObj || null);
 
                     setNotes(transfer.notes || '');
 
@@ -245,10 +246,8 @@ export default function TransferModal({ isOpen, onClose, transfer, onSave }: Tra
                     fetchTransferNumber();
                     setTransferDate(new Date().toISOString().split('T')[0]);
                     setStatus('pending');
-                    setFromBin('');
-                    setToBin('');
-                    setFromBinName('');
-                    setToBinName('');
+                    setFromBin(null);
+                    setToBin(null);
                     setNotes('');
                     setItems([]);
                 }
@@ -257,9 +256,127 @@ export default function TransferModal({ isOpen, onClose, transfer, onSave }: Tra
 
             initializeForm();
         }
-    }, [isOpen, transfer, stockItemsCache, toast]);
+    }, [isOpen, transfer, stockItemsCache, toast, availableBins]);
+
+    // Replace the existing useEffect hook in TransferModal.tsx
+    useEffect(() => {
+        if (isOpen) {
+            setIsInitialLoading(true);
+            const initializeForm = async () => {
+                if (transfer) {
+                    // Edit mode
+                    setTransferNumber(transfer.transferNumber || '');
+                    setTransferDate(transfer.transferDate.split('T')[0] || '');
+                    setStatus(transfer.status || 'pending');
+
+                    // Handle both string and object types for bins
+                    const fromBinId = getBinId(transfer.fromBin);
+                    const toBinId = getBinId(transfer.toBin);
+
+                    const fromBinObj = availableBins.find(bin => bin._id === fromBinId);
+                    const toBinObj = availableBins.find(bin => bin._id === toBinId);
+
+                    setFromBin(fromBinObj || null);
+                    setToBin(toBinObj || null);
+
+                    setNotes(transfer.notes || '');
+
+                    const initialItems = transfer.items.map((item) => ({
+                        _key: item._key || nanoid(),
+                        stockItem: {
+                            _id: item.stockItem._id,
+                            name: item.stockItem.name || '',
+                            sku: item.stockItem.sku || '',
+                            unitOfMeasure: '',
+                            currentStock: 0
+                        },
+                        transferredQuantity: item.transferredQuantity,
+                    }));
+                    setItems(initialItems);
+
+                    const fetchItemDetails = async (itemId: string) => {
+                        if (!stockItemsCache.has(itemId)) {
+                            try {
+                                const res = await fetch(`/api/stock-items/${itemId}`);
+                                if (res.ok) {
+                                    const itemData: StockItem = await res.json();
+                                    setStockItemsCache(prev => new Map(prev).set(itemId, itemData));
+                                    setItems(prevItems => prevItems.map(item =>
+                                        item.stockItem._id === itemId ?
+                                            {
+                                                ...item,
+                                                stockItem: {
+                                                    _id: itemData._id,
+                                                    name: itemData.name,
+                                                    sku: itemData.sku,
+                                                    unitOfMeasure: itemData.unitOfMeasure,
+                                                    currentStock: itemData.currentStock || 0
+                                                }
+                                            } :
+                                            item
+                                    ));
+                                }
+                            } catch (error) {
+                                console.error(`Failed to fetch stock item ${itemId}`, error);
+                            }
+                        }
+                    };
+
+                    transfer.items.forEach(item => {
+                        if (item.stockItem._id) {
+                            fetchItemDetails(item.stockItem._id);
+                        }
+                    });
+
+                } else {
+                    // Create mode - Use the new API endpoint
+                    const fetchTransferNumber = async () => {
+                        try {
+                            const res = await fetch('/api/transfers/next-number');
+                            if (res.ok) {
+                                const { transferNumber: newNumber } = await res.json();
+                                setTransferNumber(newNumber);
+                            } else {
+                                throw new Error('Failed to fetch transfer number');
+                            }
+                        } catch (error) {
+                            toast({
+                                title: 'Error',
+                                description: 'Failed to get a new transfer number. Please try again.',
+                                status: 'error',
+                                duration: 5000,
+                                isClosable: true,
+                            });
+                            console.error('Failed to get new transfer number:', error);
+                        }
+                    };
+
+                    fetchTransferNumber();
+                    setTransferDate(new Date().toISOString().split('T')[0]);
+                    setStatus('pending');
+                    setFromBin(null);
+                    setToBin(null);
+                    setNotes('');
+                    setItems([]);
+                }
+                setIsInitialLoading(false);
+            };
+            initializeForm();
+        }
+    }, [isOpen, transfer, stockItemsCache, toast, availableBins]);
 
     const handleAddItem = () => {
+        if (!fromBin) {
+            toast({
+                title: 'Select From Bin First',
+                description: 'Please select a from bin before adding items.',
+                status: 'warning',
+                duration: 3000,
+                isClosable: true,
+            });
+            return;
+        }
+
         const newItem = {
             _key: nanoid(),
             stockItem: {
@@ -287,19 +404,31 @@ export default function TransferModal({ isOpen, onClose, transfer, onSave }: Tra
     };
 
     const handleFromBinSelect = (bin: Bin) => {
-        setFromBin(bin._id);
-        setFromBinName(`${bin.name} (${bin.site.name})`);
+        setFromBin(bin);
         setIsFromBinModalOpen(false);
     };
 
     const handleToBinSelect = (bin: Bin) => {
-        setToBin(bin._id);
-        setToBinName(`${bin.name} (${bin.site.name})`);
+        setToBin(bin);
         setIsToBinModalOpen(false);
     };
 
-    const handleStockItemSelect = (item: StockItem) => {
+    const handleStockItemSelect = async (item: StockItem) => {
         if (currentEditingItemIndex !== null) {
+            // Fetch current stock for this item in the from bin
+            let currentStock = 0;
+            if (fromBin) {
+                try {
+                    const response = await fetch(`/api/stock-items/${item._id}/in-bin/${fromBin._id}`);
+                    if (response.ok) {
+                        const { inStock } = await response.json();
+                        currentStock = inStock || 0;
+                    }
+                } catch (error) {
+                    console.error('Failed to fetch current stock:', error);
+                }
+            }
+
             setItems(prevItems => prevItems.map((prevItem, index) =>
                 index === currentEditingItemIndex ?
                     {
@@ -309,7 +438,7 @@ export default function TransferModal({ isOpen, onClose, transfer, onSave }: Tra
                             name: item.name,
                             sku: item.sku,
                             unitOfMeasure: item.unitOfMeasure,
-                            currentStock: item.currentStock || 0
+                            currentStock: currentStock
                         }
                     }
                     : prevItem
@@ -320,6 +449,16 @@ export default function TransferModal({ isOpen, onClose, transfer, onSave }: Tra
     };
 
     const openStockItemModal = (index: number) => {
+        if (!fromBin) {
+            toast({
+                title: 'Select From Bin First',
+                description: 'Please select a from bin before selecting items.',
+                status: 'warning',
+                duration: 3000,
+                isClosable: true,
+            });
+            return;
+        }
         setCurrentEditingItemIndex(index);
         setIsStockItemModalOpen(true);
     };
@@ -347,7 +486,7 @@ export default function TransferModal({ isOpen, onClose, transfer, onSave }: Tra
             return false;
         }
 
-        if (fromBin === toBin) {
+        if (fromBin._id === toBin._id) {
             toast({
                 title: 'Error',
                 description: 'From bin and to bin cannot be the same',
@@ -410,26 +549,47 @@ export default function TransferModal({ isOpen, onClose, transfer, onSave }: Tra
     };
 
     const handleSave = async (finalStatus?: string) => {
-        if (!validateForm()) return;
+        if (!fromBin || !toBin) {
+            toast({
+                title: 'Missing Bins',
+                description: 'Please select both a "From Bin" and a "To Bin" before saving.',
+                status: 'error',
+                duration: 3000,
+                isClosable: true,
+            });
+            return;
+        }
+
+        if (items.length === 0) {
+            toast({
+                title: 'No Items',
+                description: 'Please add at least one item to the transfer.',
+                status: 'error',
+                duration: 3000,
+                isClosable: true,
+            });
+            return;
+        }
 
         setLoading(true);
 
         try {
-            const url = transfer ? `/api/transfers/${transfer._id}` : '/api/transfers';
+            const url = transfer ? `/api/transfers` : '/api/transfers';
             const method = transfer ? 'PATCH' : 'POST';
 
             const itemsForApi = items.map(item => ({
-                stockItem: item.stockItem._id,
+                _key: item._key,
+                stockItem: { _id: item.stockItem._id },
                 transferredQuantity: item.transferredQuantity,
             }));
 
             const payload = {
-                ...(transfer?._id && { _id: transfer._id }),
+                ...(transfer?._id && { _id: transfer._id }), // Add _id for PATCH requests
                 transferNumber,
                 transferDate,
                 status: finalStatus || status,
-                fromBin,
-                toBin,
+                fromBin: fromBin._id,
+                toBin: toBin._id,
                 notes: notes || undefined,
                 items: itemsForApi,
             };
@@ -544,7 +704,7 @@ export default function TransferModal({ isOpen, onClose, transfer, onSave }: Tra
                                         <FormControl isRequired>
                                             <FormLabel>From Bin</FormLabel>
                                             <Input
-                                                value={fromBinName}
+                                                value={fromBin ? `${fromBin.name} (${fromBin.site.name})` : ''}
                                                 placeholder="Select a bin"
                                                 readOnly
                                                 onClick={() => setIsFromBinModalOpen(true)}
@@ -555,7 +715,7 @@ export default function TransferModal({ isOpen, onClose, transfer, onSave }: Tra
                                         <FormControl isRequired>
                                             <FormLabel>To Bin</FormLabel>
                                             <Input
-                                                value={toBinName}
+                                                value={toBin ? `${toBin.name} (${toBin.site.name})` : ''}
                                                 placeholder="Select a bin"
                                                 readOnly
                                                 onClick={() => setIsToBinModalOpen(true)}
@@ -579,7 +739,7 @@ export default function TransferModal({ isOpen, onClose, transfer, onSave }: Tra
 
                                     {items.length === 0 ? (
                                         <Text color="gray.500" fontStyle="italic" textAlign="center" py={4}>
-                                            No items added yet. Click "Add Item" to get started.
+                                            {fromBin ? 'No items added yet. Click "Add Item" to get started.' : 'Please select a from bin first to add items.'}
                                         </Text>
                                     ) : (
                                         <Grid templateColumns="1fr" gap={3}>
@@ -662,7 +822,7 @@ export default function TransferModal({ isOpen, onClose, transfer, onSave }: Tra
                                         leftIcon={<FiPlus />}
                                         onClick={handleAddItem}
                                         alignSelf="start"
-                                        isDisabled={loading}
+                                        isDisabled={loading || !fromBin}
                                     >
                                         Add Item
                                     </Button>
@@ -697,6 +857,12 @@ export default function TransferModal({ isOpen, onClose, transfer, onSave }: Tra
                 isOpen={isFromBinModalOpen}
                 onClose={() => setIsFromBinModalOpen(false)}
                 onSelect={handleFromBinSelect}
+            />
+
+            <BinSelectorModal
+                isOpen={isToBinModalOpen}
+                onClose={() => setIsToBinModalOpen(false)}
+                onSelect={handleToBinSelect}
             />
 
             <StockItemSelectorModal

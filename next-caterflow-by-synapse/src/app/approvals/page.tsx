@@ -33,9 +33,10 @@ import {
     Button,
     HStack,
     VStack,
+    Badge,
 } from '@chakra-ui/react';
 import { useSession } from 'next-auth/react'
-import { FiCheckCircle, FiXCircle } from 'react-icons/fi';
+import { FiCheckCircle, FiXCircle, FiEye } from 'react-icons/fi';
 import { FaBoxes } from 'react-icons/fa';
 import { useRouter } from 'next/navigation';
 import DataTable from '../actions/DataTable';
@@ -71,13 +72,27 @@ interface ApprovalAction {
     transferNumber?: string;
     adjustmentNumber?: string;
     receiptNumber?: string;
+    fromBin?: {
+        name: string;
+        site: {
+            name: string;
+        };
+    };
+    toBin?: {
+        name: string;
+        site: {
+            name: string;
+        };
+    };
+    items?: Array<{
+        stockItem: {
+            name: string;
+        };
+        quantity: number;
+    }>;
 }
 
 export default function ApprovalsPage() {
-    // Replace this:
-    // const { isAuthenticated, isAuthReady, user } = useSession();
-
-    // With this:
     const { data: session, status } = useSession();
     const isAuthReady = status !== 'loading';
     const isAuthenticated = status === 'authenticated';
@@ -98,6 +113,7 @@ export default function ApprovalsPage() {
         'PurchaseOrder': 'Purchase Orders',
         'InternalTransfer': 'Internal Transfers',
         'StockAdjustment': 'Stock Adjustments',
+        'GoodsReceipt': 'Goods Receipts',
     };
 
     const fetchPendingApprovals = useCallback(async () => {
@@ -109,32 +125,30 @@ export default function ApprovalsPage() {
                 return;
             }
 
+            // Check if user has approval permissions
             if (user.role !== 'admin' && user.role !== 'siteManager' && user.role !== 'auditor') {
                 router.push('/');
                 return;
             }
 
-            let queryString = '';
-            if (user.role === 'admin' || user.role === 'auditor') {
-                queryString = `userRole=${user.role}`;
-            } else if (user.role === 'siteManager' && user.associatedSite?._id) {
-                queryString = `userRole=${user.role}&userSite=${user.associatedSite._id}`;
-            }
-
-            if (!queryString) {
-                setPendingApprovals([]);
-                setLoading(false);
-                return;
-            }
-
-            const response = await fetch(`/api/approvals?${queryString}`);
+            const response = await fetch('/api/approvals');
             const data = await response.json();
 
             if (!response.ok) {
                 throw new Error(data.error || `Failed to fetch approvals: ${response.statusText}`);
             }
 
-            setPendingApprovals(data);
+            // Filter approvals based on user role and site
+            let filteredData = data;
+
+            if (user.role === 'siteManager' && user.associatedSite?._id) {
+                // Site managers can only approve actions for their site
+                filteredData = data.filter((action: ApprovalAction) =>
+                    action.siteName === user.associatedSite?.name
+                );
+            }
+
+            setPendingApprovals(filteredData);
         } catch (err: any) {
             setError(err.message);
             toast({
@@ -150,7 +164,7 @@ export default function ApprovalsPage() {
     }, [user, router, toast]);
 
     useEffect(() => {
-        if (status === 'loading') return; // Wait for auth to be ready
+        if (status === 'loading') return;
 
         if (isAuthenticated) {
             fetchPendingApprovals();
@@ -170,29 +184,32 @@ export default function ApprovalsPage() {
         if (!selectedApproval) return;
 
         try {
-            const response = await fetch('/api/actions/update', {
+            const response = await fetch('/api/approvals', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    id: selectedApproval._id,
+                    actionId: selectedApproval._id,
+                    actionType: selectedApproval._type,
                     status: 'approved',
-                    approvedBy: user?.id, // Use user.id instead of user._id
+                    approvedBy: user?.id,
                     approvedAt: new Date().toISOString(),
                 }),
             });
 
             if (!response.ok) {
-                throw new Error('Failed to approve action');
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Failed to approve action');
             }
 
             toast({
                 title: 'Action Approved',
-                description: 'The item has been approved and moved to the "approved" list.',
+                description: 'The item has been approved successfully.',
                 status: 'success',
                 duration: 5000,
                 isClosable: true,
             });
 
+            // Remove the approved action from the list
             setPendingApprovals(prev => prev.filter(item => item._id !== selectedApproval._id));
             setSelectedApprovals(prev => prev.filter(item => item._id !== selectedApproval._id));
             onModalClose();
@@ -211,19 +228,22 @@ export default function ApprovalsPage() {
         if (!selectedApproval) return;
 
         try {
-            const response = await fetch('/api/actions/update', {
+            const response = await fetch('/api/approvals', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    id: selectedApproval._id,
+                    actionId: selectedApproval._id,
+                    actionType: selectedApproval._type,
                     status: 'rejected',
-                    rejectedBy: user?.id, // Use user.id instead of user._id
+                    rejectedBy: user?.id,
                     rejectedAt: new Date().toISOString(),
+                    rejectionReason: 'Rejected by approver', // You might want to add a reason field
                 }),
             });
 
             if (!response.ok) {
-                throw new Error('Failed to reject action');
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Failed to reject action');
             }
 
             toast({
@@ -259,10 +279,45 @@ export default function ApprovalsPage() {
         if (!orderedItems || orderedItems.length === 0) {
             return 'N/A';
         }
-        // Safely access the supplier name using optional chaining
         const suppliers = orderedItems.map(item => item.supplier?.name).filter(Boolean);
         const uniqueSuppliers = [...new Set(suppliers)];
         return uniqueSuppliers.join(', ');
+    };
+
+    // Helper function to get action details based on type
+    const getActionDetails = (action: ApprovalAction) => {
+        switch (action._type) {
+            case 'PurchaseOrder':
+                return {
+                    title: 'Purchase Order',
+                    reference: action.poNumber,
+                    description: action.description,
+                };
+            case 'InternalTransfer':
+                return {
+                    title: 'Internal Transfer',
+                    reference: action.transferNumber,
+                    description: `Transfer from ${action.fromBin?.name} to ${action.toBin?.name}`,
+                };
+            case 'StockAdjustment':
+                return {
+                    title: 'Stock Adjustment',
+                    reference: action.adjustmentNumber,
+                    description: action.description,
+                };
+            case 'GoodsReceipt':
+                return {
+                    title: 'Goods Receipt',
+                    reference: action.receiptNumber,
+                    description: action.description,
+                };
+            default:
+                return {
+                    title: action._type,
+                    reference: 'N/A',
+                    description: action.description,
+                };
+        }
     };
 
     // Update loading check to use status
@@ -270,6 +325,14 @@ export default function ApprovalsPage() {
         return (
             <Flex justifyContent="center" alignItems="center" minH="100vh">
                 <Spinner size="xl" />
+            </Flex>
+        );
+    }
+
+    if (!isAuthenticated) {
+        return (
+            <Flex justifyContent="center" alignItems="center" minH="100vh">
+                <Text fontSize="xl">Please sign in to view approvals</Text>
             </Flex>
         );
     }
@@ -291,12 +354,20 @@ export default function ApprovalsPage() {
         <Box p={8}>
             <Heading as="h1" size="xl" mb={6}>
                 Pending Approvals
+                <Badge ml={3} colorScheme="orange" fontSize="lg">
+                    {pendingApprovals.length}
+                </Badge>
             </Heading>
 
             <Tabs variant="enclosed" onChange={(index) => setActiveTab(index)}>
                 <TabList>
                     {actionTypes.map((type, index) => (
-                        <Tab key={type}>{actionTypeTitles[type]}</Tab>
+                        <Tab key={type}>
+                            {actionTypeTitles[type]}
+                            <Badge ml={2} colorScheme="blue">
+                                {pendingApprovals.filter(a => a._type === type).length}
+                            </Badge>
+                        </Tab>
                     ))}
                 </TabList>
                 <TabPanels>
@@ -318,45 +389,46 @@ export default function ApprovalsPage() {
                                                     size="sm"
                                                     colorScheme="blue"
                                                     onClick={() => handleOpenReview(row)}
+                                                    leftIcon={<FiEye />}
                                                 >
                                                     Review
                                                 </Button>
                                             )
                                         },
-                                        { accessorKey: 'poNumber', header: 'PO Number', isSortable: true },
                                         {
-                                            accessorKey: 'suppliers',
-                                            header: 'Suppliers',
-                                            isSortable: false,
+                                            accessorKey: 'referenceNumber',
+                                            header: 'Reference',
+                                            isSortable: true,
                                             cell: (row: any) => {
-                                                if (row._type === 'PurchaseOrder') {
-                                                    return getSupplierNames(row.orderedItems);
-                                                }
-                                                return 'N/A';
+                                                const details = getActionDetails(row);
+                                                return details.reference || 'N/A';
                                             }
                                         },
                                         {
-                                            accessorKey: 'orderedItems',
-                                            header: 'Items',
+                                            accessorKey: 'description',
+                                            header: 'Description',
                                             isSortable: false,
                                             cell: (row: any) => {
-                                                if (row._type === 'PurchaseOrder' && row.orderedItems) {
-                                                    return (
-                                                        <Box>
-                                                            <Text>{row.description}</Text>
-                                                            <Text fontSize="sm" color="gray.600" mt={1}>
-                                                                Items: {row.orderedItems.map((item: any) =>
-                                                                    `${item.stockItem.name} (${item.orderedQuantity})`
-                                                                ).join(', ')}
-                                                            </Text>
-                                                        </Box>
-                                                    );
-                                                }
-                                                return <Text>{row.description}</Text>;
+                                                const details = getActionDetails(row);
+                                                return details.description;
                                             }
                                         },
                                         { accessorKey: 'siteName', header: 'Site', isSortable: true },
-                                        { accessorKey: 'priority', header: 'Priority', isSortable: true },
+                                        {
+                                            accessorKey: 'priority',
+                                            header: 'Priority',
+                                            isSortable: true,
+                                            cell: (row: any) => (
+                                                <Badge
+                                                    colorScheme={
+                                                        row.priority === 'high' ? 'red' :
+                                                            row.priority === 'medium' ? 'orange' : 'green'
+                                                    }
+                                                >
+                                                    {row.priority}
+                                                </Badge>
+                                            )
+                                        },
                                         {
                                             accessorKey: 'createdAt',
                                             header: 'Created At',
@@ -376,25 +448,28 @@ export default function ApprovalsPage() {
             </Tabs>
 
             {/* Approval Details Modal */}
-            <Modal isOpen={isModalOpen} onClose={onModalClose} size="3xl">
+            <Modal isOpen={isModalOpen} onClose={onModalClose} size="4xl">
                 <ModalOverlay />
                 <ModalContent>
                     <ModalHeader>
                         <HStack spacing={2} alignItems="center">
                             <Icon as={FaBoxes} color="blue.500" />
-                            <Text>{selectedApproval?.title} Details</Text>
+                            <Text>
+                                {selectedApproval ? getActionDetails(selectedApproval).title : 'Approval'} Details
+                            </Text>
                         </HStack>
                     </ModalHeader>
                     <ModalBody>
                         <VStack spacing={4} align="stretch">
-                            <Flex justifyContent="space-between" flexWrap="wrap">
+                            <Flex justifyContent="space-between" flexWrap="wrap" gap={4}>
                                 <Box>
                                     <Text fontWeight="bold">Reference Number:</Text>
                                     <Text>
                                         {selectedApproval?.poNumber ||
                                             selectedApproval?.transferNumber ||
                                             selectedApproval?.adjustmentNumber ||
-                                            selectedApproval?.receiptNumber}
+                                            selectedApproval?.receiptNumber ||
+                                            'N/A'}
                                     </Text>
                                 </Box>
                                 {selectedApproval?.orderedItems && (
@@ -413,7 +488,23 @@ export default function ApprovalsPage() {
                                         <Text>{selectedApproval.orderedBy}</Text>
                                     </Box>
                                 )}
+                                <Box>
+                                    <Text fontWeight="bold">Priority:</Text>
+                                    <Badge
+                                        colorScheme={
+                                            selectedApproval?.priority === 'high' ? 'red' :
+                                                selectedApproval?.priority === 'medium' ? 'orange' : 'green'
+                                        }
+                                    >
+                                        {selectedApproval?.priority}
+                                    </Badge>
+                                </Box>
                             </Flex>
+
+                            <Box>
+                                <Text fontWeight="bold">Description:</Text>
+                                <Text>{selectedApproval?.description}</Text>
+                            </Box>
 
                             {selectedApproval?.orderedItems && selectedApproval.orderedItems.length > 0 && (
                                 <>
@@ -439,6 +530,32 @@ export default function ApprovalsPage() {
                                                         <Td isNumeric>E {item.unitPrice?.toFixed(2)}</Td>
                                                         <Td>{item.supplier.name}</Td>
                                                         <Td isNumeric>E {(item.unitPrice * item.orderedQuantity).toFixed(2)}</Td>
+                                                    </Tr>
+                                                ))}
+                                            </Tbody>
+                                        </Table>
+                                    </TableContainer>
+                                </>
+                            )}
+
+                            {selectedApproval?.items && selectedApproval.items.length > 0 && (
+                                <>
+                                    <Heading as="h4" size="sm" mt={4}>
+                                        Items
+                                    </Heading>
+                                    <TableContainer>
+                                        <Table variant="simple" size="sm">
+                                            <Thead>
+                                                <Tr>
+                                                    <Th>Item</Th>
+                                                    <Th isNumeric>Quantity</Th>
+                                                </Tr>
+                                            </Thead>
+                                            <Tbody>
+                                                {selectedApproval.items.map((item, index) => (
+                                                    <Tr key={index}>
+                                                        <Td>{item.stockItem.name}</Td>
+                                                        <Td isNumeric>{item.quantity}</Td>
                                                     </Tr>
                                                 ))}
                                             </Tbody>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
     Modal,
     ModalOverlay,
@@ -27,9 +27,15 @@ import {
     Icon,
     Spinner,
     Grid,
-    GridItem
+    GridItem,
+    AlertDialog,
+    AlertDialogBody,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogContent,
+    AlertDialogOverlay,
 } from '@chakra-ui/react';
-import { FiPlus, FiTrash2, FiSearch } from 'react-icons/fi';
+import { FiPlus, FiTrash2, FiSearch, FiCheckCircle, FiSave } from 'react-icons/fi';
 import BinSelectorModal from './BinSelectorModal';
 import StockItemSelectorModal from './StockItemSelectorModal';
 import { nanoid } from 'nanoid';
@@ -64,8 +70,8 @@ interface Dispatch {
     dispatchNumber: string;
     dispatchDate: string;
     status: string;
-    sourceBin: Bin;
-    destinationSite: Site;
+    sourceBin: Bin | null;
+    destinationSite: Site | null;
     items: DispatchedItem[];
     notes?: string;
 }
@@ -103,21 +109,39 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
     const [currentEditingItemIndex, setCurrentEditingItemIndex] = useState<number | null>(null);
     const [stockItemsCache, setStockItemsCache] = useState<Map<string, StockItem>>(new Map());
     const [isInitialLoading, setIsInitialLoading] = useState(true);
+    const [availableBins, setAvailableBins] = useState<Bin[]>([]);
 
-    // Fetch sites on component mount
+    const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+    const cancelRef = React.useRef<HTMLButtonElement>(null);
+
+    // Memoize the existing item IDs like BinCountModal does
+    const existingItemIds = useMemo(() => {
+        return items.map(item => item.stockItem._id).filter(id => id !== '');
+    }, [items]);
+
+    // Fetch bins and sites on component mount
     useEffect(() => {
-        const fetchSites = async () => {
+        const fetchBinsAndSites = async () => {
             try {
-                const response = await fetch('/api/sites');
-                if (response.ok) {
-                    const data = await response.json();
-                    setSites(data);
+                const [binsResponse, sitesResponse] = await Promise.all([
+                    fetch('/api/bins'),
+                    fetch('/api/sites')
+                ]);
+
+                if (binsResponse.ok) {
+                    const binsData = await binsResponse.json();
+                    setAvailableBins(binsData);
+                }
+
+                if (sitesResponse.ok) {
+                    const sitesData = await sitesResponse.json();
+                    setSites(sitesData);
                 }
             } catch (error) {
-                console.error('Failed to fetch sites:', error);
+                console.error('Failed to fetch bins or sites:', error);
                 toast({
                     title: 'Error',
-                    description: 'Failed to load sites. Please try again.',
+                    description: 'Failed to load data. Please try again.',
                     status: 'error',
                     duration: 3000,
                     isClosable: true,
@@ -125,7 +149,7 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
             }
         };
 
-        fetchSites();
+        fetchBinsAndSites();
     }, [toast]);
 
     // Reset form when modal opens/closes
@@ -138,11 +162,16 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
                     setDispatchNumber(dispatch.dispatchNumber || '');
                     setDispatchDate(dispatch.dispatchDate.split('T')[0] || '');
                     setStatus(dispatch.status || 'pending');
-                    setSourceBin(dispatch.sourceBin || null);
+
+                    // Add null check for sourceBin
+                    const sourceBinObj = dispatch.sourceBin
+                        ? availableBins.find(bin => bin._id === dispatch.sourceBin!._id)
+                        : null;
+                    setSourceBin(sourceBinObj || null);
+
                     setDestinationSite(dispatch.destinationSite || null);
                     setNotes(dispatch.notes || '');
 
-                    // Update the initialItems mapping to ensure _key exists
                     const initialItems = dispatch.items.map((item) => ({
                         _key: item._key || nanoid(),
                         stockItem: {
@@ -157,7 +186,6 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
                     }));
                     setItems(initialItems);
 
-                    // Fetch details for each stock item
                     const fetchItemDetails = async (itemId: string) => {
                         if (!stockItemsCache.has(itemId)) {
                             try {
@@ -194,28 +222,7 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
 
                 } else {
                     // Create mode
-                    const fetchDispatchNumber = async () => {
-                        try {
-                            const res = await fetch('/api/dispatches/next-number');
-                            if (res.ok) {
-                                const { dispatchNumber: newNumber } = await res.json();
-                                setDispatchNumber(newNumber);
-                            } else {
-                                throw new Error('Failed to fetch dispatch number');
-                            }
-                        } catch (error) {
-                            toast({
-                                title: 'Error',
-                                description: 'Failed to get a new dispatch number. Please try again.',
-                                status: 'error',
-                                duration: 5000,
-                                isClosable: true,
-                            });
-                            console.error('Failed to get new dispatch number:', error);
-                        }
-                    };
-
-                    fetchDispatchNumber();
+                    setDispatchNumber('New Dispatch');
                     setDispatchDate(new Date().toISOString().split('T')[0]);
                     setStatus('pending');
                     setSourceBin(null);
@@ -228,170 +235,97 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
 
             initializeForm();
         }
-    }, [isOpen, dispatch, stockItemsCache, toast]);
-
-    const handleAddItem = () => {
-        const newItem = {
-            _key: nanoid(),
-            stockItem: {
-                _id: '',
-                name: 'Select a stock item',
-                sku: '',
-                unitOfMeasure: '',
-                currentStock: 0
-            },
-            dispatchedQuantity: 0,
-            totalCost: 0
-        };
-        setItems(prevItems => [...prevItems, newItem]);
-        setCurrentEditingItemIndex(items.length);
-        setIsStockItemModalOpen(true);
-    };
-
-    const handleRemoveItem = (key: string) => {
-        setItems(prevItems => prevItems.filter(item => item._key !== key));
-    };
-
-    const handleItemChange = (key: string, field: keyof DispatchedItem, value: any) => {
-        setItems(prevItems => prevItems.map(item =>
-            item._key === key ? { ...item, [field]: value } : item
-        ));
-    };
+    }, [isOpen, dispatch, stockItemsCache, toast, availableBins]);
 
     const handleBinSelect = (bin: Bin) => {
         setSourceBin(bin);
         setIsBinModalOpen(false);
     };
 
-    const handleStockItemSelect = (item: StockItem) => {
+    const handleAddItem = () => {
+        setItems([...items, { _key: nanoid(), stockItem: { _id: '', name: '' }, dispatchedQuantity: 0 }]);
+    };
+
+    const handleRemoveItem = (keyToRemove: string) => {
+        setItems(items.filter(item => item._key !== keyToRemove));
+    };
+
+    const handleStockItemSelect = (stockItem: StockItem) => {
         if (currentEditingItemIndex !== null) {
-            setItems(prevItems => prevItems.map((prevItem, index) =>
-                index === currentEditingItemIndex ?
-                    {
-                        ...prevItem,
-                        stockItem: {
-                            _id: item._id,
-                            name: item.name,
-                            sku: item.sku,
-                            unitOfMeasure: item.unitOfMeasure,
-                            currentStock: item.currentStock || 0
-                        }
-                    }
-                    : prevItem
-            ));
-            setStockItemsCache(prev => new Map(prev).set(item._id, item));
+            const updatedItems = [...items];
+            const currentItem = updatedItems[currentEditingItemIndex];
+            updatedItems[currentEditingItemIndex] = {
+                ...currentItem,
+                stockItem: {
+                    _id: stockItem._id,
+                    name: stockItem.name,
+                    sku: stockItem.sku,
+                    unitOfMeasure: stockItem.unitOfMeasure,
+                    currentStock: stockItem.currentStock,
+                },
+            };
+            setItems(updatedItems);
+            setIsStockItemModalOpen(false);
+            setCurrentEditingItemIndex(null);
         }
-        setIsStockItemModalOpen(false);
     };
 
-    const openStockItemModal = (index: number) => {
-        setCurrentEditingItemIndex(index);
-        setIsStockItemModalOpen(true);
+    const handleQuantityChange = (key: string, value: number) => {
+        setItems(items.map(item =>
+            item._key === key ? { ...item, dispatchedQuantity: value } : item
+        ));
     };
 
-    const validateForm = () => {
-        if (!sourceBin) {
+    const handleSave = async (finalStatus?: string) => {
+        if (!sourceBin || !destinationSite) {
             toast({
-                title: 'Error',
-                description: 'Please select a source bin',
+                title: 'Missing Information',
+                description: 'Please select both a Source Bin and a Destination Site.',
                 status: 'error',
                 duration: 3000,
                 isClosable: true,
             });
-            return false;
-        }
-
-        if (!destinationSite) {
-            toast({
-                title: 'Error',
-                description: 'Please select a destination site',
-                status: 'error',
-                duration: 3000,
-                isClosable: true,
-            });
-            return false;
+            return;
         }
 
         if (items.length === 0) {
             toast({
-                title: 'Error',
-                description: 'Please add at least one item',
+                title: 'No Items',
+                description: 'Please add at least one item to the dispatch.',
                 status: 'error',
                 duration: 3000,
                 isClosable: true,
             });
-            return false;
+            return;
         }
-
-        for (const item of items) {
-            if (!item.stockItem._id) {
-                toast({
-                    title: 'Error',
-                    description: 'Please select a stock item for all entries',
-                    status: 'error',
-                    duration: 3000,
-                    isClosable: true,
-                });
-                return false;
-            }
-
-            if (item.dispatchedQuantity <= 0) {
-                toast({
-                    title: 'Error',
-                    description: `Please enter a valid quantity for ${item.stockItem.name}`,
-                    status: 'error',
-                    duration: 3000,
-                    isClosable: true,
-                });
-                return false;
-            }
-
-            // Check if dispatched quantity exceeds available stock
-            if (item.stockItem.currentStock !== undefined &&
-                item.dispatchedQuantity > item.stockItem.currentStock) {
-                toast({
-                    title: 'Insufficient Stock',
-                    description: `Not enough stock available for ${item.stockItem.name}. Available: ${item.stockItem.currentStock}`,
-                    status: 'error',
-                    duration: 5000,
-                    isClosable: true,
-                });
-                return false;
-            }
-        }
-
-        return true;
-    };
-
-    const handleSave = async (e: React.FormEvent) => {
-        e.preventDefault();
-
-        if (!validateForm()) return;
 
         setLoading(true);
 
+        const url = dispatch ? '/api/dispatches' : '/api/dispatches';
+        const method = dispatch ? 'PATCH' : 'POST';
+
+        const itemsForApi = items.map(item => ({
+            _key: item._key,
+            stockItem: { _id: item.stockItem._id },
+            dispatchedQuantity: item.dispatchedQuantity,
+            totalCost: item.totalCost,
+        }));
+
+        const payload = {
+            ...(dispatch && { _id: dispatch._id }),
+            dispatchDate,
+            status: finalStatus || status,
+            sourceBin: sourceBin._id,
+            destinationSite: destinationSite._id,
+            notes,
+            items: itemsForApi,
+        };
+
         try {
-            const url = dispatch ? `/api/dispatches/${dispatch._id}` : '/api/dispatches';
-            const method = dispatch ? 'PATCH' : 'POST';
-
-            const itemsForApi = items.map(item => ({
-                stockItem: item.stockItem._id,
-                dispatchedQuantity: item.dispatchedQuantity,
-                totalCost: item.totalCost || 0,
-            }));
-
             const response = await fetch(url, {
                 method,
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    dispatchNumber,
-                    dispatchDate,
-                    status,
-                    sourceBin: sourceBin?._id,
-                    destinationSite: destinationSite?._id,
-                    notes: notes || undefined,
-                    items: itemsForApi,
-                }),
+                body: JSON.stringify(payload),
             });
 
             if (!response.ok) {
@@ -401,7 +335,7 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
 
             toast({
                 title: dispatch ? 'Dispatch updated.' : 'Dispatch created.',
-                description: `Dispatch "${dispatchNumber}" has been successfully saved.`,
+                description: `Dispatch has been successfully saved.`,
                 status: 'success',
                 duration: 3000,
                 isClosable: true,
@@ -409,6 +343,7 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
 
             onSave();
             onClose();
+
         } catch (error: any) {
             toast({
                 title: 'Error',
@@ -419,237 +354,174 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
             });
         } finally {
             setLoading(false);
+            setIsConfirmOpen(false);
         }
     };
 
-    const existingItemIds = items.map(item => item.stockItem._id).filter(id => id);
+    const handleClose = () => {
+        onClose();
+        // Reset all states
+        setDispatchNumber('');
+        setDispatchDate('');
+        setStatus('pending');
+        setSourceBin(null);
+        setDestinationSite(null);
+        setNotes('');
+        setItems([]);
+    };
 
     return (
         <>
-            <Modal isOpen={isOpen} onClose={onClose} size="6xl" closeOnOverlayClick={!loading}>
+            <Modal isOpen={isOpen} onClose={handleClose} size="3xl">
                 <ModalOverlay />
                 <ModalContent>
-                    <ModalHeader>{dispatch ? 'Edit Dispatch' : 'Create Dispatch'}</ModalHeader>
-                    <ModalCloseButton isDisabled={loading} />
-                    {isInitialLoading ? (
-                        <ModalBody display="flex" justifyContent="center" alignItems="center" height="200px">
-                            <VStack>
+                    <ModalHeader>{dispatch ? `Edit Dispatch ${dispatch.dispatchNumber}` : 'New Dispatch'}</ModalHeader>
+                    <ModalCloseButton />
+                    <ModalBody>
+                        {isInitialLoading && !dispatch ? (
+                            <Flex justify="center" align="center" minH="200px">
                                 <Spinner size="xl" />
-                                <Text mt={4}>Loading dispatch data...</Text>
-                            </VStack>
-                        </ModalBody>
-                    ) : (
-                        <form onSubmit={handleSave}>
-                            <ModalBody pb={6}>
-                                <VStack spacing={4} align="stretch">
-                                    <Grid templateColumns="repeat(3, 1fr)" gap={4}>
-                                        <FormControl isRequired>
+                            </Flex>
+                        ) : (
+                            <VStack spacing={4}>
+                                <Grid templateColumns={{ base: '1fr', md: '1fr 1fr' }} gap={4} width="100%">
+                                    <GridItem>
+                                        <FormControl>
                                             <FormLabel>Dispatch Number</FormLabel>
-                                            {dispatch ? (
-                                                <Text
-                                                    p={3}
-                                                    borderRadius="md"
-                                                    bg="gray.100"
-                                                    fontWeight="bold"
-                                                    _dark={{ bg: 'gray.700' }}
-                                                >
-                                                    {dispatchNumber}
-                                                </Text>
-                                            ) : (
-                                                <Input
-                                                    value={dispatchNumber}
-                                                    onChange={(e) => setDispatchNumber(e.target.value)}
-                                                    placeholder="e.g., DISP-001"
-                                                    isReadOnly
-                                                />
-                                            )}
+                                            <Input value={dispatchNumber} isReadOnly />
                                         </FormControl>
-                                        <FormControl isRequired>
+                                    </GridItem>
+                                    <GridItem>
+                                        <FormControl>
                                             <FormLabel>Dispatch Date</FormLabel>
                                             <Input
                                                 type="date"
                                                 value={dispatchDate}
                                                 onChange={(e) => setDispatchDate(e.target.value)}
-                                                isDisabled={loading}
+                                                isReadOnly={!!dispatch}
                                             />
                                         </FormControl>
-                                        <FormControl isRequired>
-                                            <FormLabel>Status</FormLabel>
-                                            <Select
-                                                value={status}
-                                                onChange={(e) => setStatus(e.target.value)}
-                                                isDisabled={loading}
-                                            >
-                                                <option value="pending">Pending</option>
-                                                <option value="completed">Completed</option>
-                                                <option value="cancelled">Cancelled</option>
-                                            </Select>
-                                        </FormControl>
-                                    </Grid>
-
-                                    <Grid templateColumns="repeat(2, 1fr)" gap={4}>
+                                    </GridItem>
+                                    <GridItem>
                                         <FormControl isRequired>
                                             <FormLabel>Source Bin</FormLabel>
                                             <Input
                                                 value={sourceBin ? `${sourceBin.name} (${sourceBin.site.name})` : ''}
-                                                placeholder="Select a bin"
-                                                readOnly
+                                                isReadOnly
+                                                placeholder="Select Source Bin"
                                                 onClick={() => setIsBinModalOpen(true)}
-                                                cursor="pointer"
-                                                isDisabled={loading}
                                             />
                                         </FormControl>
+                                    </GridItem>
+                                    <GridItem>
                                         <FormControl isRequired>
                                             <FormLabel>Destination Site</FormLabel>
                                             <Select
-                                                value={destinationSite?._id || ''}
-                                                onChange={(e) => {
-                                                    const site = sites.find(s => s._id === e.target.value);
-                                                    setDestinationSite(site || null);
-                                                }}
                                                 placeholder="Select destination site"
-                                                isDisabled={loading}
+                                                value={destinationSite?._id || ''}
+                                                onChange={(e) => setDestinationSite(sites.find(s => s._id === e.target.value) || null)}
                                             >
                                                 {sites.map(site => (
-                                                    <option key={site._id} value={site._id}>
-                                                        {site.name}
-                                                    </option>
+                                                    <option key={site._id} value={site._id}>{site.name}</option>
                                                 ))}
                                             </Select>
                                         </FormControl>
-                                    </Grid>
+                                    </GridItem>
+                                </Grid>
 
-                                    <FormControl>
-                                        <FormLabel>Notes</FormLabel>
-                                        <Input
-                                            value={notes}
-                                            onChange={(e) => setNotes(e.target.value)}
-                                            placeholder="Additional notes or comments"
-                                            isDisabled={loading}
-                                        />
-                                    </FormControl>
+                                <FormControl>
+                                    <FormLabel>Notes</FormLabel>
+                                    <Input
+                                        value={notes}
+                                        onChange={(e) => setNotes(e.target.value)}
+                                        placeholder="Add any relevant notes"
+                                    />
+                                </FormControl>
 
-                                    <Text fontSize="lg" fontWeight="bold">Dispatched Items</Text>
-
-                                    {items.length === 0 ? (
-                                        <Text color="gray.500" fontStyle="italic" textAlign="center" py={4}>
-                                            No items added yet. Click "Add Item" to get started.
-                                        </Text>
-                                    ) : (
-                                        <Grid templateColumns="1fr" gap={3}>
-                                            {items.map((item, index) => (
-                                                <GridItem
-                                                    key={item._key}
-                                                    p={3}
-                                                    borderWidth="1px"
-                                                    borderRadius="md"
-                                                    borderColor="gray.200"
-                                                    _dark={{ borderColor: "gray.600" }}
+                                <Box width="100%">
+                                    <HStack justifyContent="space-between" width="100%" mb={2}>
+                                        <Text fontWeight="bold">Items</Text>
+                                        <Button
+                                            leftIcon={<FiPlus />}
+                                            size="sm"
+                                            onClick={handleAddItem}
+                                            colorScheme="purple"
+                                        >
+                                            Add Item
+                                        </Button>
+                                    </HStack>
+                                    <VStack spacing={3} align="stretch">
+                                        {items.map((item, index) => (
+                                            <HStack key={item._key} p={3} borderWidth="1px" borderRadius="md" bg="gray.50" _dark={{ bg: 'gray.700' }} spacing={4} align="center">
+                                                <Box flex="1">
+                                                    <Text fontWeight="semibold">{item.stockItem.name || 'Select a Stock Item'}</Text>
+                                                    <Text fontSize="sm" color="gray.500">{item.stockItem.sku}</Text>
+                                                </Box>
+                                                <Button
+                                                    size="sm"
+                                                    onClick={() => {
+                                                        setCurrentEditingItemIndex(index);
+                                                        setIsStockItemModalOpen(true);
+                                                    }}
+                                                    leftIcon={<FiSearch />}
                                                 >
-                                                    <Grid templateColumns="1fr auto" gap={2} alignItems="center">
-                                                        <Grid templateColumns="repeat(3, 1fr)" gap={3}>
-                                                            <FormControl isRequired>
-                                                                <FormLabel>Stock Item</FormLabel>
-                                                                <Button
-                                                                    variant="outline"
-                                                                    justifyContent="space-between"
-                                                                    onClick={() => openStockItemModal(index)}
-                                                                    px={3}
-                                                                    h={10}
-                                                                    width="100%"
-                                                                    textAlign="left"
-                                                                    isDisabled={loading}
-                                                                    rightIcon={<Icon as={FiSearch} color="gray.500" />}
-                                                                >
-                                                                    <Flex justify="space-between" align="center" h="100%">
-                                                                        {item.stockItem.name && item.stockItem.name !== 'Select a stock item' ? (
-                                                                            <VStack align="start" spacing={0}>
-                                                                                <Text fontSize="sm" fontWeight="medium">{item.stockItem.name}</Text>
-                                                                                {item.stockItem.sku && (
-                                                                                    <Text fontSize="xs" color="gray.500">SKU: {item.stockItem.sku}</Text>
-                                                                                )}
-                                                                                {item.stockItem.currentStock !== undefined && (
-                                                                                    <Text fontSize="xs" color="gray.500">
-                                                                                        Available: {item.stockItem.currentStock} {item.stockItem.unitOfMeasure}
-                                                                                    </Text>
-                                                                                )}
-                                                                            </VStack>
-                                                                        ) : (
-                                                                            <Text color="gray.500">Select a stock item</Text>
-                                                                        )}
-                                                                        <Icon as={FiSearch} color="gray.500" />
-                                                                    </Flex>
-                                                                </Button>
-                                                            </FormControl>
-                                                            <FormControl isRequired>
-                                                                <FormLabel>Quantity</FormLabel>
-                                                                <NumberInput
-                                                                    value={item.dispatchedQuantity}
-                                                                    onChange={(valStr, valNum) => handleItemChange(item._key, 'dispatchedQuantity', valNum)}
-                                                                    min={0}
-                                                                    max={item.stockItem.currentStock || undefined}
-                                                                    isDisabled={loading || !item.stockItem._id}
-                                                                >
-                                                                    <NumberInputField />
-                                                                    <NumberInputStepper>
-                                                                        <NumberIncrementStepper />
-                                                                        <NumberDecrementStepper />
-                                                                    </NumberInputStepper>
-                                                                </NumberInput>
-                                                            </FormControl>
-                                                            <FormControl>
-                                                                <FormLabel>Total Cost</FormLabel>
-                                                                <NumberInput
-                                                                    value={item.totalCost || 0}
-                                                                    onChange={(valStr, valNum) => handleItemChange(item._key, 'totalCost', valNum)}
-                                                                    min={0}
-                                                                    step={0.01}
-                                                                    precision={2}
-                                                                    isDisabled={loading}
-                                                                >
-                                                                    <NumberInputField />
-                                                                    <NumberInputStepper>
-                                                                        <NumberIncrementStepper />
-                                                                        <NumberDecrementStepper />
-                                                                    </NumberInputStepper>
-                                                                </NumberInput>
-                                                            </FormControl>
-                                                        </Grid>
-                                                        <IconButton
-                                                            aria-label="Remove item"
-                                                            icon={<FiTrash2 />}
-                                                            colorScheme="red"
-                                                            onClick={() => handleRemoveItem(item._key)}
-                                                            isDisabled={loading}
-                                                            mt={6}
-                                                        />
-                                                    </Grid>
-                                                </GridItem>
-                                            ))}
-                                        </Grid>
-                                    )}
+                                                    Select
+                                                </Button>
+                                                <FormControl width="120px">
+                                                    <NumberInput
+                                                        min={0}
+                                                        value={item.dispatchedQuantity}
+                                                        onChange={(valueAsString, valueAsNumber) => handleQuantityChange(item._key, valueAsNumber)}
+                                                    >
+                                                        <NumberInputField />
+                                                        <NumberInputStepper>
+                                                            <NumberIncrementStepper />
+                                                            <NumberDecrementStepper />
+                                                        </NumberInputStepper>
+                                                    </NumberInput>
+                                                </FormControl>
+                                                <IconButton
+                                                    icon={<FiTrash2 />}
+                                                    aria-label="Remove item"
+                                                    colorScheme="red"
+                                                    size="sm"
+                                                    onClick={() => handleRemoveItem(item._key)}
+                                                />
+                                            </HStack>
+                                        ))}
+                                    </VStack>
+                                </Box>
+                            </VStack>
+                        )}
+                    </ModalBody>
 
-                                    <Button
-                                        leftIcon={<FiPlus />}
-                                        onClick={handleAddItem}
-                                        alignSelf="start"
-                                        isDisabled={loading}
-                                    >
-                                        Add Item
-                                    </Button>
-                                </VStack>
-                            </ModalBody>
-
-                            <ModalFooter>
-                                <Button colorScheme="gray" mr={3} onClick={onClose} isDisabled={loading}>
-                                    Cancel
+                    <ModalFooter>
+                        <HStack spacing={4}>
+                            <Button variant="ghost" onClick={handleClose}>
+                                Cancel
+                            </Button>
+                            {dispatch && dispatch.status !== 'completed' && (
+                                <Button
+                                    colorScheme="green"
+                                    leftIcon={<FiCheckCircle />}
+                                    onClick={() => setIsConfirmOpen(true)}
+                                    isLoading={loading}
+                                    isDisabled={loading}
+                                >
+                                    Mark as Complete
                                 </Button>
-                                <Button colorScheme="blue" type="submit" isLoading={loading}>
-                                    {dispatch ? 'Update Dispatch' : 'Create Dispatch'}
-                                </Button>
-                            </ModalFooter>
-                        </form>
-                    )}
+                            )}
+                            <Button
+                                colorScheme="blue"
+                                leftIcon={<FiSave />}
+                                onClick={() => handleSave()}
+                                isLoading={loading}
+                                isDisabled={loading}
+                            >
+                                Save Dispatch
+                            </Button>
+                        </HStack>
+                    </ModalFooter>
                 </ModalContent>
             </Modal>
 
@@ -665,6 +537,39 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
                 onSelect={handleStockItemSelect}
                 existingItemIds={existingItemIds}
             />
+
+            {/* Confirmation Dialog */}
+            <AlertDialog
+                isOpen={isConfirmOpen}
+                leastDestructiveRef={cancelRef}
+                onClose={() => setIsConfirmOpen(false)}
+            >
+                <AlertDialogOverlay>
+                    <AlertDialogContent>
+                        <AlertDialogHeader fontSize="lg" fontWeight="bold">
+                            Confirm Complete Dispatch
+                        </AlertDialogHeader>
+
+                        <AlertDialogBody>
+                            Are you sure you want to mark this dispatch as complete? This action cannot be undone.
+                        </AlertDialogBody>
+
+                        <AlertDialogFooter>
+                            <Button ref={cancelRef} onClick={() => setIsConfirmOpen(false)}>
+                                Cancel
+                            </Button>
+                            <Button
+                                colorScheme="green"
+                                onClick={() => handleSave('completed')}
+                                ml={3}
+                                isLoading={loading}
+                            >
+                                Confirm Complete
+                            </Button>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialogOverlay>
+            </AlertDialog>
         </>
     );
 }

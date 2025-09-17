@@ -1,7 +1,13 @@
+// src/app/api/transfers/route.ts
+
 import { NextResponse } from 'next/server';
 import { client, writeClient } from '@/lib/sanity';
 import { groq } from 'next-sanity';
 import { logSanityInteraction } from '@/lib/sanityLogger';
+import { TransferredItem } from '@/lib/sanityTypes';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
+import { v4 as uuidv4 } from 'uuid';
 
 // Helper function to generate the next unique transfer number
 const getNextTransferNumber = async (): Promise<string> => {
@@ -10,13 +16,12 @@ const getNextTransferNumber = async (): Promise<string> => {
         const lastTransferNumber = await client.fetch(query);
 
         if (!lastTransferNumber) {
-            return 'TRF-00001'; // First transfer
+            return 'TRF-00001';
         }
 
-        // Extract the numeric part from the transfer number (e.g., "TRF-00023" -> 23)
         const match = lastTransferNumber.match(/TRF-(\d+)/);
         if (!match) {
-            return 'TRF-00001'; // Fallback if format is unexpected
+            return 'TRF-00001';
         }
 
         const lastNumber = parseInt(match[1], 10);
@@ -24,7 +29,6 @@ const getNextTransferNumber = async (): Promise<string> => {
         return `TRF-${String(nextNumber).padStart(5, '0')}`;
     } catch (error) {
         console.error('Error generating transfer number:', error);
-        // Fallback: generate a timestamp-based ID
         return `TRF-${Date.now().toString().slice(-5)}`;
     }
 };
@@ -40,48 +44,56 @@ export async function GET() {
             "fromBin": fromBin->{
                 _id,
                 name,
-                "site": site->{name}
+                "site": site->{_id, name}
             },
             "toBin": toBin->{
                 _id,
                 name,
-                "site": site->{name}
+                "site": site->{_id, name}
             },
-            "totalItems": count(transferredItems),
-            "items": transferredItems[]{
+            "items": coalesce(transferredItems[]{
+                _key,
+                transferredQuantity,
                 "stockItem": stockItem->{
                     _id,
                     name,
-                    sku
-                },
-                transferredQuantity
-            }
+                    sku,
+                    unitOfMeasure,
+                    currentStock
+                }
+            }, []),
+            "totalItems": count(transferredItems)
         }`;
-
         const transfers = await client.fetch(query);
         return NextResponse.json(transfers);
     } catch (error) {
         console.error('Failed to fetch transfers:', error);
-        return NextResponse.json(
-            { error: 'Failed to fetch transfers' },
-            { status: 500 }
-        );
+        return NextResponse.json({ error: 'Failed to fetch transfers' }, { status: 500 });
     }
 }
+
+// Handler for the next transfer number - REMOVED
+// export async function GET_NEXT_NUMBER() {
+//     try {
+//         const nextNumber = await getNextTransferNumber();
+//         return NextResponse.json({ transferNumber: nextNumber });
+//     } catch (error) {
+//         console.error('Failed to get next transfer number:', error);
+//         return NextResponse.json({ error: 'Failed to get next transfer number' }, { status: 500 });
+//     }
+// }
 
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-
-        // Generate a unique transfer number using the new function
         const transferNumber = await getNextTransferNumber();
 
-        // Create the transferred items array
         const transferredItems = (body.items || []).map((item: any) => ({
             _type: 'TransferredItem',
+            _key: item._key,
             stockItem: {
                 _type: 'reference',
-                _ref: item.stockItem,
+                _ref: item.stockItem._id,
             },
             transferredQuantity: item.transferredQuantity,
         }));
@@ -89,8 +101,8 @@ export async function POST(request: Request) {
         const transfer = {
             _type: 'InternalTransfer',
             transferNumber,
-            transferDate: body.transferDate || new Date().toISOString().split('T')[0],
-            status: body.status || 'pending',
+            transferDate: body.transferDate,
+            status: body.status,
             fromBin: {
                 _type: 'reference',
                 _ref: body.fromBin,
@@ -117,10 +129,7 @@ export async function POST(request: Request) {
         return NextResponse.json(result);
     } catch (error) {
         console.error('Failed to create transfer:', error);
-        return NextResponse.json(
-            { error: 'Failed to create transfer' },
-            { status: 500 }
-        );
+        return NextResponse.json({ error: 'Failed to create transfer' }, { status: 500 });
     }
 }
 
@@ -129,45 +138,32 @@ export async function PATCH(request: Request) {
         const body = await request.json();
         const { _id, ...updateData } = body;
 
-        // Create the transferred items array if provided
-        let transferredItems;
+        let transferredItems: TransferredItem[] | undefined;
         if (updateData.items) {
             transferredItems = updateData.items.map((item: any) => ({
                 _type: 'TransferredItem',
+                _key: item._key,
                 stockItem: {
                     _type: 'reference',
-                    _ref: item.stockItem,
+                    _ref: item.stockItem._id,
                 },
                 transferredQuantity: item.transferredQuantity,
             }));
             delete updateData.items;
         }
 
-        // Start the patch operation
-        let patch = writeClient.patch(_id).set({
+        const patch = writeClient.patch(_id).set({
             ...updateData,
             ...(transferredItems && { transferredItems }),
+            fromBin: {
+                _type: 'reference',
+                _ref: updateData.fromBin,
+            },
+            toBin: {
+                _type: 'reference',
+                _ref: updateData.toBin,
+            },
         });
-
-        // If fromBin is being updated, convert to reference
-        if (updateData.fromBin) {
-            patch = patch.set({
-                fromBin: {
-                    _type: 'reference',
-                    _ref: updateData.fromBin,
-                },
-            });
-        }
-
-        // If toBin is being updated, convert to reference
-        if (updateData.toBin) {
-            patch = patch.set({
-                toBin: {
-                    _type: 'reference',
-                    _ref: updateData.toBin,
-                },
-            });
-        }
 
         const result = await patch.commit();
 
@@ -183,10 +179,7 @@ export async function PATCH(request: Request) {
         return NextResponse.json(result);
     } catch (error) {
         console.error('Failed to update transfer:', error);
-        return NextResponse.json(
-            { error: 'Failed to update transfer' },
-            { status: 500 }
-        );
+        return NextResponse.json({ error: 'Failed to update transfer' }, { status: 500 });
     }
 }
 
@@ -196,10 +189,7 @@ export async function DELETE(request: Request) {
         const id = searchParams.get('id');
 
         if (!id) {
-            return NextResponse.json(
-                { error: 'Transfer ID is required' },
-                { status: 400 }
-            );
+            return NextResponse.json({ error: 'Transfer ID is required' }, { status: 400 });
         }
 
         await writeClient.delete(id);
@@ -216,9 +206,6 @@ export async function DELETE(request: Request) {
         return NextResponse.json({ success: true });
     } catch (error) {
         console.error('Failed to delete transfer:', error);
-        return NextResponse.json(
-            { error: 'Failed to delete transfer' },
-            { status: 500 }
-        );
+        return NextResponse.json({ error: 'Failed to delete transfer' }, { status: 500 });
     }
 }
