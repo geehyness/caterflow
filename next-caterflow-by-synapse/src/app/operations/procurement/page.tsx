@@ -431,6 +431,20 @@ export default function ProcurementPage() {
 
     const columns = [
         {
+            accessorKey: 'actions',
+            header: 'Actions',
+            cell: (row: PurchaseOrder) => (
+                <Button
+                    size="sm"
+                    colorScheme="blue"
+                    leftIcon={<Icon as={FiEdit} />}
+                    onClick={() => handleEditPO(row)}
+                >
+                    Edit
+                </Button>
+            )
+        },
+        {
             accessorKey: 'poNumber',
             header: 'PO Number',
             cell: (row: PurchaseOrder) => (
@@ -486,20 +500,7 @@ export default function ProcurementPage() {
             header: 'Order Date',
             cell: (row: PurchaseOrder) => new Date(row.orderDate).toLocaleDateString()
         },
-        {
-            accessorKey: 'actions',
-            header: 'Actions',
-            cell: (row: PurchaseOrder) => (
-                <Button
-                    size="sm"
-                    colorScheme="blue"
-                    leftIcon={<Icon as={FiEdit} />}
-                    onClick={() => handleEditPO(row)}
-                >
-                    Edit
-                </Button>
-            )
-        }
+
     ];
 
     // Add this function after handleProcessPO
