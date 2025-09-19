@@ -14,6 +14,8 @@ export async function GET(request: Request) {
             sku,
             unitOfMeasure,
             unitPrice,
+            minimumStockLevel,
+            reorderQuantity,
             category->{
                 _id,
                 title

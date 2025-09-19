@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, ChangeEvent } from 'react';
 import {
     Box,
     Heading,
@@ -20,8 +20,9 @@ import {
     Spinner,
     Text,
     IconButton,
+    Select,
 } from '@chakra-ui/react';
-import { FiPlus, FiSearch, FiEdit, FiTrash2 } from 'react-icons/fi';
+import { FiPlus, FiSearch, FiEdit, FiTrash2, FiEye, FiFilter } from 'react-icons/fi';
 import DataTable from '@/components/DataTable';
 import { useSession } from 'next-auth/react'
 import TransferModal from '@/components/TransferModal';
@@ -69,6 +70,9 @@ export default function TransfersPage() {
     const [filteredTransfers, setFilteredTransfers] = useState<Transfer[]>([]);
     const [selectedTransfer, setSelectedTransfer] = useState<Transfer | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
+    const [viewMode, setViewMode] = useState<'all' | 'actionRequired'>('all');
+    const [itemsPerPage, setItemsPerPage] = useState(10);
+    const [currentPage, setCurrentPage] = useState(1);
     const [isLoading, setIsLoading] = useState(true);
 
     const { isOpen, onOpen, onClose } = useDisclosure();
@@ -122,13 +126,22 @@ export default function TransfersPage() {
 
     useEffect(() => {
         const lowercasedSearchTerm = searchTerm.toLowerCase();
-        const results = transfers.filter(transfer =>
+
+        let results = transfers;
+
+        if (viewMode === 'actionRequired') {
+            results = results.filter(transfer => transfer.status === 'pending');
+        }
+
+        results = results.filter(transfer =>
             transfer.transferNumber.toLowerCase().includes(lowercasedSearchTerm) ||
             getSiteName(transfer.fromBin).toLowerCase().includes(lowercasedSearchTerm) ||
             getSiteName(transfer.toBin).toLowerCase().includes(lowercasedSearchTerm)
         );
+
         setFilteredTransfers(results);
-    }, [searchTerm, transfers]);
+        setCurrentPage(1); // Reset to first page on new search/filter
+    }, [searchTerm, transfers, viewMode]);
 
     const handleAddTransfer = () => {
         setSelectedTransfer(null);
@@ -220,6 +233,9 @@ export default function TransfersPage() {
         },
     ];
 
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const paginatedData = filteredTransfers.slice(startIndex, startIndex + itemsPerPage);
+
     if (isLoading) {
         return (
             <Flex justifyContent="center" alignItems="center" height="100vh">
@@ -230,12 +246,38 @@ export default function TransfersPage() {
 
     return (
         <Box p={4} maxW="container.xl" mx="auto">
-            <Flex justifyContent="space-between" alignItems="center" mb={4}>
-                <Heading as="h1" size="lg">Transfers</Heading>
-                <HStack>
+            <Flex
+                justifyContent="space-between"
+                alignItems={{ base: 'flex-start', md: 'center' }}
+                py={4}
+                mb={6}
+                flexDirection={{ base: 'column', md: 'row' }}
+                gap={{ base: 4, md: 3 }}
+            >
+                <Heading as="h1" size="xl">
+                    Transfers
+                </Heading>
+                <HStack spacing={3} flexWrap="wrap">
+                    <Button
+                        leftIcon={<FiEye />}
+                        colorScheme={viewMode === 'all' ? 'brand' : 'gray'}
+                        onClick={() => setViewMode('all')}
+                        variant="outline"
+                    >
+                        View All
+                    </Button>
+
+                    <Button
+                        leftIcon={<FiFilter />}
+                        colorScheme={viewMode === 'actionRequired' ? 'brand' : 'gray'}
+                        onClick={() => setViewMode('actionRequired')}
+                        variant="outline"
+                    >
+                        Action Required
+                    </Button>
                     <Button
                         leftIcon={<FiPlus />}
-                        colorScheme="teal"
+                        colorScheme="brand"
                         variant="solid"
                         onClick={handleAddTransfer}
                     >
@@ -244,27 +286,48 @@ export default function TransfersPage() {
                 </HStack>
             </Flex>
 
-            <Card bg={cardBg} border="1px" borderColor={borderColor} borderRadius="md" mb={4}>
-                <CardBody>
-                    <InputGroup>
-                        <InputLeftElement pointerEvents="none">
-                            <Icon as={FiSearch} color={searchIconColor} />
-                        </InputLeftElement>
-                        <Input
-                            placeholder="Search by transfer number, from bin, or to bin..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            bg={inputBg}
-                        />
-                    </InputGroup>
-                </CardBody>
-            </Card>
+            <Flex direction={{ base: 'column', md: 'row' }} mb={4} justifyContent="space-between" alignItems="center" gap={{ base: 4, md: 8 }} py={4} px={0}>
+                <InputGroup maxW="100%">
+                    <InputLeftElement pointerEvents="none">
+                        <Icon as={FiSearch} color={searchIconColor} />
+                    </InputLeftElement>
+                    <Input
+                        type="text"
+                        placeholder="Search transfers..."
+                        value={searchTerm}
+                        onChange={(e: ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
+                        flex="1"
+                        bg={inputBg}
+                    />
+                </InputGroup>
+                <HStack alignItems="center" mt={{ base: 4, md: 0 }}>
+                    <Text mr={2} width={{ base: '120px', md: '160px' }} fontSize="sm" color="gray.600">
+                        Items per page:
+                    </Text>
+                    <Select
+                        value={itemsPerPage}
+                        onChange={(e) => {
+                            setItemsPerPage(Number(e.target.value));
+                            setCurrentPage(1); // Reset to first page
+                        }}
+                        maxW="100px"
+                        size="sm"
+                        bg={inputBg}
+                    >
+                        {[5, 10, 25, 50].map((size) => (
+                            <option key={size} value={size}>
+                                {size}
+                            </option>
+                        ))}
+                    </Select>
+                </HStack>
+            </Flex>
 
             <Card bg={cardBg} border="1px" borderColor={borderColor} borderRadius="md">
                 <CardBody p={0}>
                     <DataTable
                         columns={columns}
-                        data={filteredTransfers}
+                        data={paginatedData}
                         loading={false}
                     />
                 </CardBody>

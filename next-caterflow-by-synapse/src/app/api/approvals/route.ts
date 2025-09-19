@@ -57,13 +57,21 @@ export async function GET(request: Request) {
         let approvals = [...purchaseOrders, ...internalTransfers];
         console.log(`✅ /api/approvals: Raw approvals from Sanity fetched. Count: ${approvals.length}`);
 
-        // Use a more generic description for POs since suppliers are item-specific
+        // Process approvals to ensure consistent field names
         approvals = approvals.map(approval => {
             if (approval._type === 'PurchaseOrder') {
                 const supplierNames = [...new Set(approval.orderedItems.map((item: any) => item.supplier?.name))].filter(Boolean);
                 return {
                     ...approval,
-                    description: ``,
+                    siteName: approval.site?.name || 'Unknown Site', // Add siteName field
+                    description: supplierNames.length > 0
+                        ? `Purchase order from ${supplierNames.join(', ')}`
+                        : 'Purchase order with no specified suppliers',
+                };
+            } else if (approval._type === 'InternalTransfer') {
+                return {
+                    ...approval,
+                    siteName: approval.fromSite?.name || 'Unknown Site', // Add siteName for transfers
                 };
             }
             return approval;

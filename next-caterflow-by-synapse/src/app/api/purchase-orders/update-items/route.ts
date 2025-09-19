@@ -1,74 +1,91 @@
-// /api/purchase-orders/update-items/route.ts - FIXED FOR NESTED OBJECTS
+// src/app/api/purchase-orders/update-items/route.ts
 import { NextResponse } from 'next/server';
 import { writeClient } from '@/lib/sanity';
+import { groq } from 'next-sanity';
 
-// Alternative: Update the entire array
 export async function POST(request: Request) {
     try {
         const { poId, updates } = await request.json();
-
-        console.log('API received update request:', { poId, updates });
 
         if (!poId || !updates || !Array.isArray(updates)) {
             return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
         }
 
-        // Fetch the current PO
+        // Fetch current PO
         const currentPO = await writeClient.fetch(`*[_id == $poId][0]`, { poId });
         if (!currentPO) {
             return NextResponse.json({ error: 'Purchase order not found' }, { status: 404 });
         }
 
-        // Create updated orderedItems array
-        const updatedOrderedItems = currentPO.orderedItems.map((item: any) => {
-            const update = updates.find(u => u.itemKey === item._key);
-            if (update) {
-                return {
-                    ...item,
-                    unitPrice: update.newPrice !== undefined ? update.newPrice : item.unitPrice,
-                    orderedQuantity: update.newQuantity !== undefined ? update.newQuantity : item.orderedQuantity,
-                    priceManuallyUpdated: update.newPrice !== undefined ? true : item.priceManuallyUpdated
-                };
+        // Build updated orderedItems array
+        const updatedOrderedItems = (currentPO.orderedItems || []).map((item: any) => {
+            const u = updates.find((upd: any) => upd.itemKey === item._key);
+            if (u) {
+                const newItem = { ...item };
+
+                if (u.newPrice !== undefined) {
+                    newItem.unitPrice = u.newPrice;
+                }
+                if (u.newQuantity !== undefined) {
+                    newItem.orderedQuantity = u.newQuantity;
+                }
+                if (u.supplierId) {
+                    newItem.supplier = {
+                        _type: 'reference',
+                        _ref: u.supplierId
+                    };
+                }
+
+                return newItem;
             }
             return item;
         });
 
-        // Update the entire orderedItems array
+        // Persist the updated orderedItems array
         const result = await writeClient
             .patch(poId)
             .set({ orderedItems: updatedOrderedItems })
             .commit();
 
-        console.log('Update successful:', result);
-
-        // Fetch the updated PO
-        const query = `*[_id == $poId][0]{
-            _id,
-            _type,
-            poNumber,
-            orderDate,
-            status,
-            totalAmount,
-            "site": site->{_id, name},
-            "orderedBy": orderedBy->{name},
-            orderedItems[]{
-                _key,
-                orderedQuantity,
-                unitPrice,
-                "stockItem": stockItem->{_id, name},
-                "supplier": supplier->{_id, name}
-            },
-            "supplierNames": coalesce(orderedItems[].supplier->name, []) |> unique() |> join(", ")
-        }`;
-
+        // Re-fetch the updated PO
+        const query = groq`
+            *[_id == $poId][0]{
+                _id,
+                _type,
+                poNumber,
+                orderDate,
+                status,
+                totalAmount,
+                "site": site->{_id, name},
+                "orderedBy": orderedBy->{name},
+                orderedItems[]{
+                    _key,
+                    orderedQuantity,
+                    unitPrice,
+                    "stockItem": stockItem->{_id, name, unitOfMeasure},
+                    "supplier": supplier->{_id, name}
+                }
+            }
+        `;
         const updatedPO = await writeClient.fetch(query, { poId });
 
+        // Manually generate supplier names
+        const supplierNames = updatedPO.orderedItems
+            ?.map((item: any) => item.supplier?.name)
+            .filter((name: string) => name && name.trim() !== '') || [];
+
+        const uniqueSupplierNames = supplierNames.length > 0
+            ? [...new Set(supplierNames)].join(', ')
+            : 'No suppliers specified';
+
+        // Transform for UI
         const transformedPO = {
             ...updatedPO,
+            supplierNames: uniqueSupplierNames,
             siteName: updatedPO.site?.name || '',
             actionType: 'PurchaseOrder',
             title: `Purchase Order ${updatedPO.poNumber}`,
-            description: `Order from ${updatedPO.supplierNames || 'suppliers'}`,
+            description: `Order from ${uniqueSupplierNames}`,
             priority: 'medium',
             createdAt: updatedPO.orderDate,
         };
@@ -77,11 +94,10 @@ export async function POST(request: Request) {
             success: true,
             updatedPO: transformedPO
         });
-
     } catch (error: any) {
         console.error('Failed to update items:', error);
         return NextResponse.json(
-            { error: 'Failed to update items', details: error.message },
+            { error: 'Failed to update items', details: error?.message || String(error) },
             { status: 500 }
         );
     }

@@ -460,7 +460,7 @@ export default function Home() {
             subValue={`${dashboardStats?.todaysDispatchesCount || 0} pending today`}
             icon={BsTruck}
             colorScheme="orange"
-            viewAllLink="/dispatches"
+            viewAllLink="/operations/dispatches"
           />
 
           {/* Card 3: Pending Actions */}

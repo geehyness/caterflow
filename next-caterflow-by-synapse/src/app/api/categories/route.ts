@@ -6,7 +6,8 @@ export async function GET() {
     try {
         const query = groq`*[_type == "Category"] {
             _id,
-            title
+            title,
+            description
         } | order(title asc)`;
 
         const categories = await client.fetch(query);

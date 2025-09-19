@@ -1,13 +1,6 @@
 // schemas/stockAdjustment.ts
 import { defineType, defineField } from 'sanity';
-import { createClient } from '@sanity/client';
-
-const client = createClient({
-    projectId: 'v3sfsmld',
-    dataset: 'production',
-    apiVersion: '2025-08-20',
-    useCdn: true,
-});
+import client from '../lib/client';
 
 const isUniqueAdjustmentNumber = async (adjustmentNumber, context) => {
     const { document, getClient } = context;
@@ -162,7 +155,7 @@ export default defineType({
             const statusText = evidenceStatus ? ` | Evidence: ${evidenceStatus}` : '';
             return {
                 title: `Adjustment: ${title}`,
-                subtitle: `${new Date(date).toLocaleDateString()} | Type: ${type} | Bin: ${bin}${statusText}`,
+                subtitle: `${date ? new Date(date).toLocaleDateString() : 'No date'} | Type: ${type || 'No type'} | Bin: ${bin || 'No bin'}${statusText}`,
             };
         },
     },

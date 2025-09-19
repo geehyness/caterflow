@@ -9,10 +9,38 @@ import { MoonIcon, SunIcon, HamburgerIcon } from '@chakra-ui/icons';
 import NextLink from 'next/link';
 import Image from 'next/image';
 import { useRouter, usePathname } from 'next/navigation';
-import { FiLogOut, FiBarChart2, FiBox, FiMapPin, FiTruck, FiUsers, FiSettings, FiBell, FiClock, FiActivity, FiChevronDown, FiChevronUp, FiUser } from 'react-icons/fi';
-import { useSession, signOut } from 'next-auth/react'; // Changed import
+import {
+    FiLogOut,
+    FiBarChart2,
+    FiBox,
+    FiMapPin,
+    FiTruck,
+    FiUsers,
+    FiSettings,
+    FiBell,
+    FiClock,
+    FiActivity,
+    FiChevronDown,
+    FiChevronUp,
+    FiUser,
+    FiLayers,
+    FiDatabase,
+    FiShoppingCart,
+    FiFileText,
+    FiClipboard,
+    FiRepeat,
+    FiShoppingBag,
+    FiAlertTriangle,
+    FiPackage,
+    FiList,
+    FiCheckCircle,
+    FiHome,
+    FiTrendingUp,
+    FiAlertCircle,
+    FiBriefcase
+} from 'react-icons/fi';
+import { useSession, signOut } from 'next-auth/react';
 import { useLoading } from '@/context/LoadingContext';
-import { FaCheckCircle } from 'react-icons/fa';
 import { useSidebar } from '@/context/SidebarContext';
 
 interface SidebarProps {
@@ -25,49 +53,58 @@ const SidebarContent = ({ onItemClick }: { onItemClick?: () => void }) => {
     const theme = useTheme();
     const router = useRouter();
     const pathname = usePathname();
-    const { data: session, status } = useSession(); // Use NextAuth's useSession
-    const [expandedGroups, setExpandedGroups] = useState<string[]>(['Main', 'Operations', 'Admin']);
+    const { data: session, status } = useSession();
+    const [expandedGroups, setExpandedGroups] = useState<string[]>(['Overview', 'Inventory', 'Operations', 'Administration']);
     const { setLoading } = useLoading();
 
-    // Correctly reference the neutral.light.bg-secondary and neutral.dark.bg-secondary colors from your theme
     const sidebarBg = useColorModeValue(theme.colors.neutral.light['bg-secondary'], theme.colors.neutral.dark['bg-secondary']);
     const activeBg = useColorModeValue(theme.colors.brand['100'], theme.colors.brand['700']);
     const borderColor = useColorModeValue(theme.colors.neutral.light['border-color'], theme.colors.neutral.dark['border-color']);
     const iconColor = useColorModeValue(theme.colors.neutral.light['text-primary'], theme.colors.neutral.dark['text-primary']);
     const hoverBg = useColorModeValue('gray.100', 'gray.700');
 
-    // Define menu items with roles and groups
+    // Define menu items with roles and groups - Improved icons for better distinction
     const menuGroups = [
         {
-            heading: 'Main',
+            heading: 'Overview',
+            icon: FiHome,
             items: [
-                { label: 'Dashboard', href: '/', icon: FiBarChart2, roles: ['admin', 'siteManager', 'stockController', 'dispatchStaff', 'auditor'] },
-                { label: 'Stock Items', href: '/stock-items', icon: FiBox, roles: ['admin', 'siteManager', 'stockController', 'auditor'] },
-                { label: 'Locations', href: '/locations', icon: FiMapPin, roles: ['admin', 'siteManager', 'auditor'] },
-                { label: 'Low Stock', href: '/low-stock', icon: FiBox, roles: ['admin', 'siteManager', 'stockController', 'auditor'] },
-                { label: 'Actions', href: '/actions', icon: FiClock, roles: ['admin', 'siteManager', 'stockController', 'dispatchStaff'] },
+                { label: 'Dashboard', href: '/', icon: FiBarChart2, roles: ['admin', 'siteManager', 'stockController', 'dispatchStaff', 'auditor', 'procurer'] },
                 { label: 'Activity', href: '/activity', icon: FiActivity, roles: ['admin', 'siteManager', 'stockController', 'auditor'] },
+                { label: 'Actions', href: '/actions', icon: FiAlertTriangle, roles: ['admin', 'siteManager', 'stockController', 'dispatchStaff'] },
+            ],
+        },
+        {
+            heading: 'Inventory',
+            icon: FiPackage,
+            items: [
+                { label: 'Current Stock', href: '/current', icon: FiDatabase, roles: ['admin', 'siteManager', 'stockController', 'auditor', 'procurer'] },
+                { label: 'Stock Items', href: '/stock-items', icon: FiList, roles: ['admin', 'siteManager', 'stockController', 'procurer'] },
+                { label: 'Low Stock', href: '/low-stock', icon: FiAlertCircle, roles: ['admin', 'siteManager', 'stockController', 'auditor', 'procurer'] },
             ],
         },
         {
             heading: 'Operations',
+            icon: FiSettings,
             items: [
-                { label: 'Approvals', href: '/approvals', icon: FaCheckCircle, roles: ['admin', 'siteManager'] },
-                { label: 'Purchases', href: '/operations/purchases', icon: FiTruck, roles: ['admin', 'siteManager', 'auditor'] },
-                { label: 'Receipts', href: '/operations/receipts', icon: FiTruck, roles: ['admin', 'siteManager', 'auditor'] },
+                { label: 'Approvals', href: '/approvals', icon: FiCheckCircle, roles: ['admin', 'siteManager'] },
+                { label: 'Purchases', href: '/operations/purchases', icon: FiShoppingCart, roles: ['admin', 'siteManager', 'auditor'] },
+                { label: 'Receipts', href: '/operations/receipts', icon: FiFileText, roles: ['admin', 'siteManager', 'auditor'] },
                 { label: 'Dispatches', href: '/operations/dispatches', icon: FiTruck, roles: ['admin', 'siteManager', 'dispatchStaff', 'auditor'] },
-                { label: 'Transfers', href: '/operations/transfers', icon: FiTruck, roles: ['admin', 'siteManager', 'stockController', 'dispatchStaff', 'auditor'] },
-                { label: 'Adjustments', href: '/operations/adjustments', icon: FiBox, roles: ['admin', 'siteManager', 'stockController', 'auditor'] },
-                { label: 'Counts', href: '/operations/bin-counts', icon: FiBox, roles: ['admin', 'siteManager', 'stockController', 'auditor'] },
+                { label: 'Counts', href: '/operations/bin-counts', icon: FiClipboard, roles: ['admin', 'siteManager', 'stockController', 'auditor'] },
+                { label: 'Transfers', href: '/operations/transfers', icon: FiRepeat, roles: ['admin', 'siteManager', 'stockController', 'dispatchStaff', 'auditor', 'procurer'] },
+                { label: 'Procurement', href: '/operations/procurement', icon: FiShoppingBag, roles: ['admin', 'procurer'] },
             ],
         },
         {
-            heading: 'Admin',
+            heading: 'Administration',
+            icon: FiUsers,
             items: [
                 { label: 'Users', href: '/users', icon: FiUsers, roles: ['admin'] },
-                { label: 'Suppliers', href: '/suppliers', icon: FiTruck, roles: ['admin'] },
+                { label: 'Locations', href: '/locations', icon: FiMapPin, roles: ['admin'] },
+                { label: 'Suppliers', href: '/suppliers', icon: FiBriefcase, roles: ['admin'] },
                 { label: 'Notifications', href: '/notifications', icon: FiBell, roles: ['admin'] },
-                { label: 'Settings', href: '/settings', icon: FiSettings, roles: ['admin'] },
+                { label: 'System Settings', href: '/settings', icon: FiSettings, roles: ['admin'] },
             ],
         },
     ];
@@ -171,14 +208,17 @@ const SidebarContent = ({ onItemClick }: { onItemClick?: () => void }) => {
                                     borderRadius: 'md',
                                 }}
                             >
-                                <Text
-                                    fontSize="xs"
-                                    fontWeight="bold"
-                                    textTransform="uppercase"
-                                    color="gray.500"
-                                >
-                                    {group.heading}
-                                </Text>
+                                <Flex align="center">
+                                    <Icon as={group.icon} boxSize={4} mr={2} color="gray.500" />
+                                    <Text
+                                        fontSize="xs"
+                                        fontWeight="bold"
+                                        textTransform="uppercase"
+                                        color="gray.500"
+                                    >
+                                        {group.heading}
+                                    </Text>
+                                </Flex>
                                 <Icon
                                     as={expandedGroups.includes(group.heading) ? FiChevronDown : FiChevronUp}
                                     boxSize={4}
@@ -260,7 +300,6 @@ export function Sidebar({ appName = 'Caterflow' }: SidebarProps) {
     const isMobile = useBreakpointValue({ base: true, md: false });
     const { isOpen, closeSidebar } = useSidebar();
     const theme = useTheme();
-    // Use the same theme color for the main sidebar background
     const sidebarBg = useColorModeValue(theme.colors.neutral.light['bg-secondary'], theme.colors.neutral.dark['bg-secondary']);
 
     if (isMobile) {
@@ -273,7 +312,7 @@ export function Sidebar({ appName = 'Caterflow' }: SidebarProps) {
                 <DrawerOverlay />
                 <DrawerContent
                     bg={sidebarBg}
-                    maxW={{ base: '75%', sm: '320px' }} // Set a max-width for the drawer on small screens
+                    maxW={{ base: '75%', sm: '320px' }}
                 >
                     <DrawerCloseButton />
                     <DrawerBody p={0}>

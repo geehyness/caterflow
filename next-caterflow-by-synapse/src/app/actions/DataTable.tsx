@@ -277,7 +277,16 @@ export default function DataTable({
 
     return (
         <Box p={4} borderRadius="md" borderWidth="1px" overflowX="auto" className="shadow-sm">
-            <Flex mb={4} justifyContent="space-between" alignItems="center">
+            <Flex
+                direction={{ base: 'column', md: 'row' }}
+                gap={{ base: 4, md: 8 }}
+                mb={6}
+                justifyContent="space-between"
+                alignItems="center"
+                p={4}
+                borderWidth="1px"
+                borderRadius="md"
+            >
                 <Input
                     placeholder="Search across all data..."
                     value={searchTerm}
@@ -285,11 +294,15 @@ export default function DataTable({
                         setSearchTerm(e.target.value);
                         setCurrentPage(1); // Reset to first page on search
                     }}
-                    maxW="250px"
-                    className="bg-gray-50 border-gray-300 text-gray-900"
+                    flex={{ base: '1', md: '0.6' }}
                 />
-                <Flex alignItems="center">
-                    <Text mr={2} fontSize="sm" className="text-gray-600">
+                <HStack
+                    spacing={4}
+                    alignItems="center"
+                    mt={{ base: 4, md: 0 }}
+                    flex={{ base: '1', md: '0.4' }}
+                >
+                    <Text flexShrink={0} fontSize="sm" color="gray.600">
                         Items per page:
                     </Text>
                     <Select
@@ -300,7 +313,6 @@ export default function DataTable({
                         }}
                         maxW="100px"
                         size="sm"
-                        className="bg-gray-50 border-gray-300"
                     >
                         {[5, 10, 25, 50].map((size) => (
                             <option key={size} value={size}>
@@ -308,86 +320,88 @@ export default function DataTable({
                             </option>
                         ))}
                     </Select>
-                </Flex>
+                </HStack>
             </Flex>
 
-            {loading ? (
-                <Flex justifyContent="center" alignItems="center" py={10}>
-                    <Spinner size="xl" />
-                </Flex>
-            ) : (
-                <Table variant="simple" size="sm" className="min-w-full divide-y divide-gray-200">
-                    <Thead>
-                        <Tr className="bg-gray-50">
-                            {/* Selection column - only show for GoodsReceipt action type */}
-                            {showSelection && (
-                                <Th width="50px">
-                                    <Checkbox
-                                        onChange={handleSelectAll}
-                                        isChecked={selectedRows.length === paginatedData.length && paginatedData.length > 0}
-                                        isIndeterminate={selectedRows.length > 0 && selectedRows.length < paginatedData.length}
-                                    />
-                                </Th>
-                            )}
-                            {allColumns.map((column) => (
-                                <Th
-                                    key={column.accessorKey}
-                                    onClick={() => handleSort(column.accessorKey, column.isSortable)}
-                                    cursor={column.isSortable ? 'pointer' : 'default'}
-                                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                                    _hover={{ bg: column.isSortable ? 'gray.100' : 'gray.50' }}
-                                >
-                                    <Flex alignItems="center">
-                                        {column.header}
-                                        {renderSortIcon(column.accessorKey)}
-                                    </Flex>
-                                </Th>
-                            ))}
-                        </Tr>
-                    </Thead>
-                    <Tbody>
-                        {paginatedData.length > 0 ? (
-                            paginatedData.map((row, rowIndex) => (
-                                <Tr key={row._id || rowIndex}>
-                                    {/* Selection checkbox - only show for GoodsReceipt action type */}
-                                    {showSelection && (
-                                        <Td>
-                                            <Checkbox
-                                                onChange={() => handleSelectRow(row)}
-                                                isChecked={selectedRows.includes(row)}
-                                            />
-                                        </Td>
-                                    )}
-                                    {allColumns.map((column) => (
-                                        <Td
-                                            key={column.accessorKey}
-                                            className="px-6 py-4 whitespace-nowrap text-sm text-gray-900"
-                                        >
-                                            {column.cell ? (
-                                                column.cell(row, rowIndex)
-                                            ) : column.accessorKey === 'description' ? (
-                                                renderDescriptionWithItems(row)
-                                            ) : (
-                                                <Text>{getPropertyValue(row, column.accessorKey)}</Text>
-                                            )}
-                                        </Td>
-                                    ))}
-                                </Tr>
-                            ))
-                        ) : (
-                            <Tr>
-                                <Td
-                                    colSpan={allColumns.length + (showSelection ? 1 : 0)}
-                                    textAlign="center"
-                                    py={10}
-                                >
-                                    No results found.
-                                </Td>
+            {
+                loading ? (
+                    <Flex justifyContent="center" alignItems="center" py={10}>
+                        <Spinner size="xl" />
+                    </Flex>
+                ) : (
+                    <Table variant="simple" size="sm" className="min-w-full divide-y divide-gray-200">
+                        <Thead>
+                            <Tr className="bg-gray-50">
+                                {/* Selection column - only show for GoodsReceipt action type */}
+                                {showSelection && (
+                                    <Th width="50px">
+                                        <Checkbox
+                                            onChange={handleSelectAll}
+                                            isChecked={selectedRows.length === paginatedData.length && paginatedData.length > 0}
+                                            isIndeterminate={selectedRows.length > 0 && selectedRows.length < paginatedData.length}
+                                        />
+                                    </Th>
+                                )}
+                                {allColumns.map((column) => (
+                                    <Th
+                                        key={column.accessorKey}
+                                        onClick={() => handleSort(column.accessorKey, column.isSortable)}
+                                        cursor={column.isSortable ? 'pointer' : 'default'}
+                                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                                        _hover={{ bg: column.isSortable ? 'gray.100' : 'gray.50' }}
+                                    >
+                                        <Flex alignItems="center">
+                                            {column.header}
+                                            {renderSortIcon(column.accessorKey)}
+                                        </Flex>
+                                    </Th>
+                                ))}
                             </Tr>
-                        )}
-                    </Tbody>
-                </Table>
-            )}
+                        </Thead>
+                        <Tbody>
+                            {paginatedData.length > 0 ? (
+                                paginatedData.map((row, rowIndex) => (
+                                    <Tr key={row._id || rowIndex}>
+                                        {/* Selection checkbox - only show for GoodsReceipt action type */}
+                                        {showSelection && (
+                                            <Td>
+                                                <Checkbox
+                                                    onChange={() => handleSelectRow(row)}
+                                                    isChecked={selectedRows.includes(row)}
+                                                />
+                                            </Td>
+                                        )}
+                                        {allColumns.map((column) => (
+                                            <Td
+                                                key={column.accessorKey}
+                                                className="px-6 py-4 whitespace-nowrap text-sm text-gray-900"
+                                            >
+                                                {column.cell ? (
+                                                    column.cell(row, rowIndex)
+                                                ) : column.accessorKey === 'description' ? (
+                                                    renderDescriptionWithItems(row)
+                                                ) : (
+                                                    <Text>{getPropertyValue(row, column.accessorKey)}</Text>
+                                                )}
+                                            </Td>
+                                        ))}
+                                    </Tr>
+                                ))
+                            ) : (
+                                <Tr>
+                                    <Td
+                                        colSpan={allColumns.length + (showSelection ? 1 : 0)}
+                                        textAlign="center"
+                                        py={10}
+                                    >
+                                        No results found.
+                                    </Td>
+                                </Tr>
+                            )}
+                        </Tbody>
+                    </Table>
+                )
+            }
 
             {/* Pagination Controls */}
             <Flex justifyContent="space-between" alignItems="center" mt={4} px={2}>
@@ -424,6 +438,6 @@ export default function DataTable({
                     />
                 </HStack>
             </Flex>
-        </Box>
+        </Box >
     );
 }

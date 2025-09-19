@@ -15,6 +15,9 @@ export const metadata: Metadata = {
   title: "Caterflow",
   description: "Caterflow Inventory Management System",
   manifest: "/manifest.json",
+  icons: {
+    icon: '/favicon.ico',
+  },
 };
 
 export default function RootLayout({

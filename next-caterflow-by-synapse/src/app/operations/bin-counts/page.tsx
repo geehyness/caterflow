@@ -20,6 +20,7 @@ import {
     IconButton,
     Icon,
     Text,
+    HStack,
 } from '@chakra-ui/react';
 import { FiPlus, FiSearch, FiEdit, FiEye, FiClipboard, FiFilter } from 'react-icons/fi';
 import DataTable from '@/components/DataTable';
@@ -69,7 +70,7 @@ export default function BinCountsPage() {
     const [searchTerm, setSearchTerm] = useState('');
     const { isOpen, onOpen, onClose } = useDisclosure();
     const toast = useToast();
-    const [viewMode, setViewMode] = useState<'actionRequired' | 'all'>('actionRequired');
+    const [viewMode, setViewMode] = useState<'actionRequired' | 'all'>('all');
 
     const cardBg = useColorModeValue('white', 'gray.700');
     const borderColor = useColorModeValue('gray.200', 'gray.600');
@@ -249,25 +250,30 @@ export default function BinCountsPage() {
             <Flex
                 justifyContent="space-between"
                 alignItems={{ base: 'flex-start', md: 'center' }}
+                py={4}
                 mb={6}
                 flexDirection={{ base: 'column', md: 'row' }}
-                gap={4}
+                gap={{ base: 4, md: 3 }}
             >
-                <Heading as="h1" size="lg">Bin Counts</Heading>
-                <Flex gap={3} flexWrap="wrap" justifyContent={{ base: 'flex-start', md: 'flex-end' }}>
-                    <Button
-                        leftIcon={<FiFilter />}
-                        colorScheme={viewMode === 'actionRequired' ? 'brand' : 'gray'}
-                        onClick={() => setViewMode('actionRequired')}
-                    >
-                        Action Required
-                    </Button>
+                <Heading as="h1" size="xl">
+                    Bin Counts                            </Heading>
+                <HStack spacing={3} flexWrap="wrap">
                     <Button
                         leftIcon={<FiEye />}
                         colorScheme={viewMode === 'all' ? 'brand' : 'gray'}
                         onClick={() => setViewMode('all')}
+                        variant="outline"
                     >
                         View All
+                    </Button>
+
+                    <Button
+                        leftIcon={<FiFilter />}
+                        colorScheme={viewMode === 'actionRequired' ? 'brand' : 'gray'}
+                        onClick={() => setViewMode('actionRequired')}
+                        variant="outline"
+                    >
+                        Action Required
                     </Button>
                     <Button
                         leftIcon={<FiPlus />}
@@ -276,24 +282,8 @@ export default function BinCountsPage() {
                     >
                         New Count
                     </Button>
-                </Flex>
+                </HStack>
             </Flex>
-
-            {/* Search */}
-            <Card mb={4}>
-                <CardBody>
-                    <InputGroup>
-                        <InputLeftElement pointerEvents="none">
-                            <Icon as={FiSearch} color={searchIconColor} />
-                        </InputLeftElement>
-                        <Input
-                            placeholder="Search by count number, bin, or site..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                        />
-                    </InputGroup>
-                </CardBody>
-            </Card>
 
             {/* Bin Counts Table */}
             <Card>

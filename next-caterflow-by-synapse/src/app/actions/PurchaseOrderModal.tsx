@@ -17,6 +17,7 @@ export interface OrderedItem {
     stockItem: {
         _id: string;
         name: string;
+        unitOfMeasure?: string;   // 👈 add this
     } | null;
     supplier: {
         _id: string;
@@ -73,7 +74,7 @@ export default function PurchaseOrderModal({
     const hasIncompleteItems = useMemo(() => {
         if (!poDetails?.orderedItems) return false;
         return poDetails.orderedItems.some(item =>
-            !item.stockItem || !item.supplier || item.orderedQuantity <= 0
+            !item.stockItem || item.orderedQuantity <= 0
         );
     }, [poDetails]);
 
@@ -170,9 +171,9 @@ export default function PurchaseOrderModal({
                                                 <Thead>
                                                     <Tr>
                                                         <Th>Item</Th>
-                                                        <Th isNumeric>Qty</Th>
+                                                        <Th isNumeric>Qty</Th>{/*}
                                                         <Th isNumeric>Unit Price</Th>
-                                                        <Th isNumeric>Subtotal</Th>
+                                                        <Th isNumeric>Subtotal</Th>*/}
                                                         {isEditable && <Th></Th>}
                                                     </Tr>
                                                 </Thead>
@@ -185,15 +186,32 @@ export default function PurchaseOrderModal({
                                                                 <Td>
                                                                     <VStack align="start" spacing={0}>
                                                                         <Text fontWeight="bold" color={primaryTextColor}>{item.stockItem?.name || 'N/A'}</Text>
-                                                                        <Text fontSize="sm" color={secondaryTextColor}>{item.supplier?.name || 'N/A'}</Text>
+                                                                        <Text fontSize="sm" color={secondaryTextColor}>{item.stockItem?._id || 'N/A'}</Text>
                                                                     </VStack>
                                                                 </Td>
                                                                 <Td isNumeric>
-                                                                    <NumberInput size="sm" value={quantity} onChange={(val) => handleQuantityChange(val, item._key)} min={1} isDisabled={!isEditable} w="100px">
-                                                                        <NumberInputField />
-                                                                        <NumberInputStepper><NumberIncrementStepper /><NumberDecrementStepper /></NumberInputStepper>
-                                                                    </NumberInput>
+                                                                    <VStack align="end">
+                                                                        <HStack>
+                                                                            <Text>({item.stockItem?.unitOfMeasure || 'unit'})</Text>
+                                                                            <NumberInput
+                                                                                size="sm"
+                                                                                value={quantity}
+                                                                                onChange={(val) => handleQuantityChange(val, item._key)}
+                                                                                min={1}
+                                                                                isDisabled={!isEditable}
+                                                                                w="100px"
+                                                                            >
+                                                                                <NumberInputField />
+                                                                                <NumberInputStepper>
+                                                                                    <NumberIncrementStepper />
+                                                                                    <NumberDecrementStepper />
+                                                                                </NumberInputStepper>
+                                                                            </NumberInput>
+                                                                        </HStack>
+                                                                    </VStack>
                                                                 </Td>
+
+                                                                {/*
                                                                 <Td isNumeric>
                                                                     <NumberInput size="sm" value={price?.toFixed(2)} onChange={(val) => handlePriceChange(item._key, parseFloat(val))} min={0} precision={2} isDisabled={!isEditable} w="120px">
                                                                         <NumberInputField />
@@ -202,6 +220,8 @@ export default function PurchaseOrderModal({
                                                                 <Td isNumeric>
                                                                     <Text fontWeight="bold" color={primaryTextColor}>E{(quantity * price).toFixed(2)}</Text>
                                                                 </Td>
+                                                                */}
+
                                                                 {isEditable && (
                                                                     <Td>
                                                                         <Button size="sm" colorScheme="red" variant="ghost" onClick={() => onRemoveItem(item._key)}>
@@ -217,11 +237,11 @@ export default function PurchaseOrderModal({
                                         </TableContainer>
                                     </Box>
 
-                                    <Flex justify="flex-end" w="full" mt={4}>
+                                    {/*<Flex justify="flex-end" w="full" mt={4}>
                                         <Text fontWeight="bold" fontSize="xl" color={primaryTextColor}>
                                             Total: E{totalAmount.toFixed(2)}
                                         </Text>
-                                    </Flex>
+                                    </Flex>*/}
                                 </VStack>
                             ) : (
                                 <Flex justify="center" align="center" direction="column" py={8}>

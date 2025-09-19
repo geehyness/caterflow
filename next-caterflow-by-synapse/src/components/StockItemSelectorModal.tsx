@@ -20,6 +20,7 @@ import {
     useToast,
     InputGroup,
     InputLeftElement,
+    Spinner,
 } from '@chakra-ui/react';
 import { FiSearch } from 'react-icons/fi';
 
@@ -30,10 +31,11 @@ interface StockItem {
     itemType: 'food' | 'nonFood';
     unitOfMeasure: string;
     description?: string;
-    category?: { // Updated to match expected data structure
+    category?: {
         _id: string;
         title: string;
     };
+    currentStock: number;
 }
 
 interface Category {
@@ -45,160 +47,126 @@ interface StockItemSelectorModalProps {
     isOpen: boolean;
     onClose: () => void;
     onSelect: (item: StockItem) => void;
-    existingItemIds: string[]; // This is the new prop
+    existingItemIds: string[];
+    sourceBinId?: string;
 }
 
-export default function StockItemSelectorModal({ isOpen, onClose, onSelect, existingItemIds }: StockItemSelectorModalProps) {
+export default function StockItemSelectorModal({ isOpen, onClose, onSelect, existingItemIds, sourceBinId }: StockItemSelectorModalProps) {
     const [stockItems, setStockItems] = useState<StockItem[]>([]);
     const [filteredItems, setFilteredItems] = useState<StockItem[]>([]);
     const [categories, setCategories] = useState<Category[]>([]);
     const [selectedCategory, setSelectedCategory] = useState<string>('');
-    const [selectedItemType, setSelectedItemType] = useState<string>('');
     const [searchTerm, setSearchTerm] = useState('');
     const [loading, setLoading] = useState(true);
     const toast = useToast();
 
-    const fetchStockItemsAndCategories = useCallback(async () => {
+    const fetchStockItems = useCallback(async () => {
+        setLoading(true);
         try {
-            const [itemsResponse, categoriesResponse] = await Promise.all([
-                fetch('/api/stock-items'),
-                fetch('/api/categories')
+            const url = sourceBinId ? `/api/stock-items?binId=${sourceBinId}` : '/api/stock-items';
+            const [itemsRes, categoriesRes] = await Promise.all([
+                fetch(url),
+                fetch('/api/categories'),
             ]);
 
-            if (!itemsResponse.ok || !categoriesResponse.ok) {
+            if (!itemsRes.ok || !categoriesRes.ok) {
                 throw new Error('Failed to fetch data');
             }
 
-            const itemsData = await itemsResponse.json();
-            const categoriesData = await categoriesResponse.json();
+            const itemsData = await itemsRes.json();
+            const categoriesData = await categoriesRes.json();
 
             setStockItems(itemsData);
             setCategories(categoriesData);
+            setLoading(false);
         } catch (error) {
-            console.error('Error fetching stock items and categories:', error);
+            console.error('Error fetching stock items:', error);
             toast({
-                title: 'Error',
-                description: 'Failed to load stock items. Please try again.',
+                title: 'Error fetching stock items.',
+                description: 'Failed to load stock items and categories.',
                 status: 'error',
                 duration: 5000,
                 isClosable: true,
             });
-        } finally {
             setLoading(false);
         }
-    }, [toast]);
-
-    const filterItems = useCallback(() => {
-        let filtered = stockItems;
-
-        // Step 1: Filter out items that are already counted
-        // Safely check if existingItemIds is an array and has items.
-        // Use a defensive check to handle cases where the prop might be undefined.
-        if (existingItemIds && existingItemIds.length > 0) {
-            filtered = filtered.filter(item => !existingItemIds.includes(item._id));
-        }
-
-        // Step 2: Filter by category
-        if (selectedCategory) {
-            filtered = filtered.filter(item => item.category?._id === selectedCategory);
-        }
-
-        // Step 3: Filter by item type
-        if (selectedItemType) {
-            filtered = filtered.filter(item => item.itemType === selectedItemType);
-        }
-
-        // Step 4: Filter by search term
-        if (searchTerm) {
-            const term = searchTerm.toLowerCase();
-            filtered = filtered.filter(item =>
-                item.name.toLowerCase().includes(term) ||
-                item.sku.toLowerCase().includes(term) ||
-                item.description?.toLowerCase().includes(term)
-            );
-        }
-
-        setFilteredItems(filtered);
-    }, [stockItems, existingItemIds, selectedCategory, selectedItemType, searchTerm]);
+    }, [sourceBinId, toast]);
 
     useEffect(() => {
         if (isOpen) {
-            fetchStockItemsAndCategories();
+            fetchStockItems();
         }
-    }, [isOpen, fetchStockItemsAndCategories]);
+    }, [isOpen, fetchStockItems]);
 
     useEffect(() => {
-        filterItems();
-    }, [filterItems]);
+        const lowercasedSearchTerm = searchTerm.toLowerCase();
+        const newFilteredItems = stockItems.filter(item =>
+            !existingItemIds.includes(item._id) &&
+            (selectedCategory === '' || item.category?._id === selectedCategory) &&
+            (item.name.toLowerCase().includes(lowercasedSearchTerm) ||
+                item.sku.toLowerCase().includes(lowercasedSearchTerm) ||
+                (item.description && item.description.toLowerCase().includes(lowercasedSearchTerm)))
+        );
+        setFilteredItems(newFilteredItems);
+    }, [searchTerm, selectedCategory, stockItems, existingItemIds]);
 
     const handleItemSelect = (item: StockItem) => {
         onSelect(item);
         onClose();
     };
 
-    const getItemTypeColor = (type: string) => {
-        switch (type) {
-            case 'food': return 'green';
-            case 'nonFood': return 'blue';
-            default: return 'gray';
-        }
+    const getItemTypeColor = (itemType: 'food' | 'nonFood') => {
+        return itemType === 'food' ? 'orange' : 'teal';
     };
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} size="3xl">
+        <Modal isOpen={isOpen} onClose={onClose} size="xl">
             <ModalOverlay />
             <ModalContent>
-                <ModalHeader>Select a Stock Item</ModalHeader>
+                <ModalHeader>Select Stock Item</ModalHeader>
                 <ModalCloseButton />
                 <ModalBody>
                     <VStack spacing={4} align="stretch">
-                        <HStack>
-                            <Select
-                                placeholder="Filter by category"
-                                value={selectedCategory}
-                                onChange={(e) => setSelectedCategory(e.target.value)}
-                            >
-                                {categories.map(category => (
-                                    <option key={category._id} value={category._id}>
-                                        {category.title}
-                                    </option>
-                                ))}
-                            </Select>
-                            <Select
-                                placeholder="Filter by type"
-                                value={selectedItemType}
-                                onChange={(e) => setSelectedItemType(e.target.value)}
-                            >
-                                <option value="food">Food</option>
-                                <option value="nonFood">Non-Food</option>
-                            </Select>
-                            <InputGroup>
-                                <InputLeftElement pointerEvents="none">
-                                    <FiSearch color="gray.300" />
-                                </InputLeftElement>
-                                <Input
-                                    placeholder="Search items..."
-                                    value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
-                                />
-                            </InputGroup>
-                        </HStack>
-
-                        <Box maxH="400px" overflowY="auto">
+                        <InputGroup>
+                            <InputLeftElement pointerEvents="none">
+                                <FiSearch color="gray.300" />
+                            </InputLeftElement>
+                            <Input
+                                placeholder="Search items..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                            />
+                        </InputGroup>
+                        <Select
+                            placeholder="Filter by Category"
+                            value={selectedCategory}
+                            onChange={(e) => setSelectedCategory(e.target.value)}
+                        >
+                            <option value="">All Categories</option>
+                            {categories.map(category => (
+                                <option key={category._id} value={category._id}>
+                                    {category.title}
+                                </option>
+                            ))}
+                        </Select>
+                        <Box maxHeight="400px" overflowY="auto">
                             {loading ? (
-                                <Text>Loading items...</Text>
+                                <Box textAlign="center" py={10}>
+                                    <Spinner size="xl" />
+                                </Box>
                             ) : filteredItems.length === 0 ? (
-                                <Text>No items found.</Text>
+                                <Text textAlign="center" color="gray.500" mt={4}>
+                                    No stock items found.
+                                </Text>
                             ) : (
                                 <List spacing={3}>
-                                    {filteredItems.map(item => (
+                                    {filteredItems.map((item) => (
                                         <ListItem
                                             key={item._id}
                                             p={3}
                                             borderWidth="1px"
                                             borderRadius="md"
-                                            cursor="pointer"
-                                            _hover={{ bg: 'gray.50' }}
+                                            _hover={{ bg: 'gray.100', cursor: 'pointer' }}
                                             onClick={() => handleItemSelect(item)}
                                         >
                                             <VStack align="start" spacing={1}>
@@ -224,7 +192,7 @@ export default function StockItemSelectorModal({ isOpen, onClose, onSelect, exis
                     </VStack>
                 </ModalBody>
                 <ModalFooter>
-                    <Button colorScheme="blue" onClick={onClose}>
+                    <Button variant="ghost" onClick={onClose}>
                         Cancel
                     </Button>
                 </ModalFooter>

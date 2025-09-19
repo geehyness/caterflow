@@ -1,16 +1,7 @@
-// schemas/inventoryCount.js
+// schemas/inventoryCount.ts
 import { defineType, defineField } from 'sanity';
-import { createClient } from '@sanity/client';
+import client from '../lib/client';
 
-// NOTE: You will need to replace the placeholders below with your actual project details.
-const client = createClient({
-    projectId: 'v3sfsmld', // Replace with your Sanity Project ID
-    dataset: 'production', // Replace with your dataset (e.g., 'production')
-    apiVersion: '2025-08-20', // Use a recent date, like today's date
-    useCdn: true,
-});
-
-// Async helper function to check for unique count numbers
 const isUniqueCountNumber = async (countNumber, context) => {
     const { document, getClient } = context;
     if (!countNumber) {
@@ -54,9 +45,9 @@ export default defineType({
             readOnly: ({ document }) => !!document.countNumber,
             description: 'Unique Inventory Count identifier.',
             initialValue: async () => {
-                const today = new Date().toISOString().slice(0, 10);
+                const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
                 const query = `
-                    *[_type == "InventoryCount" && _createdAt >= "${today}T00:00:00Z" && _createdAt < "${today}T23:59:59Z"] | order(_createdAt desc)[0] {
+                    *[_type == "InventoryCount" && defined(countNumber) && countNumber match "IC-${today}*"] | order(countNumber desc)[0] {
                         countNumber
                     }
                 `;
@@ -64,7 +55,7 @@ export default defineType({
 
                 let nextNumber = 1;
                 if (lastCount && lastCount.countNumber) {
-                    const lastNumber = parseInt(lastCount.countNumber.split('-').pop());
+                    const lastNumber = parseInt(lastCount.countNumber.split('-').pop() || '0');
                     if (!isNaN(lastNumber)) {
                         nextNumber = lastNumber + 1;
                     }
@@ -102,6 +93,22 @@ export default defineType({
             description: 'The specific storage bin where the physical count was performed.',
         }),
         defineField({
+            name: 'status',
+            title: 'Status',
+            type: 'string',
+            options: {
+                list: [
+                    { title: 'Draft', value: 'draft' },
+                    { title: 'In Progress', value: 'in-progress' },
+                    { title: 'Completed', value: 'completed' },
+                    { title: 'Adjusted', value: 'adjusted' },
+                ],
+                layout: 'radio',
+            },
+            initialValue: 'draft',
+            validation: (Rule) => Rule.required(),
+        }),
+        defineField({
             name: 'countedItems',
             title: 'Counted Items',
             type: 'array',
@@ -117,38 +124,39 @@ export default defineType({
     ],
     preview: {
         select: {
-            title: 'countNumber', // Using the new number field
+            title: 'countNumber',
             bin: 'bin.name',
             date: 'countDate',
             countedBy: 'countedBy.name',
+            status: 'status',
         },
-        prepare({ title, bin, date, countedBy }) {
+        prepare({ title, bin, date, countedBy, status }) {
             return {
                 title: `Count: ${title}`,
-                subtitle: `${new Date(date).toLocaleDateString()} | Bin: ${bin} | by ${countedBy}`,
+                subtitle: `${date ? new Date(date).toLocaleDateString() : 'No date'} | Bin: ${bin || 'No bin'} | by ${countedBy || 'Unknown'} | Status: ${status}`,
             };
         },
-        orderings: [
-            {
-                name: 'newest',
-                title: 'Newest First',
-                by: [{ field: 'countDate', direction: 'desc' }],
-            },
-            {
-                name: 'oldest',
-                title: 'Oldest First',
-                by: [{ field: 'countDate', direction: 'asc' }],
-            },
-            {
-                name: 'countNumberAsc',
-                title: 'Count Number (Ascending)',
-                by: [{ field: 'countNumber', direction: 'asc' }],
-            },
-            {
-                name: 'binName',
-                title: 'Bin Name (A-Z)',
-                by: [{ field: 'bin.name', direction: 'asc' }],
-            },
-        ],
     },
+    orderings: [
+        {
+            name: 'newest',
+            title: 'Newest First',
+            by: [{ field: 'countDate', direction: 'desc' }],
+        },
+        {
+            name: 'oldest',
+            title: 'Oldest First',
+            by: [{ field: 'countDate', direction: 'asc' }],
+        },
+        {
+            name: 'countNumberAsc',
+            title: 'Count Number (Ascending)',
+            by: [{ field: 'countNumber', direction: 'asc' }],
+        },
+        {
+            name: 'binName',
+            title: 'Bin Name (A-Z)',
+            by: [{ field: 'bin.name', direction: 'asc' }],
+        },
+    ],
 });

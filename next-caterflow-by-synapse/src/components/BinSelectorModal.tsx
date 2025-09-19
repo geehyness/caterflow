@@ -20,7 +20,8 @@ import {
     Badge,
     useToast,
     InputGroup,
-    InputLeftElement, // Add this import
+    InputLeftElement,
+    Spinner,
 } from '@chakra-ui/react';
 import { FiSearch } from 'react-icons/fi';
 
@@ -41,9 +42,10 @@ interface BinSelectorModalProps {
     isOpen: boolean;
     onClose: () => void;
     onSelect: (bin: Bin) => void;
+    selectedSiteId?: string;
 }
 
-export default function BinSelectorModal({ isOpen, onClose, onSelect }: BinSelectorModalProps) {
+export default function BinSelectorModal({ isOpen, onClose, onSelect, selectedSiteId }: BinSelectorModalProps) {
     const [bins, setBins] = useState<Bin[]>([]);
     const [filteredBins, setFilteredBins] = useState<Bin[]>([]);
     const [sites, setSites] = useState<Site[]>([]);
@@ -53,128 +55,120 @@ export default function BinSelectorModal({ isOpen, onClose, onSelect }: BinSelec
     const toast = useToast();
 
     const fetchBinsAndSites = useCallback(async () => {
+        setLoading(true);
         try {
-            const [binsResponse, sitesResponse] = await Promise.all([
+            const [binsRes, sitesRes] = await Promise.all([
                 fetch('/api/bins'),
-                fetch('/api/sites')
+                fetch('/api/sites'),
             ]);
 
-            if (!binsResponse.ok || !sitesResponse.ok) {
+            if (!binsRes.ok || !sitesRes.ok) {
                 throw new Error('Failed to fetch data');
             }
 
-            const binsData = await binsResponse.json();
-            const sitesData = await sitesResponse.json();
+            const binsData = await binsRes.json();
+            const sitesData = await sitesRes.json();
 
             setBins(binsData);
             setSites(sitesData);
+            setLoading(false);
         } catch (error) {
-            console.error('Error fetching bins and sites:', error);
+            console.error('Error fetching data:', error);
             toast({
-                title: 'Error',
-                description: 'Failed to load bins and sites. Please try again.',
+                title: 'Error fetching data.',
+                description: 'Failed to load bins and sites.',
                 status: 'error',
                 duration: 5000,
                 isClosable: true,
             });
-        } finally {
             setLoading(false);
         }
     }, [toast]);
 
-    const filterBins = useCallback(() => {
-        let filtered = bins;
-
-        if (selectedSite) {
-            filtered = filtered.filter(bin => bin.site._id === selectedSite);
-        }
-
-        if (searchTerm) {
-            const term = searchTerm.toLowerCase();
-            filtered = filtered.filter(bin =>
-                bin.name.toLowerCase().includes(term) ||
-                bin.site.name.toLowerCase().includes(term) ||
-                bin.locationDescription?.toLowerCase().includes(term)
-            );
-        }
-
-        setFilteredBins(filtered);
-    }, [bins, selectedSite, searchTerm]);
-
     useEffect(() => {
         if (isOpen) {
             fetchBinsAndSites();
+            setSelectedSite(selectedSiteId || '');
         }
-    }, [isOpen, fetchBinsAndSites]);
+    }, [isOpen, fetchBinsAndSites, selectedSiteId]);
 
     useEffect(() => {
-        filterBins();
-    }, [filterBins]);
+        const lowercasedSearchTerm = searchTerm.toLowerCase();
+        const newFilteredBins = bins.filter(bin =>
+            (selectedSite === '' || bin.site._id === selectedSite) &&
+            (bin.name.toLowerCase().includes(lowercasedSearchTerm) ||
+                bin.site.name.toLowerCase().includes(lowercasedSearchTerm) ||
+                (bin.locationDescription && bin.locationDescription.toLowerCase().includes(lowercasedSearchTerm)))
+        );
+        setFilteredBins(newFilteredBins);
+    }, [searchTerm, selectedSite, bins]);
 
     const handleBinSelect = (bin: Bin) => {
         onSelect(bin);
         onClose();
     };
 
-    const getBinTypeColor = (type: string) => {
-        switch (type) {
-            case 'main-storage': return 'blue';
-            case 'overflow-storage': return 'orange';
-            case 'refrigerator': return 'green';
-            case 'freezer': return 'teal';
-            case 'dispensing-point': return 'purple';
-            case 'receiving-area': return 'pink';
-            default: return 'gray';
+    const getBinTypeColor = (binType: string) => {
+        switch (binType) {
+            case 'storage':
+                return 'blue';
+            case 'coldStorage':
+                return 'cyan';
+            case 'display':
+                return 'green';
+            default:
+                return 'gray';
         }
     };
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} size="3xl">
+        <Modal isOpen={isOpen} onClose={onClose} size="xl">
             <ModalOverlay />
             <ModalContent>
                 <ModalHeader>Select a Bin</ModalHeader>
                 <ModalCloseButton />
                 <ModalBody>
                     <VStack spacing={4} align="stretch">
-                        <HStack>
-                            <Select
-                                placeholder="Filter by site"
-                                value={selectedSite}
-                                onChange={(e) => setSelectedSite(e.target.value)}
-                            >
-                                {sites.map(site => (
-                                    <option key={site._id} value={site._id}>
-                                        {site.name}
-                                    </option>
-                                ))}
-                            </Select>
-                            <InputGroup> {/* Add InputGroup wrapper */}
-                                <InputLeftElement pointerEvents="none">
-                                    <FiSearch color="gray.300" />
-                                </InputLeftElement>
-                                <Input
-                                    placeholder="Search bins..."
-                                    value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
-                                />
-                            </InputGroup>
-                        </HStack>
-
-                        <Box maxH="400px" overflowY="auto">
+                        <InputGroup>
+                            <InputLeftElement pointerEvents="none">
+                                <FiSearch color="gray.300" />
+                            </InputLeftElement>
+                            <Input
+                                placeholder="Search bins..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                            />
+                        </InputGroup>
+                        <Select
+                            placeholder="Filter by Site"
+                            value={selectedSite}
+                            onChange={(e) => setSelectedSite(e.target.value)}
+                        >
+                            <option value="">All Sites</option>
+                            {sites.map(site => (
+                                <option key={site._id} value={site._id}>
+                                    {site.name}
+                                </option>
+                            ))}
+                        </Select>
+                        <Box maxHeight="400px" overflowY="auto">
                             {loading ? (
-                                <Text>Loading bins...</Text>
+                                <Box textAlign="center" py={10}>
+                                    <Spinner size="xl" />
+                                </Box>
                             ) : filteredBins.length === 0 ? (
-                                <Text>No bins found.</Text>
+                                <Text textAlign="center" color="gray.500" mt={4}>
+                                    No bins found.
+                                </Text>
                             ) : (
                                 <List spacing={3}>
-                                    {filteredBins.map(bin => (
+                                    {filteredBins.map((bin) => (
                                         <ListItem
                                             key={bin._id}
                                             p={3}
                                             borderWidth="1px"
                                             borderRadius="md"
-                                            cursor="pointer"
-                                            _hover={{ bg: 'gray.50' }}
+                                            _hover={{ bg: 'gray.100', cursor: 'pointer' }}
                                             onClick={() => handleBinSelect(bin)}
                                         >
                                             <VStack align="start" spacing={1}>
@@ -197,7 +191,7 @@ export default function BinSelectorModal({ isOpen, onClose, onSelect }: BinSelec
                     </VStack>
                 </ModalBody>
                 <ModalFooter>
-                    <Button colorScheme="blue" onClick={onClose}>
+                    <Button variant="ghost" onClick={onClose}>
                         Cancel
                     </Button>
                 </ModalFooter>

@@ -26,6 +26,7 @@ import {
     AlertDialogOverlay,
     VStack,
     Icon,
+    HStack,
 } from '@chakra-ui/react';
 import { FiPlus, FiSearch, FiEye, FiFilter, FiEdit } from 'react-icons/fi';
 import DataTable from '@/app/actions/DataTable';
@@ -94,11 +95,9 @@ export default function PurchasesPage() {
     const [searchTerm, setSearchTerm] = useState('');
     const { isOpen, onOpen, onClose } = useDisclosure();
     const toast = useToast();
-    const [viewMode, setViewMode] = useState<'actionRequired' | 'all'>('actionRequired');
+    const [viewMode, setViewMode] = useState<'actionRequired' | 'all'>('all');
 
     const [isConfirmDialogOpen, setIsConfirmDialogOpen] = useState(false);
-    const [isZeroPriceDialogOpen, setIsZeroPriceDialogOpen] = useState(false);
-    const [hasZeroPriceItems, setHasZeroPriceItems] = useState<string[]>([]);
 
     const [selectedAction, setSelectedAction] = useState<PurchaseOrderDetails | null>(null);
 
@@ -388,25 +387,8 @@ export default function PurchasesPage() {
         } : null);
     };
 
-    const handleConfirmOrderUpdate = async () => {
-        if (!poDetails) return;
-
-        const zeroPriceItems = poDetails.orderedItems?.filter(item => {
-            const price = editedPrices[item._key] ?? item.unitPrice;
-            return price === 0;
-        }).map(item => item.stockItem?.name || 'Unknown Item') || [];
-
-        if (zeroPriceItems.length > 0) {
-            setHasZeroPriceItems(zeroPriceItems);
-            setIsZeroPriceDialogOpen(true);
-        } else {
-            setIsConfirmDialogOpen(true);
-        }
-    };
-
     const proceedWithOrderUpdate = async () => {
         setIsConfirmDialogOpen(false);
-        setIsZeroPriceDialogOpen(false);
         setIsSaving(true);
         try {
             await handleSaveOrder();
@@ -488,11 +470,6 @@ export default function PurchasesPage() {
             header: 'Order Date',
             cell: (row: any) => new Date(row.orderDate).toLocaleDateString()
         },
-        {
-            accessorKey: 'totalAmount',
-            header: 'Total Amount',
-            cell: (row: any) => `E${row.totalAmount?.toFixed(2) || '0.00'}`
-        },
     ];
 
     return (
@@ -500,50 +477,38 @@ export default function PurchasesPage() {
             <Flex
                 justifyContent="space-between"
                 alignItems={{ base: 'flex-start', md: 'center' }}
+                py={4}
                 mb={6}
                 flexDirection={{ base: 'column', md: 'row' }}
-                gap={4}
+                gap={{ base: 4, md: 3 }}
             >
-                <Heading as="h1" size="lg">Purchase Orders</Heading>
-                <Flex gap={3} flexWrap="wrap" justifyContent={{ base: 'flex-start', md: 'flex-end' }}>
-                    <Button
-                        leftIcon={<FiFilter />}
-                        colorScheme={viewMode === 'actionRequired' ? 'brand' : 'gray'}
-                        onClick={() => setViewMode('actionRequired')}
-                    >
-                        Action Required
-                    </Button>
+                <Heading as="h1" size="xl">
+                    Purchase Orders
+                </Heading>
+                <HStack spacing={3} flexWrap="wrap">
                     <Button
                         leftIcon={<FiEye />}
                         colorScheme={viewMode === 'all' ? 'brand' : 'gray'}
                         onClick={() => setViewMode('all')}
+                        variant="outline"
                     >
                         View All
                     </Button>
+
                     <Button
-                        leftIcon={<FiPlus />}
-                        colorScheme="brand"
-                        onClick={handleAddOrder}
+                        leftIcon={<FiFilter />}
+                        colorScheme={viewMode === 'actionRequired' ? 'brand' : 'gray'}
+                        onClick={() => setViewMode('actionRequired')}
+                        variant="outline"
                     >
+                        Action Required
+                    </Button>
+
+                    <Button leftIcon={<FiPlus />} colorScheme="brand" onClick={handleAddOrder}>
                         New Order
                     </Button>
-                </Flex>
+                </HStack>
             </Flex>
-
-            <Card mb={4}>
-                <CardBody>
-                    <InputGroup>
-                        <InputLeftElement pointerEvents="none">
-                            <Icon as={FiSearch} color={searchIconColor} />
-                        </InputLeftElement>
-                        <Input
-                            placeholder="Search by PO number, supplier, or site..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                        />
-                    </InputGroup>
-                </CardBody>
-            </Card>
 
             <Card>
                 <CardBody p={0}>
@@ -577,7 +542,7 @@ export default function PurchasesPage() {
                     setEditedQuantities={setEditedQuantities}
                     isSaving={isSaving}
                     onSave={handleSaveOrder}
-                    onApproveRequest={handleConfirmOrderUpdate} // Changed prop name here
+                    onApproveRequest={proceedWithOrderUpdate} // Changed prop name here
                     onRemoveItem={handleRemoveItem}
                 />
             )}
@@ -602,38 +567,6 @@ export default function PurchasesPage() {
                             </Button>
                             <Button colorScheme="blue" onClick={proceedWithOrderUpdate} ml={3}>
                                 Confirm Submit
-                            </Button>
-                        </AlertDialogFooter>
-                    </AlertDialogContent>
-                </AlertDialogOverlay>
-            </AlertDialog>
-
-
-            <AlertDialog
-                isOpen={isZeroPriceDialogOpen}
-                onClose={() => setIsZeroPriceDialogOpen(false)}
-                leastDestructiveRef={cancelRef}
-            >
-                <AlertDialogOverlay>
-                    <AlertDialogContent>
-                        <AlertDialogHeader fontSize="lg" fontWeight="bold">
-                            Zero Price Warning
-                        </AlertDialogHeader>
-                        <AlertDialogBody>
-                            <Text mb={3}>The following items have a price of $0:</Text>
-                            <VStack align="start" spacing={1} mb={3}>
-                                {hasZeroPriceItems.map((itemName, index) => (
-                                    <Text key={index} fontSize="sm">• {itemName}</Text>
-                                ))}
-                            </VStack>
-                            <Text>Are you sure you want to proceed with zero prices?</Text>
-                        </AlertDialogBody>
-                        <AlertDialogFooter>
-                            <Button onClick={() => setIsZeroPriceDialogOpen(false)}>
-                                Cancel
-                            </Button>
-                            <Button colorScheme="orange" onClick={proceedWithOrderUpdate} ml={3}>
-                                Proceed Anyway
                             </Button>
                         </AlertDialogFooter>
                     </AlertDialogContent>

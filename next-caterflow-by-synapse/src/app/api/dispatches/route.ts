@@ -1,3 +1,5 @@
+// /api/dispatches/route.ts
+
 import { NextResponse } from 'next/server';
 import { client, writeClient } from '@/lib/sanity';
 import { groq } from 'next-sanity';
@@ -9,55 +11,61 @@ import { v4 as uuidv4 } from 'uuid';
 
 const getNextDispatchNumber = async (): Promise<string> => {
     try {
-        const query = groq`*[_type == "DispatchLog"] | order(dispatchNumber desc)[0].dispatchNumber`;
-        const lastDispatchNumber = await client.fetch(query);
+        const today = new Date().toISOString().slice(0, 10);
+        const query = groq`*[_type == "DispatchLog" && _createdAt >= "${today}T00:00:00Z" && _createdAt < "${today}T23:59:59Z"] | order(_createdAt desc)[0] {
+            dispatchNumber
+        }`;
 
-        if (!lastDispatchNumber) {
-            return 'DISP-00001';
+        const lastLog = await client.fetch(query);
+        let nextNumber = 1;
+
+        if (lastLog && lastLog.dispatchNumber) {
+            const lastNumber = parseInt(lastLog.dispatchNumber.split('-').pop() || '0');
+            if (!isNaN(lastNumber)) {
+                nextNumber = lastNumber + 1;
+            }
         }
 
-        const match = lastDispatchNumber.match(/DISP-(\d+)/);
-        if (!match) {
-            return 'DISP-00001';
-        }
-
-        const lastNumber = parseInt(match[1], 10);
-        const nextNumber = lastNumber + 1;
-        return `DISP-${String(nextNumber).padStart(5, '0')}`;
+        const paddedNumber = String(nextNumber).padStart(3, '0');
+        return `DL-${today}-${paddedNumber}`;
     } catch (error) {
         console.error('Error generating dispatch number:', error);
-        return `DISP-${Date.now().toString().slice(-5)}`;
+        return `DL-${Date.now().toString().slice(-8)}`;
     }
 };
 
 export async function GET() {
     try {
-        // In your API route, update the query to use coalesce for null safety:
         const query = groq`*[_type == "DispatchLog"] | order(dispatchDate desc) {
-    _id,
-    dispatchNumber,
-    dispatchDate,
-    status,
-    notes,
-    "sourceBin": coalesce(sourceBin->{
-        _id,
-        name,
-        "site": site->{_id, name}
-    }, null),
-    "destinationSite": coalesce(destinationSite->{_id, name}, null),
-    "items": coalesce(dispatchedItems[]{
-        _key,
-        dispatchedQuantity,
-        totalCost,
-        "stockItem": stockItem->{
             _id,
-            name,
-            sku,
-            unitOfMeasure,
-            currentStock
-        }
-    }, [])
-}`;
+            dispatchNumber,
+            dispatchDate,
+            evidenceStatus,
+            peopleFed,
+            notes,
+            "dispatchType": coalesce(dispatchType->{_id, name, description}, null),
+            "sourceBin": coalesce(sourceBin->{
+                _id,
+                name,
+                "site": site->{_id, name}
+            }, null),
+            "dispatchedBy": coalesce(dispatchedBy->{_id, name, email}, null),
+            "dispatchedItems": coalesce(dispatchedItems[]{
+                _key,
+                dispatchedQuantity,
+                totalCost,
+                notes,
+                "stockItem": stockItem->{
+                    _id,
+                    name,
+                    sku,
+                    unitOfMeasure,
+                    currentStock
+                }
+            }, []),
+            "attachments": coalesce(attachments[]->{_id, name, url}, [])
+        }`;
+
         const dispatches = await client.fetch(query);
         return NextResponse.json(dispatches);
     } catch (error) {
@@ -84,6 +92,7 @@ export async function POST(request: Request) {
             _id: uuidv4(),
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
+            evidenceStatus: 'pending',
         };
 
         const result = await writeClient.create(newDoc);
@@ -93,7 +102,7 @@ export async function POST(request: Request) {
             `Created new dispatch: ${newDoc.dispatchNumber}`,
             'DispatchLog',
             result._id,
-            'system',
+            session.user.id,
             true
         );
 
@@ -106,6 +115,11 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
     try {
+        const session = await getServerSession(authOptions);
+        if (!session || !session.user) {
+            return NextResponse.json({ error: 'User not authenticated' }, { status: 401 });
+        }
+
         const body = await request.json();
         const { _id, ...updateData } = body;
 
@@ -113,30 +127,37 @@ export async function PATCH(request: Request) {
         if (updateData.items) {
             dispatchedItems = updateData.items.map((item: any) => ({
                 _type: 'DispatchedItem',
-                _key: item._key,
+                _key: item._key || uuidv4(),
                 stockItem: {
                     _type: 'reference',
                     _ref: item.stockItem._id,
                 },
                 dispatchedQuantity: item.dispatchedQuantity,
                 totalCost: item.totalCost || 0,
+                notes: item.notes || '',
             }));
             delete updateData.items;
         }
 
-        const patch = writeClient.patch(_id).set({
+        const patchData: any = {
             ...updateData,
             ...(dispatchedItems && { dispatchedItems }),
             sourceBin: {
                 _type: 'reference',
                 _ref: updateData.sourceBin,
             },
-            destinationSite: {
+            dispatchType: {
                 _type: 'reference',
-                _ref: updateData.destinationSite,
+                _ref: updateData.dispatchType,
             },
-        });
+            dispatchedBy: {
+                _type: 'reference',
+                _ref: updateData.dispatchedBy || session.user.id,
+            },
+            updatedAt: new Date().toISOString(),
+        };
 
+        const patch = writeClient.patch(_id).set(patchData);
         const result = await patch.commit();
 
         await logSanityInteraction(
@@ -144,7 +165,7 @@ export async function PATCH(request: Request) {
             `Updated dispatch: ${updateData.dispatchNumber || _id}`,
             'DispatchLog',
             _id,
-            'system',
+            session.user.id,
             true
         );
 
@@ -157,6 +178,11 @@ export async function PATCH(request: Request) {
 
 export async function DELETE(request: Request) {
     try {
+        const session = await getServerSession(authOptions);
+        if (!session || !session.user) {
+            return NextResponse.json({ error: 'User not authenticated' }, { status: 401 });
+        }
+
         const { searchParams } = new URL(request.url);
         const id = searchParams.get('id');
 
@@ -171,7 +197,7 @@ export async function DELETE(request: Request) {
             `Deleted dispatch: ${id}`,
             'DispatchLog',
             id,
-            'system',
+            session.user.id,
             true
         );
 

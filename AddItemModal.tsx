@@ -227,7 +227,6 @@ export default function AddItemModal({
                                                     <Box>
                                                         <Text fontWeight="bold" color={primaryTextColor}>{item.name}</Text>
                                                         <Text fontSize="sm" color={primaryTextColor}>SKU: {item.sku}</Text>
-                                                        <Text fontSize="sm" color={primaryTextColor}>Current Price: E{item.unitPrice?.toFixed(2) || '0.00'}</Text>
                                                     </Box>
                                                 </HStack>
                                             </Flex>

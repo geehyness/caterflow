@@ -80,8 +80,11 @@ export async function GET(request: Request) {
             // Manually get unique supplier names from the fetched data
             const suppliers = purchaseOrder[0].orderedItems
                 .map((item: any) => item.supplier?.name)
-                .filter(Boolean);
-            const uniqueSupplierNames = [...new Set(suppliers)].join(', ');
+                .filter(name => name && name.trim() !== ''); // More robust filtering
+
+            const uniqueSupplierNames = suppliers.length > 0
+                ? [...new Set(suppliers)].join(', ')
+                : 'No suppliers specified';
 
             const res = NextResponse.json({
                 ...purchaseOrder[0],
@@ -107,8 +110,14 @@ export async function GET(request: Request) {
 
         // Manually process all purchase orders to add the unique supplier names
         const processedOrders = (purchaseOrders || []).map((order: any) => {
-            const suppliers = order.orderedItems.map((item: any) => item.supplier?.name).filter(Boolean);
-            const uniqueSupplierNames = [...new Set(suppliers)].join(', ');
+            const suppliers = order.orderedItems
+                .map((item: any) => item.supplier?.name)
+                .filter(name => name && name.trim() !== '');
+
+            const uniqueSupplierNames = suppliers.length > 0
+                ? [...new Set(suppliers)].join(', ')
+                : 'No suppliers specified';
+
             return {
                 ...order,
                 supplierNames: uniqueSupplierNames
@@ -161,21 +170,22 @@ export async function POST(request: Request) {
             return setNoCache(res);
         }
 
-        // --- 2. Iterate and Validate Each Item ---
+        // --- 2. Validate Items (supplier is now optional) ---
         for (const item of orderedItems) {
-            // Check if supplier exists in the system
-            const supplierExists = await client.fetch(
-                groq`count(*[_type == "Supplier" && _id == $supplierId]) > 0`,
-                { supplierId: item.supplier }
-            );
-
-            if (!supplierExists) {
-                // This is the correct way to handle a validation error
-                const res = NextResponse.json(
-                    { error: `Supplier ${item.supplier} does not exist. Please try again.` },
-                    { status: 400 }
+            // Only validate supplier if it's provided (supplier is now optional)
+            if (item.supplier) {
+                const supplierExists = await client.fetch(
+                    groq`count(*[_type == "Supplier" && _id == $supplierId]) > 0`,
+                    { supplierId: item.supplier }
                 );
-                return setNoCache(res);
+
+                if (!supplierExists) {
+                    const res = NextResponse.json(
+                        { error: `Supplier ${item.supplier} does not exist. Please try again.` },
+                        { status: 400 }
+                    );
+                    return setNoCache(res);
+                }
             }
         }
 
@@ -200,10 +210,13 @@ export async function POST(request: Request) {
                     _type: 'reference',
                     _ref: item.stockItem
                 },
-                supplier: {
-                    _type: 'reference',
-                    _ref: item.supplier
-                }
+                // Only include supplier if provided (supplier is now optional)
+                ...(item.supplier && {
+                    supplier: {
+                        _type: 'reference',
+                        _ref: item.supplier
+                    }
+                })
             })),
             totalAmount: totalAmount || 0,
             status: status || 'draft',

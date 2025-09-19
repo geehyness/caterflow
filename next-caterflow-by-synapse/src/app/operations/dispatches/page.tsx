@@ -19,18 +19,25 @@ import {
     Badge,
     Text,
     Icon,
+    HStack,
 } from '@chakra-ui/react';
 import { FiPlus, FiSearch, FiEye, FiFilter, FiEdit } from 'react-icons/fi';
 import DataTable from '@/components/DataTable';
 import { useSession } from 'next-auth/react'
 import DispatchModal from '@/components/DispatchModal';
 
-// Rename the interface to avoid conflict with React's Dispatch type
 interface DispatchRecord {
     _id: string;
     dispatchNumber: string;
     dispatchDate: string;
-    status: 'pending' | 'completed' | 'cancelled';
+    evidenceStatus: 'pending' | 'partial' | 'complete';
+    peopleFed?: number;
+    notes?: string;
+    dispatchType: {
+        _id: string;
+        name: string;
+        description?: string;
+    };
     sourceBin: {
         _id: string;
         name: string;
@@ -39,19 +46,27 @@ interface DispatchRecord {
             name: string;
         };
     };
-    destinationSite: {
+    dispatchedBy: {
         _id: string;
         name: string;
+        email: string;
     };
-    totalItems: number;
-    items: Array<{
-        _key: string; // Add this required property
+    dispatchedItems: Array<{
+        _key: string;
         stockItem: {
             _id: string;
             name: string;
+            sku?: string;
+            unitOfMeasure?: string;
         };
         dispatchedQuantity: number;
         totalCost?: number;
+        notes?: string;
+    }>;
+    attachments?: Array<{
+        _id: string;
+        name: string;
+        url: string;
     }>;
 }
 
@@ -66,7 +81,7 @@ export default function DispatchesPage() {
     const [searchTerm, setSearchTerm] = useState('');
     const { isOpen, onOpen, onClose } = useDisclosure();
     const toast = useToast();
-    const [viewMode, setViewMode] = useState<'actionRequired' | 'all'>('actionRequired');
+    const [viewMode, setViewMode] = useState<'actionRequired' | 'all'>('all');
 
     const cardBg = useColorModeValue('white', 'gray.700');
     const borderColor = useColorModeValue('gray.200', 'gray.600');
@@ -80,15 +95,7 @@ export default function DispatchesPage() {
             const response = await fetch('/api/dispatches');
             if (response.ok) {
                 const data = await response.json();
-                // Add _key property if missing
-                const dispatchesWithKeys = data.map((dispatch: DispatchRecord) => ({
-                    ...dispatch,
-                    items: dispatch.items.map((item, index) => ({
-                        ...item,
-                        _key: item._key || `item-${index}-${Date.now()}` // Generate key if missing
-                    }))
-                }));
-                setDispatches(dispatchesWithKeys);
+                setDispatches(data);
             } else {
                 throw new Error('Failed to fetch dispatches');
             }
@@ -106,7 +113,6 @@ export default function DispatchesPage() {
         }
     }, [toast]);
 
-
     useEffect(() => {
         fetchDispatches();
     }, [fetchDispatches]);
@@ -116,14 +122,15 @@ export default function DispatchesPage() {
             ? dispatches.filter(dispatch => {
                 const term = searchTerm.toLowerCase();
                 const dispatchNumberMatch = dispatch.dispatchNumber.toLowerCase().includes(term);
+                const dispatchTypeMatch = dispatch.dispatchType.name.toLowerCase().includes(term);
                 const sourceBinMatch = dispatch.sourceBin.name.toLowerCase().includes(term);
-                const destinationSiteMatch = dispatch.destinationSite.name.toLowerCase().includes(term);
-                return dispatchNumberMatch || sourceBinMatch || destinationSiteMatch;
+                const dispatchedByMatch = dispatch.dispatchedBy.name.toLowerCase().includes(term);
+                return dispatchNumberMatch || dispatchTypeMatch || sourceBinMatch || dispatchedByMatch;
             })
             : dispatches;
 
         const dispatchesToDisplay = viewMode === 'actionRequired'
-            ? filtered.filter(dispatch => dispatch.status === 'pending')
+            ? filtered.filter(dispatch => dispatch.evidenceStatus === 'pending' || dispatch.evidenceStatus === 'partial')
             : filtered;
 
         setFilteredDispatches(dispatchesToDisplay);
@@ -144,25 +151,23 @@ export default function DispatchesPage() {
         onClose();
     };
 
-    const getStatusColor = (status: string) => {
+    const getEvidenceStatusColor = (status: string) => {
         switch (status) {
             case 'pending': return 'yellow';
-            case 'completed': return 'green';
-            case 'cancelled': return 'red';
-            case 'N/A': return 'gray';
+            case 'partial': return 'orange';
+            case 'complete': return 'green';
             default: return 'gray';
         }
     };
 
-    // Update the getItemList function to handle string references
     const getItemList = (dispatch: DispatchRecord) => {
-        if (!dispatch.items || dispatch.items.length === 0) return 'No items';
+        if (!dispatch.dispatchedItems || dispatch.dispatchedItems.length === 0) return 'No items';
 
-        const items = dispatch.items.slice(0, 3).map(item =>
+        const items = dispatch.dispatchedItems.slice(0, 3).map(item =>
             `${item.stockItem?.name || 'Unknown'} (${item.dispatchedQuantity})`
         );
 
-        return items.join(', ') + (dispatch.items.length > 3 ? '...' : '');
+        return items.join(', ') + (dispatch.dispatchedItems.length > 3 ? '...' : '');
     };
 
     const columns = [
@@ -172,12 +177,12 @@ export default function DispatchesPage() {
             cell: (row: any) => (
                 <Button
                     size="sm"
-                    colorScheme={row.status === 'pending' ? 'brand' : 'gray'}
-                    variant={row.status === 'pending' ? 'solid' : 'outline'}
+                    colorScheme={row.evidenceStatus === 'pending' ? 'brand' : 'gray'}
+                    variant={row.evidenceStatus === 'pending' ? 'solid' : 'outline'}
                     onClick={() => handleViewDispatch(row)}
-                    leftIcon={<Icon as={row.status === 'pending' ? FiEdit : FiEye} />}
+                    leftIcon={<Icon as={row.evidenceStatus === 'pending' ? FiEdit : FiEye} />}
                 >
-                    {row.status === 'pending' ? 'Edit' : 'View'}
+                    {row.evidenceStatus === 'pending' ? 'Edit' : 'View'}
                 </Button>
             ),
         },
@@ -191,23 +196,24 @@ export default function DispatchesPage() {
             cell: (row: DispatchRecord) => new Date(row.dispatchDate).toLocaleDateString(),
         },
         {
+            accessorKey: 'dispatchType',
+            header: 'Dispatch Type',
+            cell: (row: DispatchRecord) => row.dispatchType?.name,
+        },
+        {
             accessorKey: 'sourceBin',
             header: 'Source Bin',
             cell: (row: DispatchRecord) => (
                 <Box>
-                    <Text fontWeight="bold">{row.sourceBin.name}</Text>
+                    <Text fontWeight="bold">{row.sourceBin?.name}</Text>
                     <Text fontSize="sm" color={secondaryTextColor}>{row.sourceBin.site.name}</Text>
                 </Box>
             ),
         },
         {
-            accessorKey: 'destinationSite',
-            header: 'Destination Site',
-            cell: (row: DispatchRecord) => (
-                <Box>
-                    <Text fontWeight="bold">{row.destinationSite.name}</Text>
-                </Box>
-            ),
+            accessorKey: 'dispatchedBy',
+            header: 'Dispatched By',
+            cell: (row: DispatchRecord) => row.dispatchedBy.name,
         },
         {
             accessorKey: 'description',
@@ -221,11 +227,16 @@ export default function DispatchesPage() {
             )
         },
         {
-            accessorKey: 'status',
-            header: 'Status',
+            accessorKey: 'peopleFed',
+            header: 'People Fed',
+            cell: (row: DispatchRecord) => row.peopleFed || 'N/A',
+        },
+        {
+            accessorKey: 'evidenceStatus',
+            header: 'Evidence Status',
             cell: (row: DispatchRecord) => (
-                <Badge colorScheme={getStatusColor(row.status)} variant="subtle">
-                    {row.status.replace('-', ' ').toUpperCase()}
+                <Badge colorScheme={getEvidenceStatusColor(row.evidenceStatus)} variant="subtle">
+                    {row.evidenceStatus.toUpperCase()}
                 </Badge>
             ),
         },
@@ -246,51 +257,45 @@ export default function DispatchesPage() {
             <Flex
                 justifyContent="space-between"
                 alignItems={{ base: 'flex-start', md: 'center' }}
+                py={4}
                 mb={6}
                 flexDirection={{ base: 'column', md: 'row' }}
-                gap={4}
+                gap={{ base: 4, md: 3 }}
             >
-                <Heading as="h1" size="lg">Dispatches</Heading>
-                <Flex gap={3} flexWrap="wrap" justifyContent={{ base: 'flex-start', md: 'flex-end' }}>
-                    <Button
-                        leftIcon={<FiFilter />}
-                        colorScheme={viewMode === 'actionRequired' ? 'brand' : 'gray'}
-                        onClick={() => setViewMode('actionRequired')}
-                    >
-                        Action Required
-                    </Button>
+                <Heading as="h1" size="xl">
+                    Dispatches
+                </Heading>
+                <HStack spacing={3} flexWrap="wrap">
                     <Button
                         leftIcon={<FiEye />}
                         colorScheme={viewMode === 'all' ? 'brand' : 'gray'}
                         onClick={() => setViewMode('all')}
+                        variant="outline"
                     >
                         View All
                     </Button>
+
+                    <Button
+                        leftIcon={<FiFilter />}
+                        colorScheme={viewMode === 'actionRequired' ? 'brand' : 'gray'}
+                        onClick={() => setViewMode('actionRequired')}
+                        variant="outline"
+                    >
+                        Action Required
+                    </Button>
+
+
+
                     <Button
                         leftIcon={<FiPlus />}
                         colorScheme="brand"
                         onClick={handleAddDispatch}
+                        isDisabled={!user}
                     >
                         New Dispatch
                     </Button>
-                </Flex>
+                </HStack>
             </Flex>
-
-            <Card bg={cardBg} border="1px" borderColor={borderColor} borderRadius="md" mb={4}>
-                <CardBody>
-                    <InputGroup>
-                        <InputLeftElement pointerEvents="none">
-                            <Icon as={FiSearch} color={searchIconColor} />
-                        </InputLeftElement>
-                        <Input
-                            placeholder="Search by dispatch number, source bin, or destination site..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            bg={inputBg}
-                        />
-                    </InputGroup>
-                </CardBody>
-            </Card>
 
             <Card bg={cardBg} border="1px" borderColor={borderColor} borderRadius="md">
                 <CardBody p={0}>

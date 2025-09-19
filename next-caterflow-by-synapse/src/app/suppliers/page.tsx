@@ -208,21 +208,6 @@ export default function SuppliersPage() {
                 </Button>
             </Flex>
 
-            {/* Search */}
-            <Card bg={cardBg} border="1px" borderColor={borderColor} borderRadius="md" mb={4} p={4}>
-                <InputGroup>
-                    <InputLeftElement pointerEvents="none">
-                        <FiSearch color="gray.300" />
-                    </InputLeftElement>
-                    <Input
-                        placeholder="Search suppliers..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        bg={inputBg}
-                    />
-                </InputGroup>
-            </Card>
-
             {/* Suppliers Table */}
             <Card bg={cardBg} border="1px" borderColor={borderColor} borderRadius="md">
                 <CardBody p={0}>

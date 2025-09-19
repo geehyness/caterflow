@@ -215,7 +215,16 @@ export default function DataTable({
 
     return (
         <Box p={4} borderRadius="md" borderWidth="1px" overflowX="auto" className="shadow-sm">
-            <Flex mb={4} justifyContent="space-between" alignItems="center">
+            <Flex
+                direction={{ base: 'column', md: 'row' }}
+                gap={{ base: 4, md: 8 }}
+                mb={6}
+                justifyContent="space-between"
+                alignItems="center"
+                p={4}
+                borderWidth="1px"
+                borderRadius="md"
+            >
                 <Input
                     placeholder="Search across all data..."
                     value={searchTerm}
@@ -223,11 +232,15 @@ export default function DataTable({
                         setSearchTerm(e.target.value);
                         setCurrentPage(1); // Reset to first page on search
                     }}
-                    maxW="250px"
-                    className="bg-gray-50 border-gray-300 text-gray-900"
+                    flex={{ base: '1', md: '0.6' }}
                 />
-                <Flex alignItems="center">
-                    <Text mr={2} fontSize="sm" className="text-gray-600">
+                <HStack
+                    spacing={4}
+                    alignItems="center"
+                    mt={{ base: 4, md: 0 }}
+                    flex={{ base: '1', md: '0.4' }}
+                >
+                    <Text flexShrink={0} fontSize="sm" color="gray.600">
                         Items per page:
                     </Text>
                     <Select
@@ -238,7 +251,6 @@ export default function DataTable({
                         }}
                         maxW="100px"
                         size="sm"
-                        className="bg-gray-50 border-gray-300"
                     >
                         {[5, 10, 25, 50].map((size) => (
                             <option key={size} value={size}>
@@ -246,7 +258,7 @@ export default function DataTable({
                             </option>
                         ))}
                     </Select>
-                </Flex>
+                </HStack>
             </Flex>
 
             {loading ? (

@@ -191,7 +191,7 @@ export default function CreatePurchaseOrderModal({
         console.log('Saving order items:', orderItems);
 
         // Validate all items have suppliers
-        const itemsWithoutSuppliers = orderItems.filter(item => !item.supplier);
+        {/*const itemsWithoutSuppliers = orderItems.filter(item => !item.supplier);
         if (itemsWithoutSuppliers.length > 0) {
             toast({
                 title: 'Missing suppliers',
@@ -201,7 +201,7 @@ export default function CreatePurchaseOrderModal({
                 isClosable: true,
             });
             return;
-        }
+        }*/}
 
         // If site selection is required but not provided
         if (!selectedSiteId && !selectedSite) {
@@ -274,18 +274,17 @@ export default function CreatePurchaseOrderModal({
                                             variant="ghost"
                                         />
                                         <VStack align="stretch" spacing={2}>
-                                            <HStack justifyContent="space-between" alignItems="center">
+                                            <VStack align={"stretch"}>
                                                 <Text fontWeight="bold" fontSize="lg">{stockItem?.name}</Text>
-                                                <Text fontSize="sm" color="gray.600">SKU: {stockItem?.sku}</Text>
-                                            </HStack>
-                                            <Flex direction={{ base: 'column', md: 'row' }} justify="space-between" align={{ base: 'flex-start', md: 'center' }} gap={4} flexWrap="wrap">
-                                                <Box flex="1 1 200px">
+                                                <Text fontSize="xs" fontWeight={"bold"} color="gray.600">SKU: {stockItem?.sku}</Text>
+                                            </VStack>
+                                            <Flex direction={{ base: 'row', md: 'row' }} justify="space-between" align={{ base: 'flex-start', md: 'center' }} gap={4} flexWrap="wrap">
+                                                {/*<Box flex="1 1 60px">
                                                     <Text fontWeight="medium" mb={1}>Supplier</Text>
                                                     <Select
                                                         value={item.supplier}
                                                         onChange={(e) => updateItemSupplier(index, e.target.value)}
-                                                        size="sm"
-                                                    >
+                                                        size="sm"                                                    >
                                                         <option value="">Select Supplier</option>
                                                         {suppliers.map(supplier => (
                                                             <option key={supplier._id} value={supplier._id}>
@@ -293,30 +292,13 @@ export default function CreatePurchaseOrderModal({
                                                             </option>
                                                         ))}
                                                     </Select>
-                                                </Box>
-                                                <Box flex="1 1 80px">
-                                                    <Text fontWeight="medium" mb={1}>Quantity</Text>
+                                                </Box>*/}
+                                                <Box flex="1 1 60px">
+                                                    <Text fontWeight="medium" mb={1}>Quantity ({stockItem?.unitOfMeasure})</Text>
                                                     <NumberInput
                                                         value={item.orderedQuantity}
                                                         onChange={(value) => updateItemQuantity(index, parseInt(value) || 1)}
                                                         min={1}
-                                                        size="sm"
-                                                    >
-                                                        <NumberInputField />
-                                                        <NumberInputStepper>
-                                                            <NumberIncrementStepper />
-                                                            <NumberDecrementStepper />
-                                                        </NumberInputStepper>
-                                                    </NumberInput>
-                                                </Box>
-                                                <Box flex="1 1 100px">
-                                                    <Text fontWeight="medium" mb={1}>Unit Price</Text>
-                                                    <NumberInput
-                                                        value={item.unitPrice}
-                                                        onChange={(value) => updateItemPrice(index, parseFloat(value) || 0)}
-                                                        min={0}
-                                                        precision={2}
-                                                        step={0.01}
                                                         size="sm"
                                                     >
                                                         <NumberInputField />
@@ -408,7 +390,6 @@ export default function CreatePurchaseOrderModal({
                                                     <Box>
                                                         <Text fontWeight="bold">{item.name}</Text>
                                                         <Text fontSize="sm">SKU: {item.sku}</Text>
-                                                        <Text fontSize="sm">Current Price: ${item.unitPrice?.toFixed(2) || '0.00'}</Text>
                                                     </Box>
                                                     <Button size="sm" colorScheme="blue">Add</Button>
                                                 </Flex>

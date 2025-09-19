@@ -1,13 +1,6 @@
 // schemas/goodsReceipt.ts
 import { defineType, defineField } from 'sanity';
-import { createClient } from '@sanity/client';
-
-const client = createClient({
-    projectId: 'v3sfsmld',
-    dataset: 'production',
-    apiVersion: '2025-08-20',
-    useCdn: true,
-});
+import client from '../lib/client';
 
 const isUniqueReceiptNumber = async (receiptNumber, context) => {
     const { document, getClient } = context;
@@ -149,11 +142,11 @@ export default defineType({
             evidenceStatus: 'evidenceStatus',
         },
         prepare({ title, date, po, bin, evidenceStatus }) {
-            const poText = po ? ` (PO: ${po})` : '';
+            const poText = po ? ` | PO: ${po}` : '';
             const statusText = evidenceStatus ? ` | Evidence: ${evidenceStatus}` : '';
             return {
                 title: `Receipt: ${title}`,
-                subtitle: `${new Date(date).toLocaleDateString()} | To: ${bin}${poText}${statusText}`,
+                subtitle: `${date ? new Date(date).toLocaleDateString() : 'No date'} | To: ${bin || 'No bin'}${poText}${statusText}`,
             };
         },
     },

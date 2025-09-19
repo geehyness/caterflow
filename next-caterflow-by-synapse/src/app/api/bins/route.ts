@@ -12,18 +12,35 @@ interface BinData {
 }
 
 // GET all bins
-export async function GET() {
+// Update the GET function in /api/bins/route.ts
+export async function GET(req: NextRequest) {
     try {
-        const bins = await writeClient.fetch(groq`
-      *[_type == "Bin"] | order(name asc) {
-        _id,
-        name,
-        binType,
-        locationDescription,
-        site->{_id, name}
-      }
-    `);
+        const { searchParams } = new URL(req.url);
+        const siteId = searchParams.get('siteId');
 
+        let query;
+        let params = {};
+
+        if (siteId) {
+            query = groq`*[_type == "Bin" && site._ref == $siteId] | order(name asc) {
+                _id,
+                name,
+                binType,
+                locationDescription,
+                site->{_id, name}
+            }`;
+            params = { siteId };
+        } else {
+            query = groq`*[_type == "Bin"] | order(name asc) {
+                _id,
+                name,
+                binType,
+                locationDescription,
+                site->{_id, name}
+            }`;
+        }
+
+        const bins = await writeClient.fetch(query, params);
         return NextResponse.json(bins);
     } catch (error) {
         console.error('Error fetching bins:', error);

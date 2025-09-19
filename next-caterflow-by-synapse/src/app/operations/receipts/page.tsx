@@ -64,7 +64,7 @@ export default function GoodsReceiptsPage() {
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const toast = useToast();
-    const [viewMode, setViewMode] = useState<'actionRequired' | 'all'>('actionRequired');
+    const [viewMode, setViewMode] = useState<'actionRequired' | 'all'>('all');
     const [selectedGoodsReceipt, setSelectedGoodsReceipt] = useState<any>(null);
     const { isOpen: isReceiptModalOpen, onOpen: onReceiptModalOpen, onClose: onReceiptModalClose } = useDisclosure();
     const { isOpen: isPOSelectionModalOpen, onOpen: onPOSelectionModalOpen, onClose: onPOSelectionModalClose } = useDisclosure();
@@ -275,25 +275,31 @@ export default function GoodsReceiptsPage() {
             <Flex
                 justifyContent="space-between"
                 alignItems={{ base: 'flex-start', md: 'center' }}
+                py={4}
                 mb={6}
                 flexDirection={{ base: 'column', md: 'row' }}
-                gap={4}
+                gap={{ base: 4, md: 3 }}
             >
-                <Heading as="h1" size="lg">Goods Receipts</Heading>
-                <HStack>
-                    <Button
-                        leftIcon={<FiFilter />}
-                        colorScheme={viewMode === 'actionRequired' ? 'brand' : 'gray'}
-                        onClick={() => setViewMode('actionRequired')}
-                    >
-                        Action Required
-                    </Button>
+                <Heading as="h1" size="xl">
+                    Goods Receipt
+                </Heading>
+                <HStack spacing={3} flexWrap="wrap">
                     <Button
                         leftIcon={<FiEye />}
                         colorScheme={viewMode === 'all' ? 'brand' : 'gray'}
                         onClick={() => setViewMode('all')}
+                        variant="outline"
                     >
                         View All
+                    </Button>
+
+                    <Button
+                        leftIcon={<FiFilter />}
+                        colorScheme={viewMode === 'actionRequired' ? 'brand' : 'gray'}
+                        onClick={() => setViewMode('actionRequired')}
+                        variant="outline"
+                    >
+                        Action Required
                     </Button>
                     <Button
                         leftIcon={<Icon as={FiPlus} />}
@@ -304,20 +310,6 @@ export default function GoodsReceiptsPage() {
                     </Button>
                 </HStack>
             </Flex>
-            <Card mb={4}>
-                <CardBody>
-                    <InputGroup>
-                        <InputLeftElement pointerEvents="none">
-                            <Icon as={FiSearch} color={searchIconColor} />
-                        </InputLeftElement>
-                        <Input
-                            placeholder="Search by receipt number or PO number..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                        />
-                    </InputGroup>
-                </CardBody>
-            </Card>
             <Card>
                 <CardBody p={0}>
                     <DataTable

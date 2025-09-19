@@ -33,6 +33,7 @@ import {
     Button,
     HStack,
     VStack,
+    Badge,
 } from '@chakra-ui/react';
 import { useSession } from 'next-auth/react'
 import { FiCheckCircle, FiXCircle } from 'react-icons/fi';
@@ -50,7 +51,7 @@ interface OrderedItem {
     supplier: {
         _id: string;
         name: string;
-    };
+    } | null; // Supplier can be null
     orderedQuantity: number;
     unitPrice: number;
 }
@@ -74,10 +75,6 @@ interface ApprovalAction {
 }
 
 export default function ApprovalsPage() {
-    // Replace this:
-    // const { isAuthenticated, isAuthReady, user } = useSession();
-
-    // With this:
     const { data: session, status } = useSession();
     const isAuthReady = status !== 'loading';
     const isAuthenticated = status === 'authenticated';
@@ -176,7 +173,7 @@ export default function ApprovalsPage() {
                 body: JSON.stringify({
                     id: selectedApproval._id,
                     status: 'approved',
-                    approvedBy: user?.id, // Use user.id instead of user._id
+                    approvedBy: user?.id,
                     approvedAt: new Date().toISOString(),
                 }),
             });
@@ -217,7 +214,7 @@ export default function ApprovalsPage() {
                 body: JSON.stringify({
                     id: selectedApproval._id,
                     status: 'rejected',
-                    rejectedBy: user?.id, // Use user.id instead of user._id
+                    rejectedBy: user?.id,
                     rejectedAt: new Date().toISOString(),
                 }),
             });
@@ -248,22 +245,48 @@ export default function ApprovalsPage() {
         }
     };
 
+    // Helper function to get unique supplier names with fallback
+    const getSupplierNames = (orderedItems: OrderedItem[] | undefined) => {
+        if (!orderedItems || orderedItems.length === 0) {
+            return 'No suppliers specified';
+        }
+
+        // Safely access the supplier name using optional chaining
+        const suppliers = orderedItems
+            .map(item => item.supplier?.name)
+            .filter(name => name && name.trim() !== '');
+
+        if (suppliers.length === 0) {
+            return 'No suppliers specified';
+        }
+
+        const uniqueSuppliers = [...new Set(suppliers)];
+        return uniqueSuppliers.join(', ');
+    };
+
+    // Helper function to get item description with fallback
+    const getItemDescription = (row: any) => {
+        if (row._type === 'PurchaseOrder' && row.orderedItems) {
+            const itemCount = row.orderedItems.length;
+            const supplierInfo = getSupplierNames(row.orderedItems);
+
+            return (
+                <Box>
+                    <Text>{row.description || `Purchase Order with ${itemCount} item(s)`}</Text>
+                    <Text fontSize="sm" color="gray.600" mt={1}>
+                        Suppliers: {supplierInfo}
+                    </Text>
+                </Box>
+            );
+        }
+        return <Text>{row.description || 'No description available'}</Text>;
+    };
+
     // Filter approvals by type for tabs
     const filteredApprovals = pendingApprovals.filter(action => {
         const type = actionTypes[activeTab];
         return action._type === type;
     });
-
-    // Helper function to get unique supplier names
-    const getSupplierNames = (orderedItems: OrderedItem[] | undefined) => {
-        if (!orderedItems || orderedItems.length === 0) {
-            return 'N/A';
-        }
-        // Safely access the supplier name using optional chaining
-        const suppliers = orderedItems.map(item => item.supplier?.name).filter(Boolean);
-        const uniqueSuppliers = [...new Set(suppliers)];
-        return uniqueSuppliers.join(', ');
-    };
 
     // Update loading check to use status
     if (status === 'loading' || loading) {
@@ -323,7 +346,12 @@ export default function ApprovalsPage() {
                                                 </Button>
                                             )
                                         },
-                                        { accessorKey: 'poNumber', header: 'PO Number', isSortable: true },
+                                        {
+                                            accessorKey: 'poNumber',
+                                            header: 'PO Number',
+                                            isSortable: true,
+                                            cell: (row: any) => row.poNumber || 'N/A'
+                                        },
                                         {
                                             accessorKey: 'suppliers',
                                             header: 'Suppliers',
@@ -343,9 +371,9 @@ export default function ApprovalsPage() {
                                                 if (row._type === 'PurchaseOrder' && row.orderedItems) {
                                                     return (
                                                         <Box>
-                                                            <Text>{row.description}</Text>
+                                                            <Text>Items:</Text>
                                                             <Text fontSize="sm" color="gray.600" mt={1}>
-                                                                Items: {row.orderedItems.map((item: any) =>
+                                                                {row.orderedItems.map((item: any) =>
                                                                     `${item.stockItem.name} (${item.orderedQuantity})`
                                                                 ).join(', ')}
                                                             </Text>
@@ -355,8 +383,27 @@ export default function ApprovalsPage() {
                                                 return <Text>{row.description}</Text>;
                                             }
                                         },
-                                        { accessorKey: 'siteName', header: 'Site', isSortable: true },
-                                        { accessorKey: 'priority', header: 'Priority', isSortable: true },
+                                        {
+                                            accessorKey: 'siteName',
+                                            header: 'Site',
+                                            isSortable: true,
+                                            cell: (row: any) => row.siteName || 'N/A'
+                                        },
+                                        {
+                                            accessorKey: 'priority',
+                                            header: 'Priority',
+                                            isSortable: true,
+                                            cell: (row: any) => (
+                                                <Badge
+                                                    colorScheme={
+                                                        row.priority === 'high' ? 'red' :
+                                                            row.priority === 'medium' ? 'orange' : 'gray'
+                                                    }
+                                                >
+                                                    {row.priority?.toUpperCase() || 'MEDIUM'}
+                                                </Badge>
+                                            )
+                                        },
                                         {
                                             accessorKey: 'createdAt',
                                             header: 'Created At',
@@ -387,14 +434,15 @@ export default function ApprovalsPage() {
                     </ModalHeader>
                     <ModalBody>
                         <VStack spacing={4} align="stretch">
-                            <Flex justifyContent="space-between" flexWrap="wrap">
+                            <Flex justifyContent="space-between" flexWrap="wrap" gap={4}>
                                 <Box>
                                     <Text fontWeight="bold">Reference Number:</Text>
                                     <Text>
                                         {selectedApproval?.poNumber ||
                                             selectedApproval?.transferNumber ||
                                             selectedApproval?.adjustmentNumber ||
-                                            selectedApproval?.receiptNumber}
+                                            selectedApproval?.receiptNumber ||
+                                            'N/A'}
                                     </Text>
                                 </Box>
                                 {selectedApproval?.orderedItems && (
@@ -405,7 +453,7 @@ export default function ApprovalsPage() {
                                 )}
                                 <Box>
                                     <Text fontWeight="bold">Site:</Text>
-                                    <Text>{selectedApproval?.siteName}</Text>
+                                    <Text>{selectedApproval?.siteName || 'N/A'}</Text>
                                 </Box>
                                 {selectedApproval?.orderedBy && (
                                     <Box>
@@ -434,10 +482,10 @@ export default function ApprovalsPage() {
                                             <Tbody>
                                                 {selectedApproval.orderedItems.map((item) => (
                                                     <Tr key={item._key}>
-                                                        <Td>{item.stockItem.name}</Td>
+                                                        <Td>{item.stockItem?.name || 'Unknown Item'}</Td>
                                                         <Td isNumeric>{item.orderedQuantity}</Td>
                                                         <Td isNumeric>E {item.unitPrice?.toFixed(2)}</Td>
-                                                        <Td>{item.supplier.name}</Td>
+                                                        <Td>{item.supplier?.name || 'No supplier'}</Td>
                                                         <Td isNumeric>E {(item.unitPrice * item.orderedQuantity).toFixed(2)}</Td>
                                                     </Tr>
                                                 ))}
