@@ -11,8 +11,12 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
         }
 
-        // Fetch current PO
-        const currentPO = await writeClient.fetch(`*[_id == $poId][0]`, { poId });
+        // Fetch current PO - FIXED: Use correct type "PurchaseOrder"
+        const currentPO = await writeClient.fetch(
+            `*[_type == "PurchaseOrder" && _id == $poId][0]`,
+            { poId }
+        );
+
         if (!currentPO) {
             return NextResponse.json({ error: 'Purchase order not found' }, { status: 404 });
         }
@@ -47,9 +51,9 @@ export async function POST(request: Request) {
             .set({ orderedItems: updatedOrderedItems })
             .commit();
 
-        // Re-fetch the updated PO
+        // Re-fetch the updated PO - FIXED: Use correct type "PurchaseOrder"
         const query = groq`
-            *[_id == $poId][0]{
+            *[_type == "PurchaseOrder" && _id == $poId][0]{
                 _id,
                 _type,
                 poNumber,
@@ -68,6 +72,10 @@ export async function POST(request: Request) {
             }
         `;
         const updatedPO = await writeClient.fetch(query, { poId });
+
+        if (!updatedPO) {
+            return NextResponse.json({ error: 'Failed to fetch updated purchase order' }, { status: 500 });
+        }
 
         // Manually generate supplier names
         const supplierNames = updatedPO.orderedItems

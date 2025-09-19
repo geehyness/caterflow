@@ -398,44 +398,6 @@ export default function ProcurementPage() {
         }
     };
 
-    const handleProcessPO = async () => {
-        if (!selectedPO) return;
-        setProcessing(true);
-        try {
-            const response = await fetch(`/api/purchase-orders/${selectedPO._id}`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ updateData: { status: 'processed' } })
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || 'Failed to process purchase order');
-            }
-
-            toast({
-                title: 'Success',
-                description: 'Purchase order processed successfully',
-                status: 'success',
-                duration: 3000,
-                isClosable: true,
-            });
-
-            onEditModalClose();
-            await fetchApprovedPOs();
-        } catch (err: any) {
-            console.error('Failed to process purchase order:', err);
-            toast({
-                title: 'Error',
-                description: err?.message || 'Failed to process purchase order',
-                status: 'error',
-                duration: 5000,
-                isClosable: true,
-            });
-        } finally {
-            setProcessing(false);
-        }
-    };
 
     /* ---------- Validation helpers & UI state ---------- */
 
@@ -539,6 +501,126 @@ export default function ProcurementPage() {
             )
         }
     ];
+
+    // Add this function after handleProcessPO
+    const handleSaveChanges = async () => {
+        if (!selectedPO) return;
+        setSaving(true);
+
+        try {
+            const updates = selectedPO.orderedItems.map(item => {
+                const supplierId = editedSuppliers[item._key] ?? item.supplier?._id;
+                const totalPrice = editedPrices[item._key];
+
+                return {
+                    itemKey: item._key,
+                    supplierId: supplierId,
+                    newPrice: totalPrice ? totalPrice / item.orderedQuantity : undefined
+                };
+            }).filter(update => update.supplierId && update.newPrice);
+
+            // Update the purchase order items
+            await updatePurchaseOrderItems(selectedPO._id, updates);
+
+            // Update stock item prices
+            for (const item of selectedPO.orderedItems) {
+                const totalPrice = editedPrices[item._key];
+                if (totalPrice) {
+                    const unitPrice = totalPrice / item.orderedQuantity;
+                    await updateStockItemUnitPrice(item.stockItem._id, unitPrice);
+                }
+            }
+
+            toast({
+                title: 'Success',
+                description: 'Changes saved successfully',
+                status: 'success',
+                duration: 3000,
+                isClosable: true,
+            });
+
+            onEditModalClose();
+            await fetchApprovedPOs();
+        } catch (err: any) {
+            console.error('Failed to save changes:', err);
+            toast({
+                title: 'Error',
+                description: err?.message || 'Failed to save changes',
+                status: 'error',
+                duration: 5000,
+                isClosable: true,
+            });
+        } finally {
+            setSaving(false);
+        }
+    };
+
+
+    // Replace the existing handleProcessPO function with this:
+    const handleProcessPO = async () => {
+        if (!selectedPO) return;
+        setProcessing(true);
+
+        try {
+            // First, save all the changes to the purchase order items
+            const updates = selectedPO.orderedItems.map(item => {
+                const supplierId = editedSuppliers[item._key] ?? item.supplier?._id;
+                const totalPrice = editedPrices[item._key];
+
+                return {
+                    itemKey: item._key,
+                    supplierId: supplierId,
+                    newPrice: totalPrice ? totalPrice / item.orderedQuantity : undefined
+                };
+            }).filter(update => update.supplierId && update.newPrice);
+
+            // Update the purchase order items
+            await updatePurchaseOrderItems(selectedPO._id, updates);
+
+            // Then update the stock items with the new prices
+            for (const item of selectedPO.orderedItems) {
+                const totalPrice = editedPrices[item._key];
+                if (totalPrice) {
+                    const unitPrice = totalPrice / item.orderedQuantity;
+                    await updateStockItemUnitPrice(item.stockItem._id, unitPrice);
+                }
+            }
+
+            // Finally, process the purchase order
+            const response = await fetch(`/api/purchase-orders/${selectedPO._id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ updateData: { status: 'processed' } })
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Failed to process purchase order');
+            }
+
+            toast({
+                title: 'Success',
+                description: 'Purchase order processed successfully',
+                status: 'success',
+                duration: 3000,
+                isClosable: true,
+            });
+
+            onEditModalClose();
+            await fetchApprovedPOs();
+        } catch (err: any) {
+            console.error('Failed to process purchase order:', err);
+            toast({
+                title: 'Error',
+                description: err?.message || 'Failed to process purchase order',
+                status: 'error',
+                duration: 5000,
+                isClosable: true,
+            });
+        } finally {
+            setProcessing(false);
+        }
+    };
 
     /* ---------- Render ---------- */
 
@@ -707,7 +789,7 @@ export default function ProcurementPage() {
                             </Button>
                             <Button
                                 colorScheme="blue"
-                                onClick={() => console.log('Save Changes')} // replace with your save handler
+                                onClick={handleSaveChanges} // replace with your save handler
                                 isDisabled={!canSaveChanges()}
                             >
                                 Save All Changes

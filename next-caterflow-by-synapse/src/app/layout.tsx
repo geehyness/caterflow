@@ -8,6 +8,7 @@ import { SidebarProvider } from "@/context/SidebarContext";
 import { Box } from "@chakra-ui/react";
 import { Footer } from "@/components/Footer"; // Import the Footer component
 import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
+import { SpeedInsights } from "@vercel/speed-insights/next"
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -48,6 +49,7 @@ export default function RootLayout({
               <Box flex="1">
                 {children}
               </Box>
+              <SpeedInsights />
               <Footer appName="Caterflow" />
             </Box>
             <ServiceWorkerRegister />
