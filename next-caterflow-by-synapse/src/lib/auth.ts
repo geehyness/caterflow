@@ -1,8 +1,8 @@
 import type { NextAuthOptions } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import { groq } from 'next-sanity';
-import { client } from '@/lib/sanity';
-import { compare } from 'bcryptjs';
+import { client, writeClient } from '@/lib/sanity';
+import { compare, hash } from 'bcryptjs';
 
 const userQuery = groq`*[_type == "AppUser" && email == $email][0] {
     _id,
@@ -11,6 +11,7 @@ const userQuery = groq`*[_type == "AppUser" && email == $email][0] {
     name,
     role,
     password,
+    isActive,
     associatedSite->{_id, name}
 }`;
 
@@ -40,11 +41,40 @@ export const authOptions: NextAuthOptions = {
                         return null;
                     }
 
-                    if (!user.password) {
-                        console.log('User has no password set');
-                        return null;
+                    // Check if user is active
+                    if (user.isActive === false) {
+                        console.log('User account is inactive:', user.email);
+                        throw new Error('Account is inactive. Please contact administrator.');
                     }
 
+                    // Handle new users without password
+                    if (!user.password) {
+                        console.log('New user - setting password for:', user.email);
+
+                        // Hash and set the password
+                        const hashedPassword = await hash(credentials.password, 10);
+
+                        // Update user in Sanity with the new password
+                        await writeClient
+                            .patch(user._id)
+                            .set({
+                                password: hashedPassword,
+                                // You might want to set other fields like lastLogin, etc.
+                            })
+                            .commit();
+
+                        console.log('Password set successfully for new user:', user.email);
+
+                        return {
+                            id: user._id,
+                            name: user.name,
+                            email: user.email,
+                            role: user.role,
+                            associatedSite: user.associatedSite || null,
+                        };
+                    }
+
+                    // Existing users - verify password
                     const isValidPassword = await compare(credentials.password, user.password);
 
                     if (!isValidPassword) {
@@ -63,7 +93,13 @@ export const authOptions: NextAuthOptions = {
                     };
                 } catch (error) {
                     console.error('Authorization error:', error);
-                    return null;
+
+                    // Re-throw specific errors to show proper messages
+                    if (error.message.includes('inactive')) {
+                        throw new Error('Account is inactive. Please contact administrator.');
+                    }
+
+                    throw new Error('Authentication failed. Please try again.');
                 }
             },
         }),

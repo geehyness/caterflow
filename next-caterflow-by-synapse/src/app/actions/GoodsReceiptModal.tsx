@@ -1,7 +1,7 @@
 // Please replace the entire file content with this code block
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     Modal,
     ModalOverlay,
@@ -35,21 +35,9 @@ import {
     Spinner,
     Flex,
     Box,
-    AlertDialog,
-    AlertDialogBody,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogContent,
-    AlertDialogOverlay,
-    Icon,
-    InputGroup,
-    InputRightElement,
-    Checkbox,
-    useColorModeValue,
 } from '@chakra-ui/react';
-import { FiCheck, FiSave, FiUpload, FiX, FiCheckCircle } from 'react-icons/fi';
+import { FiCheck, FiSave, FiX, FiCheckCircle } from 'react-icons/fi';
 import FileUploadModal from '@/components/FileUploadModal';
-import { Reference } from 'sanity';
 
 import BinSelectorModal from '@/components/BinSelectorModal';
 
@@ -134,7 +122,6 @@ export default function GoodsReceiptModal({
     const toast = useToast();
     const [isSaving, setIsSaving] = useState(false);
     const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
-    const cancelRef = useRef<HTMLButtonElement>(null);
 
     const isNewReceipt = !receipt || receipt._id.startsWith('temp-');
 
@@ -149,7 +136,7 @@ export default function GoodsReceiptModal({
     const [notes, setNotes] = useState('');
     const [availableBins, setAvailableBins] = useState<Bin[]>([]);
     const [selectedItemsKeys, setSelectedItemsKeys] = useState<string[]>([]);
-    const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+    const [savedReceiptId, setSavedReceiptId] = useState<string>('');
 
     useEffect(() => {
         if (receipt && !isNewReceipt) {
@@ -159,9 +146,11 @@ export default function GoodsReceiptModal({
             setReceiptDate(receipt.receiptDate || '');
             setSelectedBin(receipt.receivingBin?._id || '');
             setNotes(receipt.notes || '');
+            setSavedReceiptId(receipt._id); // Set saved receipt ID for existing receipts
         } else if (isNewReceipt && preSelectedPO) {
             setSelectedPOId(preSelectedPO);
             setReceiptDate(new Date().toISOString().split('T')[0]);
+            setSavedReceiptId(''); // Reset saved receipt ID for new receipts
         }
     }, [receipt, isNewReceipt, preSelectedPO]);
 
@@ -171,6 +160,13 @@ export default function GoodsReceiptModal({
             setReceiptNumber(`GR-${timestamp}`);
         }
     }, [receiptNumber, receipt]);
+
+    useEffect(() => {
+        // Reset savedReceiptId when modal closes
+        if (!isOpen) {
+            setSavedReceiptId('');
+        }
+    }, [isOpen]);
 
     useEffect(() => {
         const loadItemsFromPO = async () => {
@@ -291,9 +287,6 @@ export default function GoodsReceiptModal({
         setSelectedItemsKeys([]);
     };
 
-    const handleSelectionChange = (selectedData: any[]) => {
-        setSelectedItemsKeys(selectedData.map(item => item._key));
-    };
 
     const determineStatus = () => {
         if (receivedItems.length === 0) return 'draft';
@@ -308,7 +301,7 @@ export default function GoodsReceiptModal({
         return 'draft';
     };
 
-    const saveReceipt = async (status: string, attachmentId?: string) => {
+    const saveReceipt = async (status: string = 'draft'): Promise<any> => {
         setIsSaving(true);
         if (!selectedPOId || !selectedBin) {
             toast({
@@ -319,7 +312,7 @@ export default function GoodsReceiptModal({
                 isClosable: true,
             });
             setIsSaving(false);
-            return;
+            throw new Error('Missing purchase order or bin');
         }
 
         try {
@@ -349,20 +342,9 @@ export default function GoodsReceiptModal({
             };
 
             if (!isNewReceipt && receipt?._id) {
-                // This is an update, so use the dynamic route
                 url = `/api/goods-receipts/${receipt._id}`;
-                method = 'POST';
+                method = 'PUT';
                 payload._id = receipt._id;
-
-                // Only send the fields that can be updated
-                payload.status = status;
-                payload.notes = notes;
-                payload.receivingBin = { _type: 'reference', _ref: selectedBin };
-                payload.receivedItems = itemsToSave;
-
-                if (attachmentId) {
-                    payload.attachments = [...(receipt?.attachments || []), { _type: 'reference', _ref: attachmentId }];
-                }
             }
 
             const response = await fetch(url, {
@@ -374,14 +356,19 @@ export default function GoodsReceiptModal({
             });
 
             if (response.ok) {
-                toast({
-                    title: `Receipt ${status === 'draft' ? 'saved' : 'completed'}`,
-                    description: `Goods receipt has been ${status === 'draft' ? 'saved' : 'completed'} successfully.`,
-                    status: 'success',
-                    duration: 5000,
-                    isClosable: true,
-                });
-                onSave();
+                const result = await response.json();
+
+                if (status === 'draft') {
+                    toast({
+                        title: 'Draft Saved',
+                        description: 'Goods receipt has been saved as draft.',
+                        status: 'success',
+                        duration: 3000,
+                        isClosable: true,
+                    });
+                }
+
+                return result;
             } else {
                 const errorData = await response.json();
                 throw new Error(errorData.error || 'Failed to save goods receipt');
@@ -395,21 +382,21 @@ export default function GoodsReceiptModal({
                 duration: 5000,
                 isClosable: true,
             });
+            throw error;
         } finally {
             setIsSaving(false);
         }
     };
 
     const handleSaveDraft = () => {
-        const status = determineStatus();
-        if (status === 'completed') {
-            setIsConfirmOpen(true);
-        } else {
-            saveReceipt(status);
-        }
+        saveReceipt('draft').then(() => {
+            onSave();
+        }).catch(() => {
+            // Error handling is already done in saveReceipt
+        });
     };
 
-    const handleCompleteReceipt = () => {
+    const handleCompleteReceipt = async () => {
         if (!isFullyReceived) {
             toast({
                 title: 'Incomplete Receipt',
@@ -420,12 +407,97 @@ export default function GoodsReceiptModal({
             });
             return;
         }
-        setIsUploadModalOpen(true);
+
+        try {
+            setIsSaving(true);
+
+            // For new receipts, save first to get a real ID
+            let finalReceiptId = receipt?._id;
+            if (isNewReceipt) {
+                const savedReceipt = await saveReceipt('draft');
+                finalReceiptId = savedReceipt._id;
+                setSavedReceiptId(finalReceiptId); // Store the real ID
+
+                // Update the local receipt state with the saved receipt
+                setReceiptNumber(savedReceipt.receiptNumber);
+            } else {
+                setSavedReceiptId(finalReceiptId); // Store the existing ID
+            }
+
+            if (!finalReceiptId) {
+                throw new Error('Could not determine receipt ID');
+            }
+
+            // Now open the upload modal
+            setIsUploadModalOpen(true);
+
+        } catch (error) {
+            console.error('Failed to prepare receipt for completion:', error);
+            toast({
+                title: 'Error',
+                description: `Failed to prepare receipt for completion. ${error instanceof Error ? error.message : ''}`,
+                status: 'error',
+                duration: 5000,
+                isClosable: true,
+            });
+        } finally {
+            setIsSaving(false);
+        }
     };
 
     const handleFinalizeReceipt = async (attachmentId: string) => {
         setIsUploadModalOpen(false);
-        saveReceipt('completed', attachmentId);
+
+        try {
+            setIsSaving(true);
+
+            // Use the saved receipt ID (either from props or from the save operation)
+            const receiptIdToUse = savedReceiptId || receipt?._id;
+
+            if (!receiptIdToUse) {
+                throw new Error('No receipt ID available for completion');
+            }
+
+            // Use the transaction API to complete both receipt and PO
+            const completeResponse = await fetch('/api/complete-goods-receipt', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    receiptId: receiptIdToUse,
+                    poId: selectedPOId,
+                    attachmentId
+                }),
+            });
+
+            if (!completeResponse.ok) {
+                const errorData = await completeResponse.json();
+                throw new Error(errorData.error || 'Failed to complete goods receipt transaction');
+            }
+
+            toast({
+                title: 'Receipt Completed',
+                description: 'Goods receipt has been completed successfully with evidence.',
+                status: 'success',
+                duration: 5000,
+                isClosable: true,
+            });
+
+            onSave();
+            onClose();
+        } catch (error) {
+            console.error('Completion error:', error);
+            toast({
+                title: 'Error',
+                description: `Failed to complete goods receipt. ${error instanceof Error ? error.message : ''}`,
+                status: 'error',
+                duration: 5000,
+                isClosable: true,
+            });
+        } finally {
+            setIsSaving(false);
+        }
     };
 
     const getStatusColor = (status: string) => {
@@ -719,7 +791,7 @@ export default function GoodsReceiptModal({
                                     isDisabled={!isFullyReceived || !selectedPOId || receivedItems.length === 0 || !selectedBin}
                                     leftIcon={<FiCheckCircle />}
                                 >
-                                    Complete Receipt
+                                    {isNewReceipt ? 'Save & Upload Evidence' : 'Upload Evidence & Complete'}
                                 </Button>
                             </>
                         )}
@@ -731,10 +803,10 @@ export default function GoodsReceiptModal({
                 isOpen={isUploadModalOpen}
                 onClose={() => setIsUploadModalOpen(false)}
                 onUploadComplete={handleFinalizeReceipt}
-                relatedToId={receipt?._id || ''}
+                relatedToId={savedReceiptId || receipt?._id || ''} // Use the saved ID if available
                 fileType="receipt"
-                title="Upload Receipt Photos"
-                description="Please upload photos of the received goods for verification."
+                title="Upload Receipt Evidence"
+                description="Please upload photos or documents as evidence before completing the receipt. This will also mark the purchase order as completed."
             />
 
             <BinSelectorModal
@@ -742,34 +814,6 @@ export default function GoodsReceiptModal({
                 onClose={() => setIsBinSelectorOpen(false)}
                 onSelect={handleBinSelect}
             />
-
-            {/* Confirmation Dialog */}
-            <AlertDialog
-                isOpen={isConfirmOpen}
-                leastDestructiveRef={cancelRef}
-                onClose={() => setIsConfirmOpen(false)}
-            >
-                <AlertDialogOverlay>
-                    <AlertDialogContent>
-                        <AlertDialogHeader fontSize="lg" fontWeight="bold">
-                            Confirm Complete Receipt
-                        </AlertDialogHeader>
-
-                        <AlertDialogBody>
-                            Are you sure you want to mark this receipt as complete? This will also mark the associated purchase order as completed and cannot be undone.
-                        </AlertDialogBody>
-
-                        <AlertDialogFooter>
-                            <Button ref={cancelRef} onClick={() => setIsConfirmOpen(false)}>
-                                Cancel
-                            </Button>
-                            <Button colorScheme="green" onClick={() => saveReceipt('completed')} ml={3}>
-                                Confirm Complete
-                            </Button>
-                        </AlertDialogFooter>
-                    </AlertDialogContent>
-                </AlertDialogOverlay>
-            </AlertDialog>
         </>
     );
 }

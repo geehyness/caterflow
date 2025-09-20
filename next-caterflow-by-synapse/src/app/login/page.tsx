@@ -61,6 +61,7 @@ export default function LoginPage() {
     }
   }, [status, router, redirect]);
 
+  // In your handleLogin function in page.tsx
   const handleLogin = async (event: React.FormEvent) => {
     event.preventDefault();
     setIsLoading(true);
@@ -73,9 +74,18 @@ export default function LoginPage() {
       });
 
       if (result?.error) {
+        // Handle specific error messages
+        let errorMessage = 'Invalid email or password.';
+
+        if (result.error.includes('Account is inactive')) {
+          errorMessage = 'Account is inactive. Please contact administrator.';
+        } else if (result.error.includes('Authentication failed')) {
+          errorMessage = 'Authentication failed. Please try again.';
+        }
+
         toast({
           title: 'Login failed.',
-          description: 'Invalid email or password.',
+          description: errorMessage,
           status: 'error',
           duration: 5000,
           isClosable: true,

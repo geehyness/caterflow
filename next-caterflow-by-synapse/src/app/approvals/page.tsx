@@ -97,6 +97,20 @@ export default function ApprovalsPage() {
         'StockAdjustment': 'Stock Adjustments',
     };
 
+    // Add this helper function at the top of your component
+    const getActionTypeTitle = (type: string): string => {
+        const titles: Record<string, string> = {
+            PurchaseOrder: 'Purchase Orders',
+            GoodsReceipt: 'Goods Receipts',
+            DispatchLog: 'Dispatch Logs',
+            InternalTransfer: 'Internal Transfers',
+            StockAdjustment: 'Stock Adjustments',
+            InventoryCount: 'Inventory Counts',
+        };
+
+        return titles[type] || 'Items';
+    };
+
     const fetchPendingApprovals = useCallback(async () => {
         setLoading(true);
         setError(null);
@@ -327,7 +341,7 @@ export default function ApprovalsPage() {
                         <TabPanel key={type}>
                             {filteredApprovals.length === 0 ? (
                                 <Text fontSize="lg" color="gray.500">
-                                    No pending {actionTypeTitles[type].toLowerCase()} for approval.
+                                    No pending {getActionTypeTitle(type).toLowerCase()} for approval.
                                 </Text>
                             ) : (
                                 <DataTable

@@ -79,12 +79,15 @@ export default function GoodsReceiptsPage() {
     // Also update the fetch functions to remove their individual loading states:
     const fetchGoodsReceipts = useCallback(async () => {
         try {
+            console.log('Fetching goods receipts...');
             const response = await fetch('/api/goods-receipts');
             if (response.ok) {
                 const data = await response.json();
+                console.log('Goods receipts fetched:', data);
                 setGoodsReceipts(data || []);
                 setGoodsReceiptsList(data || []);
             } else {
+                console.error('Failed to fetch goods receipts:', response.status);
                 throw new Error('Failed to fetch goods receipts');
             }
         } catch (error) {
@@ -99,14 +102,20 @@ export default function GoodsReceiptsPage() {
         }
     }, [toast]);
 
-
     const fetchAllPurchaseOrders = useCallback(async () => {
         try {
+            console.log('Fetching all purchase orders...');
             const response = await fetch('/api/purchase-orders');
             if (response.ok) {
                 const data = await response.json();
+                console.log('Purchase orders fetched:', data);
                 setAllPurchaseOrders(data || []);
-                setApprovedPurchaseOrders(data.filter((po: any) => po.status === 'approved') || []);
+
+                // Also log the approved ones specifically
+                const approvedPOs = data.filter((po: any) => po.status === 'processed');
+                console.log('Approved purchase orders:', approvedPOs);
+
+                setApprovedPurchaseOrders(approvedPOs || []);
             } else {
                 console.error('Failed to fetch purchase orders:', response.status);
             }
@@ -149,18 +158,44 @@ export default function GoodsReceiptsPage() {
     }, [goodsReceipts, searchTerm, viewMode]);
 
     // Get approved POs without receipts
+    // Update your getApprovedPOsWithoutReceipts function with detailed logging
     const getApprovedPOsWithoutReceipts = (): any[] => {
+        console.log('=== DEBUG: getApprovedPOsWithoutReceipts START ===');
+
+        // Log all goods receipts
+        console.log('All goods receipts:', goodsReceiptsList);
+
         // Get all PO IDs that have receipts
         const poIdsWithReceipts = new Set(
             goodsReceiptsList
                 .filter(receipt => receipt.purchaseOrder)
-                .map(receipt => getReferenceId(receipt.purchaseOrder))
+                .map(receipt => {
+                    const poId = getReferenceId(receipt.purchaseOrder);
+                    console.log(`Receipt ${receipt._id} has PO ID: ${poId}`);
+                    return poId;
+                })
         );
 
+        console.log('PO IDs with receipts:', Array.from(poIdsWithReceipts));
+
+        // Log all purchase orders
+        console.log('All purchase orders:', allPurchaseOrders);
+
         // Filter approved POs that don't have receipts
-        return allPurchaseOrders
-            .filter(po => po.status === 'approved' && !poIdsWithReceipts.has(po._id))
-            .map(po => ({
+        const approvedPOs = allPurchaseOrders.filter(po => {
+            const isApproved = po.status === 'processed';
+            const hasReceipt = poIdsWithReceipts.has(po._id);
+
+            console.log(`PO ${po._id} (${po.poNumber}): status=${po.status}, hasReceipt=${hasReceipt}, isApproved=${isApproved}`);
+
+            return isApproved && !hasReceipt;
+        });
+
+        console.log('Approved POs without receipts:', approvedPOs);
+
+        // Transform the data
+        const result = approvedPOs.map(po => {
+            const transformed = {
                 _id: po._id,
                 _type: 'purchaseOrder',
                 _createdAt: po.orderDate || new Date().toISOString(),
@@ -177,7 +212,16 @@ export default function GoodsReceiptsPage() {
                 orderedItems: po.orderedItems || [],
                 orderedBy: po.orderedBy || '',
                 totalAmount: po.totalAmount || 0
-            }));
+            };
+
+            console.log(`Transformed PO ${po._id}:`, transformed);
+            return transformed;
+        });
+
+        console.log('Final result:', result);
+        console.log('=== DEBUG: getApprovedPOsWithoutReceipts END ===');
+
+        return result;
     };
 
     const approvedPOsWithoutReceipts = getApprovedPOsWithoutReceipts();
