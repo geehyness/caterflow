@@ -1,9 +1,9 @@
-// pages/api/sites/[siteId]/main-bin/route.ts
-import { NextRequest, NextResponse } from 'next/server';
-import { writeClient } from '@/lib/sanity';
+// src/app/api/sites/[siteId]/main-bin/route.ts
+import { NextResponse } from 'next/server';
+import { client } from '@/lib/sanity';
 import { groq } from 'next-sanity';
 
-export async function GET(req: NextRequest, { params }: { params: { siteId: string } }) {
+export async function GET(request: Request, { params }: { params: { siteId: string } }) {
     try {
         const { siteId } = params;
 
@@ -14,14 +14,17 @@ export async function GET(req: NextRequest, { params }: { params: { siteId: stri
             );
         }
 
+        // Decode the siteId in case it contains special characters
+        const decodedSiteId = decodeURIComponent(siteId);
+
         // Sanity query to find a bin with the binType "main-storage" for the given site
         const query = groq`*[_type == "Bin" && site._ref == $siteId && binType == "main-storage"][0] {
-        _id,
-        name,
-        "site": site->{_id, name}
-    }`;
+            _id,
+            name,
+            "site": site->{_id, name}
+        }`;
 
-        const mainBin = await writeClient.fetch(query, { siteId });
+        const mainBin = await client.fetch(query, { siteId: decodedSiteId });
 
         if (!mainBin) {
             return NextResponse.json(

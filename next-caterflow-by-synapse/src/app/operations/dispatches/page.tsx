@@ -1,3 +1,4 @@
+// src/app/operations/dispatches/page.tsx  (or wherever your original file lives)
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
@@ -33,27 +34,27 @@ interface DispatchRecord {
     evidenceStatus: 'pending' | 'partial' | 'complete';
     peopleFed?: number;
     notes?: string;
-    dispatchType: {
+    dispatchType?: {
         _id: string;
         name: string;
         description?: string;
     };
-    sourceBin: {
+    sourceBin?: {
         _id: string;
         name: string;
-        site: {
+        site?: {
             _id: string;
             name: string;
         };
     };
-    dispatchedBy: {
+    dispatchedBy?: {
         _id: string;
         name: string;
         email: string;
     };
-    dispatchedItems: Array<{
+    dispatchedItems?: Array<{
         _key: string;
-        stockItem: {
+        stockItem?: {
             _id: string;
             name: string;
             sku?: string;
@@ -68,6 +69,7 @@ interface DispatchRecord {
         name: string;
         url: string;
     }>;
+    status?: string;
 }
 
 export default function DispatchesPage() {
@@ -95,7 +97,7 @@ export default function DispatchesPage() {
             const response = await fetch('/api/dispatches');
             if (response.ok) {
                 const data = await response.json();
-                setDispatches(data);
+                setDispatches(data || []);
             } else {
                 throw new Error('Failed to fetch dispatches');
             }
@@ -121,10 +123,10 @@ export default function DispatchesPage() {
         const filtered = searchTerm
             ? dispatches.filter(dispatch => {
                 const term = searchTerm.toLowerCase();
-                const dispatchNumberMatch = dispatch.dispatchNumber.toLowerCase().includes(term);
-                const dispatchTypeMatch = dispatch.dispatchType.name.toLowerCase().includes(term);
-                const sourceBinMatch = dispatch.sourceBin.name.toLowerCase().includes(term);
-                const dispatchedByMatch = dispatch.dispatchedBy.name.toLowerCase().includes(term);
+                const dispatchNumberMatch = (dispatch.dispatchNumber || '').toLowerCase().includes(term);
+                const dispatchTypeMatch = (dispatch.dispatchType?.name || '').toLowerCase().includes(term);
+                const sourceBinMatch = (dispatch.sourceBin?.name || '').toLowerCase().includes(term);
+                const dispatchedByMatch = (dispatch.dispatchedBy?.name || '').toLowerCase().includes(term);
                 return dispatchNumberMatch || dispatchTypeMatch || sourceBinMatch || dispatchedByMatch;
             })
             : dispatches;
@@ -141,9 +143,40 @@ export default function DispatchesPage() {
         onOpen();
     };
 
-    const handleViewDispatch = (dispatch: DispatchRecord) => {
-        setSelectedDispatch(dispatch);
-        onOpen();
+    // Fetch latest single dispatch before opening modal to ensure attachments + evidenceStatus are fresh
+    const handleViewDispatch = async (rowOrRecord: DispatchRecord) => {
+        const record = (rowOrRecord as any)?.original ?? rowOrRecord;
+        if (!record?._id) {
+            toast({
+                title: 'Error',
+                description: 'Invalid dispatch selected.',
+                status: 'error',
+                isClosable: true,
+            });
+            return;
+        }
+
+        try {
+            setLoading(true);
+            const res = await fetch(`/api/dispatches/${record._id}`);
+            if (!res.ok) {
+                throw new Error('Failed to fetch dispatch details');
+            }
+            const latest = await res.json();
+            setSelectedDispatch(latest);
+            onOpen();
+        } catch (err) {
+            console.error('Error loading dispatch details:', err);
+            toast({
+                title: 'Error',
+                description: 'Could not load dispatch details. Please try again.',
+                status: 'error',
+                duration: 5000,
+                isClosable: true,
+            });
+        } finally {
+            setLoading(false);
+        }
     };
 
     const handleSaveSuccess = () => {
@@ -174,17 +207,26 @@ export default function DispatchesPage() {
         {
             accessorKey: 'workflowAction',
             header: 'Action',
-            cell: (row: any) => (
-                <Button
-                    size="sm"
-                    colorScheme={row.evidenceStatus === 'pending' ? 'brand' : 'gray'}
-                    variant={row.evidenceStatus === 'pending' ? 'solid' : 'outline'}
-                    onClick={() => handleViewDispatch(row)}
-                    leftIcon={<Icon as={row.evidenceStatus === 'pending' ? FiEdit : FiEye} />}
-                >
-                    {row.evidenceStatus === 'pending' ? 'Edit' : 'View'}
-                </Button>
-            ),
+            cell: (row: any) => {
+                // support both React-Table style row objects and direct row data
+                const d: DispatchRecord = row?.original ?? row;
+                const isComplete = d?.evidenceStatus === 'complete';
+                const isEditable = !isComplete;
+                const LabelIcon = isComplete ? FiEye : FiEdit;
+
+                return (
+                    <Button
+                        size="sm"
+                        colorScheme={!isComplete ? 'brand' : 'gray'}
+                        variant={!isComplete ? 'solid' : 'outline'}
+                        onClick={() => handleViewDispatch(d)}
+                        leftIcon={<Icon as={LabelIcon} />}
+                        isDisabled={!user}
+                    >
+                        {isComplete ? 'View' : 'Edit'}
+                    </Button>
+                );
+            },
         },
         {
             accessorKey: 'dispatchNumber',
@@ -193,52 +235,74 @@ export default function DispatchesPage() {
         {
             accessorKey: 'dispatchDate',
             header: 'Dispatch Date',
-            cell: (row: DispatchRecord) => new Date(row.dispatchDate).toLocaleDateString(),
+            cell: (row: any) => {
+                const d: DispatchRecord = row?.original ?? row;
+                return d?.dispatchDate ? new Date(d.dispatchDate).toLocaleDateString() : '-';
+            },
         },
         {
             accessorKey: 'dispatchType',
             header: 'Dispatch Type',
-            cell: (row: DispatchRecord) => row.dispatchType?.name,
+            cell: (row: any) => {
+                const d: DispatchRecord = row?.original ?? row;
+                return d?.dispatchType?.name || '-';
+            },
         },
         {
             accessorKey: 'sourceBin',
             header: 'Source Bin',
-            cell: (row: DispatchRecord) => (
-                <Box>
-                    <Text fontWeight="bold">{row.sourceBin?.name}</Text>
-                    <Text fontSize="sm" color={secondaryTextColor}>{row.sourceBin.site.name}</Text>
-                </Box>
-            ),
+            cell: (row: any) => {
+                const d: DispatchRecord = row?.original ?? row;
+                return (
+                    <Box>
+                        <Text fontWeight="bold">{d?.sourceBin?.name || '-'}</Text>
+                        <Text fontSize="sm" color={secondaryTextColor}>{d?.sourceBin?.site?.name || ''}</Text>
+                    </Box>
+                );
+            },
         },
         {
             accessorKey: 'dispatchedBy',
             header: 'Dispatched By',
-            cell: (row: DispatchRecord) => row.dispatchedBy.name,
+            cell: (row: any) => {
+                const d: DispatchRecord = row?.original ?? row;
+                return d?.dispatchedBy?.name || '-';
+            },
         },
         {
             accessorKey: 'description',
             header: 'Items',
-            cell: (row: DispatchRecord) => (
-                <Box>
-                    <Text fontSize="sm" color={secondaryTextColor} noOfLines={2}>
-                        {getItemList(row)}
-                    </Text>
-                </Box>
-            )
+            cell: (row: any) => {
+                const d: DispatchRecord = row?.original ?? row;
+                return (
+                    <Box>
+                        <Text fontSize="sm" color={secondaryTextColor} noOfLines={2}>
+                            {getItemList(d)}
+                        </Text>
+                    </Box>
+                );
+            }
         },
         {
             accessorKey: 'peopleFed',
             header: 'People Fed',
-            cell: (row: DispatchRecord) => row.peopleFed || 'N/A',
+            cell: (row: any) => {
+                const d: DispatchRecord = row?.original ?? row;
+                return d?.peopleFed ?? 'N/A';
+            },
         },
         {
             accessorKey: 'evidenceStatus',
             header: 'Evidence Status',
-            cell: (row: DispatchRecord) => (
-                <Badge colorScheme={getEvidenceStatusColor(row.evidenceStatus)} variant="subtle">
-                    {row.evidenceStatus.toUpperCase()}
-                </Badge>
-            ),
+            cell: (row: any) => {
+                const d: DispatchRecord = row?.original ?? row;
+                const statusStr = d?.evidenceStatus || 'pending';
+                return (
+                    <Badge colorScheme={getEvidenceStatusColor(statusStr)} variant="subtle">
+                        {statusStr.toUpperCase()}
+                    </Badge>
+                );
+            },
         },
     ];
 
@@ -283,8 +347,6 @@ export default function DispatchesPage() {
                     >
                         Action Required
                     </Button>
-
-
 
                     <Button
                         leftIcon={<FiPlus />}

@@ -1,13 +1,22 @@
-// /api/dispatches/route.ts
-
+// src/app/api/dispatches/route.ts
 import { NextResponse } from 'next/server';
 import { client, writeClient } from '@/lib/sanity';
 import { groq } from 'next-sanity';
 import { logSanityInteraction } from '@/lib/sanityLogger';
-import { DispatchedItem } from '@/lib/sanityTypes';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { v4 as uuidv4 } from 'uuid';
+
+// normalize refs to string ids
+const resolveRef = (val: any): string | null => {
+    if (!val && val !== 0) return null;
+    if (typeof val === 'string') return val;
+    if (typeof val === 'object') {
+        if (typeof val._ref === 'string') return val._ref;
+        if (typeof val._id === 'string') return val._id;
+    }
+    return null;
+};
 
 const getNextDispatchNumber = async (): Promise<string> => {
     try {
@@ -21,9 +30,7 @@ const getNextDispatchNumber = async (): Promise<string> => {
 
         if (lastLog && lastLog.dispatchNumber) {
             const lastNumber = parseInt(lastLog.dispatchNumber.split('-').pop() || '0');
-            if (!isNaN(lastNumber)) {
-                nextNumber = lastNumber + 1;
-            }
+            if (!isNaN(lastNumber)) nextNumber = lastNumber + 1;
         }
 
         const paddedNumber = String(nextNumber).padStart(3, '0');
@@ -34,6 +41,7 @@ const getNextDispatchNumber = async (): Promise<string> => {
     }
 };
 
+// --- GET all dispatches ---
 export async function GET() {
     try {
         const query = groq`*[_type == "DispatchLog"] | order(dispatchDate desc) {
@@ -43,13 +51,32 @@ export async function GET() {
             evidenceStatus,
             peopleFed,
             notes,
-            "dispatchType": coalesce(dispatchType->{_id, name, description}, null),
-            "sourceBin": coalesce(sourceBin->{
+            "dispatchType": dispatchType->{
                 _id,
                 name,
-                "site": site->{_id, name}
-            }, null),
-            "dispatchedBy": coalesce(dispatchedBy->{_id, name, email}, null),
+                description,
+                defaultTime
+            },
+            "sourceBin": sourceBin->{
+                _id,
+                name,
+                "site": site->{
+                    _id,
+                    name,
+                    location,
+                    code
+                }
+            },
+            "dispatchedBy": dispatchedBy->{
+                _id,
+                name,
+                email,
+                role,
+                "assignedSite": associatedSite->{
+                    _id,
+                    name
+                }
+            },
             "dispatchedItems": coalesce(dispatchedItems[]{
                 _key,
                 dispatchedQuantity,
@@ -60,24 +87,41 @@ export async function GET() {
                     name,
                     sku,
                     unitOfMeasure,
-                    currentStock
+                    currentStock,
+                    unitPrice,
+                    "category": category->{
+                        _id,
+                        title
+                    }
                 }
             }, []),
-            "attachments": coalesce(attachments[]->{_id, name, url}, [])
+            "attachments": coalesce(attachments[]->{
+                _id,
+                name,
+                url,
+                description,
+                uploadDate
+            }, [])
         }`;
 
         const dispatches = await client.fetch(query);
-        return NextResponse.json(dispatches);
+
+        const validDispatches = dispatches.filter((dispatch: any) =>
+            dispatch.sourceBin !== null &&
+            dispatch.dispatchType !== null
+        );
+
+        return NextResponse.json(validDispatches);
     } catch (error) {
         console.error('Failed to fetch dispatches:', error);
         return NextResponse.json({ error: 'Failed to fetch dispatches' }, { status: 500 });
     }
 }
 
+// --- POST create dispatch ---
 export async function POST(request: Request) {
     try {
         const session = await getServerSession(authOptions);
-
         if (!session || !session.user) {
             return NextResponse.json({ error: 'User not authenticated' }, { status: 401 });
         }
@@ -85,7 +129,28 @@ export async function POST(request: Request) {
         const body = await request.json();
         const { _id, ...createData } = body;
 
-        const newDoc = {
+        if (!createData.dispatchType || !createData.sourceBin || !createData.dispatchDate) {
+            return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+        }
+
+        // normalize references
+        const dispatchTypeRef = resolveRef(createData.dispatchType);
+        const sourceBinRef = resolveRef(createData.sourceBin);
+        const dispatchedByRef = resolveRef(createData.dispatchedBy) || session.user.id;
+
+        const dispatchedItems = (createData.dispatchedItems || []).map((item: any) => ({
+            _type: 'DispatchedItem',
+            _key: item._key || uuidv4(),
+            stockItem: {
+                _type: 'reference',
+                _ref: resolveRef(item.stockItem) || resolveRef(item.stockItem?._id) || null,
+            },
+            dispatchedQuantity: item.dispatchedQuantity,
+            totalCost: item.totalCost || 0,
+            notes: item.notes || '',
+        }));
+
+        const newDoc: any = {
             ...createData,
             _type: 'DispatchLog',
             dispatchNumber: await getNextDispatchNumber(),
@@ -93,6 +158,11 @@ export async function POST(request: Request) {
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
             evidenceStatus: 'pending',
+            peopleFed: createData.peopleFed || undefined,
+            dispatchType: dispatchTypeRef ? { _type: 'reference', _ref: dispatchTypeRef } : undefined,
+            sourceBin: sourceBinRef ? { _type: 'reference', _ref: sourceBinRef } : undefined,
+            dispatchedBy: dispatchedByRef ? { _type: 'reference', _ref: dispatchedByRef } : undefined,
+            dispatchedItems,
         };
 
         const result = await writeClient.create(newDoc);
@@ -113,6 +183,9 @@ export async function POST(request: Request) {
     }
 }
 
+// --- PATCH update by body (legacy / optional) ---
+// This handler expects a JSON body with an _id field to identify which doc to update.
+// It will reject edits if the existing document already has evidenceStatus === 'complete'.
 export async function PATCH(request: Request) {
     try {
         const session = await getServerSession(authOptions);
@@ -123,41 +196,78 @@ export async function PATCH(request: Request) {
         const body = await request.json();
         const { _id, ...updateData } = body;
 
-        let dispatchedItems: DispatchedItem[] | undefined;
-        if (updateData.items) {
-            dispatchedItems = updateData.items.map((item: any) => ({
-                _type: 'DispatchedItem',
-                _key: item._key || uuidv4(),
-                stockItem: {
-                    _type: 'reference',
-                    _ref: item.stockItem._id,
-                },
-                dispatchedQuantity: item.dispatchedQuantity,
-                totalCost: item.totalCost || 0,
-                notes: item.notes || '',
-            }));
-            delete updateData.items;
+        if (!_id) {
+            return NextResponse.json({ error: 'Dispatch ID is required' }, { status: 400 });
         }
 
-        const patchData: any = {
-            ...updateData,
-            ...(dispatchedItems && { dispatchedItems }),
-            sourceBin: {
-                _type: 'reference',
-                _ref: updateData.sourceBin,
-            },
-            dispatchType: {
-                _type: 'reference',
-                _ref: updateData.dispatchType,
-            },
-            dispatchedBy: {
-                _type: 'reference',
-                _ref: updateData.dispatchedBy || session.user.id,
-            },
-            updatedAt: new Date().toISOString(),
-        };
+        // Fetch existing doc to check evidenceStatus
+        const existing = await client.fetch(
+            `*[_type=="DispatchLog" && _id == $id][0]{ evidenceStatus }`,
+            { id: _id }
+        );
+        if (existing?.evidenceStatus === 'complete') {
+            return NextResponse.json({ error: 'Dispatch is completed and cannot be edited' }, { status: 400 });
+        }
 
-        const patch = writeClient.patch(_id).set(patchData);
+        let patch = writeClient.patch(_id).set({ updatedAt: new Date().toISOString() });
+
+        if (updateData.dispatchDate) patch = patch.set({ dispatchDate: updateData.dispatchDate });
+        if (updateData.evidenceStatus) patch = patch.set({ evidenceStatus: updateData.evidenceStatus });
+        if (updateData.hasOwnProperty('peopleFed')) patch = patch.set({ peopleFed: updateData.peopleFed });
+        if (updateData.notes) patch = patch.set({ notes: updateData.notes });
+
+        if (updateData.dispatchType) {
+            const ref = resolveRef(updateData.dispatchType);
+            if (ref) patch = patch.set({ dispatchType: { _type: 'reference', _ref: ref } });
+        }
+
+        if (updateData.sourceBin) {
+            const ref = resolveRef(updateData.sourceBin);
+            if (ref) patch = patch.set({ sourceBin: { _type: 'reference', _ref: ref } });
+        }
+
+        if (updateData.dispatchedBy) {
+            const ref = resolveRef(updateData.dispatchedBy);
+            if (ref) patch = patch.set({ dispatchedBy: { _type: 'reference', _ref: ref } });
+        } else {
+            patch = patch.set({ dispatchedBy: { _type: 'reference', _ref: session.user.id } });
+        }
+
+        if (updateData.dispatchedItems) {
+            const normalizedItems = (updateData.dispatchedItems || []).map((item: any) => {
+                const stockRef = resolveRef(item.stockItem) || resolveRef(item.stockItem?._id) || resolveRef(item.stockItem?._ref);
+                return {
+                    _type: 'DispatchedItem',
+                    _key: item._key || uuidv4(),
+                    stockItem: {
+                        _type: 'reference',
+                        _ref: stockRef,
+                    },
+                    dispatchedQuantity: item.dispatchedQuantity,
+                    totalCost: item.totalCost || 0,
+                    notes: item.notes || '',
+                };
+            });
+            patch = patch.set({ dispatchedItems: normalizedItems });
+        }
+
+        // If caller provided attachments array, set it (replace); caller should pass properly shaped refs.
+        if (updateData.attachments) {
+            patch = patch.set({ attachments: updateData.attachments });
+        }
+
+        // Allow setting status fields (e.g., status:'completed') — caller is responsible for using this safely.
+        if (updateData.status) {
+            patch = patch.set({ status: updateData.status });
+        }
+        if (updateData.completedAt) {
+            patch = patch.set({ completedAt: updateData.completedAt });
+        }
+        if (updateData.completedBy) {
+            const cbRef = resolveRef(updateData.completedBy) || updateData.completedBy;
+            if (cbRef) patch = patch.set({ completedBy: { _type: 'reference', _ref: cbRef } });
+        }
+
         const result = await patch.commit();
 
         await logSanityInteraction(
@@ -176,6 +286,7 @@ export async function PATCH(request: Request) {
     }
 }
 
+// --- DELETE by query param ?id=... ---
 export async function DELETE(request: Request) {
     try {
         const session = await getServerSession(authOptions);
@@ -188,6 +299,12 @@ export async function DELETE(request: Request) {
 
         if (!id) {
             return NextResponse.json({ error: 'Dispatch ID is required' }, { status: 400 });
+        }
+
+        // prevent deletion of completed dispatches
+        const existing = await client.fetch(`*[_type=="DispatchLog" && _id == $id][0]{ evidenceStatus }`, { id });
+        if (existing?.evidenceStatus === 'complete') {
+            return NextResponse.json({ error: 'Completed dispatch cannot be deleted' }, { status: 400 });
         }
 
         await writeClient.delete(id);

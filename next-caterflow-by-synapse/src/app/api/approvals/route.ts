@@ -1,8 +1,9 @@
+// src/app/api/approvals/route.ts
 import { NextResponse } from 'next/server';
 import { client } from '@/lib/sanity';
 import { groq } from 'next-sanity';
 
-// Corrected GROQ query to fix the syntax error
+// Purchase orders pending approval
 const purchaseOrderApprovalQuery = groq`
   *[_type == "PurchaseOrder" && status == "pending-approval"] {
     _id,
@@ -12,9 +13,9 @@ const purchaseOrderApprovalQuery = groq`
     "title": "Approve Purchase Order",
     "description": "Purchase order for items",
     "priority": "high",
-    "site": site->{name, _id}, // Get the full site object for filtering
+    "site": site->{name, _id},
     "poNumber": poNumber,
-    "orderedByName": orderedBy->name, // Explicitly name the key for orderedBy
+    "orderedByName": orderedBy->name,
     orderedItems[]{
         _key,
         orderedQuantity,
@@ -25,9 +26,9 @@ const purchaseOrderApprovalQuery = groq`
   }
 `;
 
-// Define a separate GROQ query for Internal Transfers that require approval
+// Internal transfers pending approval
 const internalTransferApprovalQuery = groq`
-  *[_type == "InternalTransfer" && status == "pending"] {
+  *[_type == "InternalTransfer" && status == "pending-approval"] {
     _id,
     _type,
     _createdAt,
@@ -36,7 +37,8 @@ const internalTransferApprovalQuery = groq`
     "description": "Transfer request from " + coalesce(fromBin->site->name, "Unknown") + " to " + coalesce(toBin->site->name, "Unknown"),
     "priority": "high",
     "fromSite": fromBin->site->{name, _id},
-    "toSite": toBin->site->{name, _id}
+    "toSite": toBin->site->{name, _id},
+    transferNumber
   }
 `;
 
@@ -46,57 +48,55 @@ export async function GET(request: Request) {
         const userSite = searchParams.get('userSite');
         const userRole = searchParams.get('userRole');
 
-        console.log("➡️ /api/approvals: Request received.");
-        console.log("➡️ /api/approvals: Fetching approvals for:", { userRole, userSite });
-
         const [purchaseOrders, internalTransfers] = await Promise.all([
             client.fetch(purchaseOrderApprovalQuery),
             client.fetch(internalTransferApprovalQuery),
         ]);
 
         let approvals = [...purchaseOrders, ...internalTransfers];
-        console.log(`✅ /api/approvals: Raw approvals from Sanity fetched. Count: ${approvals.length}`);
 
-        // Process approvals to ensure consistent field names
-        approvals = approvals.map(approval => {
+        // Normalize items
+        approvals = approvals.map((approval: any) => {
             if (approval._type === 'PurchaseOrder') {
-                const supplierNames = [...new Set(approval.orderedItems.map((item: any) => item.supplier?.name))].filter(Boolean);
+                const supplierNames = [...new Set((approval.orderedItems || []).map((i: any) => i.supplier?.name).filter(Boolean))];
                 return {
                     ...approval,
-                    siteName: approval.site?.name || 'Unknown Site', // Add siteName field
+                    siteName: approval.site?.name || 'Unknown Site',
                     description: supplierNames.length > 0
                         ? `Purchase order from ${supplierNames.join(', ')}`
-                        : 'Purchase order with no specified suppliers',
+                        : (approval.description || 'Purchase order'),
                 };
             } else if (approval._type === 'InternalTransfer') {
                 return {
                     ...approval,
-                    siteName: approval.fromSite?.name || 'Unknown Site', // Add siteName for transfers
+                    siteName: approval.fromSite?.name || 'Unknown Site',
                 };
             }
             return approval;
         });
 
-        if (userRole === "admin" || userRole === "auditor") {
-            console.log("👤 User Role: Admin/Auditor. No filtering applied.");
-        } else if (userRole === "siteManager" && userSite) {
+        // Filter by role/site
+        if (userRole === 'admin' || userRole === 'auditor') {
+            // no filter
+        } else if (userRole === 'siteManager' && userSite) {
             approvals = approvals.filter((approval: any) => {
-                const isPurchaseOrderForSite = approval._type === 'PurchaseOrder' && approval.site?._id === userSite;
-                const isInternalTransferForSite = approval._type === 'InternalTransfer' && (approval.fromSite?._id === userSite || approval.toSite?._id === userSite);
-                return isPurchaseOrderForSite || isInternalTransferForSite;
+                if (approval._type === 'PurchaseOrder') {
+                    return approval.site?._id === userSite;
+                }
+                if (approval._type === 'InternalTransfer') {
+                    return (approval.fromSite?._id === userSite) || (approval.toSite?._id === userSite);
+                }
+                return false;
             });
-            console.log(`👤 Site Manager. Filtered approvals for site ${userSite}: ${approvals.length}`);
         } else {
-            approvals = [];
-            console.log("⚠️ Unknown role or insufficient permissions. No approvals returned.");
+            approvals = []; // not authorized
         }
 
         approvals.sort((a: any, b: any) => new Date(b._createdAt).getTime() - new Date(a._createdAt).getTime());
-        console.log(`✅ /api/approvals: Sorting complete. Returning ${approvals.length} approvals.`);
 
         return NextResponse.json(approvals);
     } catch (error: any) {
-        console.error("❌ Failed to fetch pending approvals:", error);
-        return new NextResponse(JSON.stringify({ error: "Failed to fetch pending approvals", details: error.message }), { status: 500 });
+        console.error('Failed to fetch pending approvals:', error);
+        return NextResponse.json({ error: 'Failed to fetch pending approvals', details: error.message }, { status: 500 });
     }
 }

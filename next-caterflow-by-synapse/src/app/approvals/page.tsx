@@ -90,11 +90,10 @@ export default function ApprovalsPage() {
     const router = useRouter();
     const [selectedApprovals, setSelectedApprovals] = useState<ApprovalAction[]>([]);
 
-    const actionTypes = ['PurchaseOrder', 'GoodsReceipt', 'InternalTransfer', 'StockAdjustment'];
+    const actionTypes = ['PurchaseOrder', 'InternalTransfer'];
     const actionTypeTitles: { [key: string]: string } = {
         'PurchaseOrder': 'Purchase Orders',
         'InternalTransfer': 'Internal Transfers',
-        'StockAdjustment': 'Stock Adjustments',
     };
 
     // Add this helper function at the top of your component

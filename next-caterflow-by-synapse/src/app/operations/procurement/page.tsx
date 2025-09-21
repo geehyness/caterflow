@@ -681,7 +681,7 @@ export default function ProcurementPage() {
                                             <Tr>
                                                 <Th>Item</Th>
                                                 <Th>Supplier</Th>
-                                                <Th>Set Default Supplier</Th>
+                                                <Th>Set Default</Th>
                                                 <Th>Total Price (E)</Th>
                                                 <Th></Th>
                                             </Tr>

@@ -1,3 +1,4 @@
+// src/components/TransferModal.tsx
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -37,10 +38,12 @@ import {
     AlertDialogContent,
     AlertDialogOverlay,
 } from '@chakra-ui/react';
-import { FiPlus, FiTrash2, FiSearch, FiCheckCircle, FiSave } from 'react-icons/fi';
+import { FiPlus, FiTrash2, FiSearch, FiCheckCircle, FiSave, FiUpload } from 'react-icons/fi';
 import BinSelectorModal from './BinSelectorModal';
 import StockItemSelectorModal from './StockItemSelectorModal';
 import { nanoid } from 'nanoid';
+import FileUploadModal from './FileUploadModal';
+import { useSession } from 'next-auth/react';
 
 interface TransferredItem {
     _key: string;
@@ -65,24 +68,22 @@ interface Bin {
     site: Site;
 }
 
-// Update the Transfer interface to match the page's Transfer interface
 interface Transfer {
-    _id: string;
-    transferNumber: string;
-    transferDate: string;
-    status: string;
-    fromBin: Bin | string;
-    toBin: Bin | string;
-    items: TransferredItem[];
+    _id?: string;
+    transferNumber?: string;
+    transferDate?: string;
+    status?: string;
+    fromBin?: Bin | string;
+    toBin?: Bin | string;
+    items?: TransferredItem[];
     notes?: string;
 }
 
 interface StockItem {
     _id: string;
     name: string;
-    sku: string;
-    unitOfMeasure: string;
-    itemType: 'food' | 'nonFood';
+    sku?: string;
+    unitOfMeasure?: string;
     currentStock?: number;
 }
 
@@ -93,28 +94,25 @@ interface TransferModalProps {
     onSave: () => void;
 }
 
-// Helper function to get bin name
-const getBinName = (bin: Bin | string): string => {
-    if (typeof bin === 'object') {
-        return bin.name;
-    }
-    return bin;
+const getBinId = (bin: Bin | string | undefined): string => {
+    if (!bin) return '';
+    if (typeof bin === 'object') return bin._id;
+    return String(bin);
 };
 
-// Helper function to get bin ID
-const getBinId = (bin: Bin | string): string => {
-    if (typeof bin === 'object') {
-        return bin._id;
-    }
-    return bin;
+const getBinName = (bin: Bin | string | undefined): string => {
+    if (!bin) return '';
+    if (typeof bin === 'object') return `${bin.name} (${bin.site?.name || ''})`;
+    return String(bin);
 };
 
 export default function TransferModal({ isOpen, onClose, transfer, onSave }: TransferModalProps) {
+    const { data: session } = useSession();
     const [transferNumber, setTransferNumber] = useState('');
     const [transferDate, setTransferDate] = useState('');
     const [status, setStatus] = useState('pending');
-    const [fromBin, setFromBin] = useState<string>('');
-    const [toBin, setToBin] = useState<string>('');
+    const [fromBin, setFromBin] = useState('');
+    const [toBin, setToBin] = useState('');
     const [fromBinName, setFromBinName] = useState('');
     const [toBinName, setToBinName] = useState('');
     const [notes, setNotes] = useState('');
@@ -134,7 +132,12 @@ export default function TransferModal({ isOpen, onClose, transfer, onSave }: Tra
     const [isConfirmOpen, setIsConfirmOpen] = useState(false);
     const cancelRef = useRef<HTMLButtonElement>(null);
 
-    // Fetch bins on component mount
+    // File upload modal control
+    const [isFileModalOpen, setIsFileModalOpen] = useState(false);
+    const [fileModalTitle, setFileModalTitle] = useState('Upload Evidence');
+    const [evidenceType, setEvidenceType] = useState<'delivery-note' | 'photo' | 'receipt' | 'other'>('delivery-note');
+    const [processing, setProcessing] = useState(false);
+
     useEffect(() => {
         const fetchBins = async () => {
             try {
@@ -151,98 +154,43 @@ export default function TransferModal({ isOpen, onClose, transfer, onSave }: Tra
         fetchBins();
     }, []);
 
-    // Reset form when modal opens/closes
     useEffect(() => {
         if (isOpen) {
             setIsInitialLoading(true);
-            const initializeForm = async () => {
-                if (transfer) {
-                    // Edit mode
+            (async () => {
+                if (transfer && transfer._id) {
+                    // Edit / view mode
                     setTransferNumber(transfer.transferNumber || '');
-                    setTransferDate(transfer.transferDate.split('T')[0] || '');
+                    setTransferDate((transfer.transferDate || '').split('T')[0] || new Date().toISOString().split('T')[0]);
                     setStatus(transfer.status || 'pending');
-
-                    // Handle both string and object types for bins
                     setFromBin(getBinId(transfer.fromBin));
                     setToBin(getBinId(transfer.toBin));
                     setFromBinName(getBinName(transfer.fromBin));
                     setToBinName(getBinName(transfer.toBin));
-
                     setNotes(transfer.notes || '');
-
-                    // Update the initialItems mapping to ensure _key exists
-                    const initialItems = transfer.items.map((item) => ({
+                    setItems((transfer.items || []).map(item => ({
                         _key: item._key || nanoid(),
                         stockItem: {
-                            _id: item.stockItem._id,
-                            name: item.stockItem.name || '',
-                            sku: item.stockItem.sku || '',
-                            unitOfMeasure: '',
-                            currentStock: 0
+                            _id: item.stockItem?._id || item.stockItem || '',
+                            name: item.stockItem?.name || '',
+                            sku: item.stockItem?.sku || '',
+                            unitOfMeasure: item.stockItem?.unitOfMeasure || '',
+                            currentStock: item.stockItem?.currentStock || 0
                         },
-                        transferredQuantity: item.transferredQuantity,
-                    }));
-                    setItems(initialItems);
-
-                    // Fetch details for each stock item
-                    const fetchItemDetails = async (itemId: string) => {
-                        if (!stockItemsCache.has(itemId)) {
-                            try {
-                                const res = await fetch(`/api/stock-items/${itemId}`);
-                                if (res.ok) {
-                                    const itemData: StockItem = await res.json();
-                                    setStockItemsCache(prev => new Map(prev).set(itemId, itemData));
-                                    setItems(prevItems => prevItems.map(item =>
-                                        item.stockItem._id === itemId ?
-                                            {
-                                                ...item,
-                                                stockItem: {
-                                                    _id: itemData._id,
-                                                    name: itemData.name,
-                                                    sku: itemData.sku,
-                                                    unitOfMeasure: itemData.unitOfMeasure,
-                                                    currentStock: itemData.currentStock || 0
-                                                }
-                                            } :
-                                            item
-                                    ));
-                                }
-                            } catch (error) {
-                                console.error(`Failed to fetch stock item ${itemId}`, error);
-                            }
-                        }
-                    };
-
-                    transfer.items.forEach(item => {
-                        if (item.stockItem._id) {
-                            fetchItemDetails(item.stockItem._id);
-                        }
-                    });
-
+                        transferredQuantity: item.transferredQuantity || 0,
+                    })));
+                    setIsInitialLoading(false);
                 } else {
                     // Create mode
-                    const fetchTransferNumber = async () => {
-                        try {
-                            const res = await fetch('/api/transfers/next-number');
-                            if (res.ok) {
-                                const { transferNumber: newNumber } = await res.json();
-                                setTransferNumber(newNumber);
-                            } else {
-                                throw new Error('Failed to fetch transfer number');
-                            }
-                        } catch (error) {
-                            toast({
-                                title: 'Error',
-                                description: 'Failed to get a new transfer number. Please try again.',
-                                status: 'error',
-                                duration: 5000,
-                                isClosable: true,
-                            });
-                            console.error('Failed to get new transfer number:', error);
+                    try {
+                        const res = await fetch('/api/operations/transfers/next-number');
+                        if (res.ok) {
+                            const body = await res.json();
+                            setTransferNumber(body.transferNumber || '');
                         }
-                    };
-
-                    fetchTransferNumber();
+                    } catch (err) {
+                        console.warn('Could not fetch next transfer number', err);
+                    }
                     setTransferDate(new Date().toISOString().split('T')[0]);
                     setStatus('pending');
                     setFromBin('');
@@ -251,72 +199,33 @@ export default function TransferModal({ isOpen, onClose, transfer, onSave }: Tra
                     setToBinName('');
                     setNotes('');
                     setItems([]);
+                    setIsInitialLoading(false);
                 }
-                setIsInitialLoading(false);
-            };
-
-            initializeForm();
+            })();
+        } else {
+            // reset
+            setIsInitialLoading(false);
+            setCurrentEditingItemIndex(null);
         }
-    }, [isOpen, transfer, stockItemsCache, toast]);
+    }, [isOpen, transfer]);
 
     const handleAddItem = () => {
-        const newItem = {
+        const newItem: TransferredItem = {
             _key: nanoid(),
-            stockItem: {
-                _id: '',
-                name: 'Select a stock item',
-                sku: '',
-                unitOfMeasure: '',
-                currentStock: 0
-            },
+            stockItem: { _id: '', name: 'Select a stock item', unitOfMeasure: '', currentStock: 0 },
             transferredQuantity: 0,
         };
-        setItems(prevItems => [...prevItems, newItem]);
+        setItems(prev => [...prev, newItem]);
         setCurrentEditingItemIndex(items.length);
         setIsStockItemModalOpen(true);
     };
 
     const handleRemoveItem = (key: string) => {
-        setItems(prevItems => prevItems.filter(item => item._key !== key));
+        setItems(prev => prev.filter(i => i._key !== key));
     };
 
     const handleItemChange = (key: string, field: keyof TransferredItem, value: any) => {
-        setItems(prevItems => prevItems.map(item =>
-            item._key === key ? { ...item, [field]: value } : item
-        ));
-    };
-
-    const handleFromBinSelect = (bin: Bin) => {
-        setFromBin(bin._id);
-        setFromBinName(`${bin.name} (${bin.site.name})`);
-        setIsFromBinModalOpen(false);
-    };
-
-    const handleToBinSelect = (bin: Bin) => {
-        setToBin(bin._id);
-        setToBinName(`${bin.name} (${bin.site.name})`);
-        setIsToBinModalOpen(false);
-    };
-
-    const handleStockItemSelect = (item: StockItem) => {
-        if (currentEditingItemIndex !== null) {
-            setItems(prevItems => prevItems.map((prevItem, index) =>
-                index === currentEditingItemIndex ?
-                    {
-                        ...prevItem,
-                        stockItem: {
-                            _id: item._id,
-                            name: item.name,
-                            sku: item.sku,
-                            unitOfMeasure: item.unitOfMeasure,
-                            currentStock: item.currentStock || 0
-                        }
-                    }
-                    : prevItem
-            ));
-            setStockItemsCache(prev => new Map(prev).set(item._id, item));
-        }
-        setIsStockItemModalOpen(false);
+        setItems(prev => prev.map(it => it._key === key ? { ...it, [field]: value } : it));
     };
 
     const openStockItemModal = (index: number) => {
@@ -324,166 +233,182 @@ export default function TransferModal({ isOpen, onClose, transfer, onSave }: Tra
         setIsStockItemModalOpen(true);
     };
 
+    const handleStockItemSelect = (item: StockItem) => {
+        if (currentEditingItemIndex !== null) {
+            setItems(prev => prev.map((it, idx) => idx === currentEditingItemIndex ? {
+                ...it,
+                stockItem: {
+                    _id: item._id,
+                    name: item.name,
+                    sku: item.sku,
+                    unitOfMeasure: item.unitOfMeasure,
+                    currentStock: item.currentStock || 0
+                }
+            } : it));
+            setStockItemsCache(prev => new Map(prev).set(item._id, item));
+            setCurrentEditingItemIndex(null);
+        }
+        setIsStockItemModalOpen(false);
+    };
+
+    const isEditable = !transfer || status === 'pending';
+
     const validateForm = () => {
-        if (!fromBin) {
-            toast({
-                title: 'Error',
-                description: 'Please select a from bin',
-                status: 'error',
-                duration: 3000,
-                isClosable: true,
-            });
-            return false;
-        }
-
-        if (!toBin) {
-            toast({
-                title: 'Error',
-                description: 'Please select a to bin',
-                status: 'error',
-                duration: 3000,
-                isClosable: true,
-            });
-            return false;
-        }
-
-        if (fromBin === toBin) {
-            toast({
-                title: 'Error',
-                description: 'From bin and to bin cannot be the same',
-                status: 'error',
-                duration: 3000,
-                isClosable: true,
-            });
-            return false;
-        }
-
-        if (items.length === 0) {
-            toast({
-                title: 'Error',
-                description: 'Please add at least one item',
-                status: 'error',
-                duration: 3000,
-                isClosable: true,
-            });
-            return false;
-        }
-
-        for (const item of items) {
-            if (!item.stockItem._id) {
-                toast({
-                    title: 'Error',
-                    description: 'Please select a stock item for all entries',
-                    status: 'error',
-                    duration: 3000,
-                    isClosable: true,
-                });
-                return false;
-            }
-
-            if (item.transferredQuantity <= 0) {
-                toast({
-                    title: 'Error',
-                    description: `Please enter a valid quantity for ${item.stockItem.name}`,
-                    status: 'error',
-                    duration: 3000,
-                    isClosable: true,
-                });
-                return false;
-            }
-
-            // Check if transferred quantity exceeds available stock
-            if (item.stockItem.currentStock !== undefined &&
-                item.transferredQuantity > item.stockItem.currentStock) {
-                toast({
-                    title: 'Insufficient Stock',
-                    description: `Not enough stock available for ${item.stockItem.name}. Available: ${item.stockItem.currentStock}`,
-                    status: 'error',
-                    duration: 5000,
-                    isClosable: true,
-                });
-                return false;
+        if (!fromBin) { toast({ title: 'Error', description: 'Select a from bin', status: 'error' }); return false; }
+        if (!toBin) { toast({ title: 'Error', description: 'Select a to bin', status: 'error' }); return false; }
+        if (fromBin === toBin) { toast({ title: 'Error', description: 'From and to cannot be same', status: 'error' }); return false; }
+        if (items.length === 0) { toast({ title: 'Error', description: 'Add at least one item', status: 'error' }); return false; }
+        for (const it of items) {
+            if (!it.stockItem?._id) { toast({ title: 'Error', description: 'Select stock item for all entries', status: 'error' }); return false; }
+            if (!it.transferredQuantity || it.transferredQuantity <= 0) { toast({ title: 'Error', description: 'Enter valid quantity', status: 'error' }); return false; }
+            if (it.stockItem.currentStock !== undefined && it.transferredQuantity > it.stockItem.currentStock) {
+                toast({ title: 'Insufficient', description: `Not enough stock for ${it.stockItem.name}`, status: 'error' }); return false;
             }
         }
-
         return true;
     };
 
-    const handleSave = async (finalStatus?: string) => {
-        if (!validateForm()) return;
-
+    const saveTransfer = async (): Promise<string | null> => {
+        if (!validateForm()) return null;
         setLoading(true);
-
         try {
-            const url = transfer ? `/api/transfers/${transfer._id}` : '/api/transfers';
-            const method = transfer ? 'PATCH' : 'POST';
-
-            const itemsForApi = items.map(item => ({
-                stockItem: item.stockItem._id,
-                transferredQuantity: item.transferredQuantity,
-            }));
-
-            const payload = {
-                ...(transfer?._id && { _id: transfer._id }),
+            const payload: any = {
                 transferNumber,
-                transferDate,
-                status: finalStatus || status,
+                transferDate: new Date(transferDate).toISOString(),
+                status,
                 fromBin,
                 toBin,
-                notes: notes || undefined,
-                items: itemsForApi,
+                notes: notes || '',
+                items: items.map(it => ({ stockItem: it.stockItem._id, transferredQuantity: it.transferredQuantity })),
             };
 
-            const response = await fetch(url, {
+            if (transfer && transfer._id) payload._id = transfer._id;
+
+            const url = transfer && transfer._id ? `/api/operations/transfers` : `/api/operations/transfers`;
+            const method = transfer && transfer._id ? 'PATCH' : 'POST';
+
+            // For PATCH endpoint existing implementation expects _id in body
+            const res = await fetch(url, {
                 method,
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
             });
 
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || 'Failed to save transfer');
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err.error || 'Failed to save transfer');
             }
 
-            toast({
-                title: transfer ? 'Transfer updated.' : 'Transfer created.',
-                description: `Transfer "${transferNumber}" has been successfully saved.`,
-                status: 'success',
-                duration: 3000,
-                isClosable: true,
-            });
-
+            const resBody = await res.json();
+            toast({ title: transfer ? 'Transfer updated' : 'Transfer created', status: 'success' });
             onSave();
-            onClose();
-        } catch (error: any) {
-            toast({
-                title: 'Error',
-                description: error.message || 'Failed to save transfer. Please try again.',
-                status: 'error',
-                duration: 5000,
-                isClosable: true,
-            });
+            return resBody._id || resBody.id || (transfer && transfer._id) || null;
+        } catch (err: any) {
+            toast({ title: 'Error saving transfer', description: err.message || 'Unknown', status: 'error' });
+            console.error(err);
+            return null;
         } finally {
             setLoading(false);
-            setIsConfirmOpen(false);
         }
     };
 
-    const handleComplete = (e: React.MouseEvent) => {
-        e.preventDefault();
-        if (!validateForm()) return;
-        setIsConfirmOpen(true);
+    const handleSubmitForApproval = async () => {
+        // ensure saved, then submit
+        setProcessing(true);
+        try {
+            const id = await saveTransfer();
+            if (!id) return;
+            const res = await fetch(`/api/operations/transfers/${id}/submit`, { method: 'POST' });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err.error || 'Failed to submit for approval');
+            }
+            toast({ title: 'Submitted for approval', status: 'success' });
+            onSave();
+            onClose();
+        } catch (err: any) {
+            toast({ title: 'Error', description: err.message || 'Failed to submit', status: 'error' });
+        } finally {
+            setProcessing(false);
+        }
     };
 
-    const existingItemIds = items.map(item => item.stockItem._id).filter(id => id);
+    const handleOpenUploadEvidence = () => {
+        // only allowed when approved
+        setFileModalTitle('Upload Transfer Evidence');
+        setEvidenceType('delivery-note');
+        setIsFileModalOpen(true);
+    };
+
+    // Called by FileUploadModal when upload completes. It sends attachmentId to complete route.
+    const handleEvidenceUploadComplete = async (attachmentId: string) => {
+        if (!transfer || !transfer._id) {
+            toast({ title: 'Error', description: 'No transfer id available', status: 'error' });
+            setIsFileModalOpen(false);
+            return;
+        }
+
+        setProcessing(true);
+        try {
+            const res = await fetch(`/api/operations/transfers/${transfer._id}/complete`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ attachmentId }),
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err.error || 'Failed to complete transfer');
+            }
+
+            toast({ title: 'Transfer processed', description: 'Stock moved and transfer completed.', status: 'success' });
+            onSave();
+            onClose();
+        } catch (err: any) {
+            toast({ title: 'Error completing transfer', description: err.message || 'See console', status: 'error' });
+        } finally {
+            setProcessing(false);
+            setIsFileModalOpen(false);
+        }
+    };
+
+    const handleDirectComplete = async () => {
+        // If operator prefers to complete without uploading (not recommended), call complete with no attachment
+        if (!transfer || !transfer._id) {
+            toast({ title: 'Error', description: 'No transfer id available', status: 'error' });
+            return;
+        }
+        setProcessing(true);
+        try {
+            const res = await fetch(`/api/operations/transfers/${transfer._id}/complete`, { method: 'POST' });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err.error || 'Failed to complete transfer');
+            }
+            toast({ title: 'Transfer processed', status: 'success' });
+            onSave();
+            onClose();
+        } catch (err: any) {
+            toast({ title: 'Error', description: err.message || 'Failed to complete transfer', status: 'error' });
+        } finally {
+            setProcessing(false);
+        }
+    };
+
+    const handleConfirmComplete = (e: React.MouseEvent) => {
+        e.preventDefault();
+        // open file upload modal to collect evidence (preferred)
+        handleOpenUploadEvidence();
+    };
+
+    const existingItemIds = items.map(i => i.stockItem._id).filter(Boolean);
 
     return (
         <>
-            <Modal isOpen={isOpen} onClose={onClose} size="6xl" closeOnOverlayClick={!loading}>
+            <Modal isOpen={isOpen} onClose={onClose} size="6xl" closeOnOverlayClick={!loading && !processing}>
                 <ModalOverlay />
                 <ModalContent>
                     <ModalHeader>{transfer ? 'Edit Transfer' : 'Create Transfer'}</ModalHeader>
-                    <ModalCloseButton isDisabled={loading} />
+                    <ModalCloseButton isDisabled={loading || processing} />
                     {isInitialLoading ? (
                         <ModalBody display="flex" justifyContent="center" alignItems="center" height="200px">
                             <VStack>
@@ -492,49 +417,26 @@ export default function TransferModal({ isOpen, onClose, transfer, onSave }: Tra
                             </VStack>
                         </ModalBody>
                     ) : (
-                        <form onSubmit={(e) => { e.preventDefault(); handleSave(); }}>
+                        <form onSubmit={async (e) => { e.preventDefault(); await saveTransfer(); }}>
                             <ModalBody pb={6}>
                                 <VStack spacing={4} align="stretch">
                                     <Grid templateColumns="repeat(3, 1fr)" gap={4}>
                                         <FormControl isRequired>
                                             <FormLabel>Transfer Number</FormLabel>
-                                            {transfer ? (
-                                                <Text
-                                                    p={3}
-                                                    borderRadius="md"
-                                                    bg="gray.100"
-                                                    fontWeight="bold"
-                                                    _dark={{ bg: 'gray.700' }}
-                                                >
-                                                    {transferNumber}
-                                                </Text>
-                                            ) : (
-                                                <Input
-                                                    value={transferNumber}
-                                                    onChange={(e) => setTransferNumber(e.target.value)}
-                                                    placeholder="e.g., TRF-001"
-                                                    isReadOnly
-                                                />
-                                            )}
+                                            <Input value={transferNumber} readOnly />
                                         </FormControl>
                                         <FormControl isRequired>
                                             <FormLabel>Transfer Date</FormLabel>
-                                            <Input
-                                                type="date"
-                                                value={transferDate}
-                                                onChange={(e) => setTransferDate(e.target.value)}
-                                                isDisabled={loading}
-                                            />
+                                            <Input type="date" value={transferDate} onChange={(e) => setTransferDate(e.target.value)} isDisabled={!isEditable || loading} />
                                         </FormControl>
                                         <FormControl isRequired>
                                             <FormLabel>Status</FormLabel>
-                                            <Select
-                                                value={status}
-                                                onChange={(e) => setStatus(e.target.value)}
-                                                isDisabled={loading || !!transfer}
-                                            >
+                                            <Select value={status} onChange={(e) => setStatus(e.target.value)} isDisabled>
                                                 <option value="pending">Pending</option>
+                                                <option value="pending-approval">Pending Approval</option>
+                                                <option value="approved">Approved</option>
                                                 <option value="completed">Completed</option>
+                                                <option value="rejected">Rejected</option>
                                                 <option value="cancelled">Cancelled</option>
                                             </Select>
                                         </FormControl>
@@ -543,99 +445,45 @@ export default function TransferModal({ isOpen, onClose, transfer, onSave }: Tra
                                     <Grid templateColumns="repeat(2, 1fr)" gap={4}>
                                         <FormControl isRequired>
                                             <FormLabel>From Bin</FormLabel>
-                                            <Input
-                                                value={fromBinName}
-                                                placeholder="Select a bin"
-                                                readOnly
-                                                onClick={() => setIsFromBinModalOpen(true)}
-                                                cursor="pointer"
-                                                isDisabled={loading}
-                                            />
+                                            <Input value={fromBinName} placeholder="Select a bin" readOnly onClick={() => isEditable && setIsFromBinModalOpen(true)} cursor={isEditable ? 'pointer' : 'default'} isDisabled={!isEditable} />
                                         </FormControl>
                                         <FormControl isRequired>
                                             <FormLabel>To Bin</FormLabel>
-                                            <Input
-                                                value={toBinName}
-                                                placeholder="Select a bin"
-                                                readOnly
-                                                onClick={() => setIsToBinModalOpen(true)}
-                                                cursor="pointer"
-                                                isDisabled={loading}
-                                            />
+                                            <Input value={toBinName} placeholder="Select a bin" readOnly onClick={() => isEditable && setIsToBinModalOpen(true)} cursor={isEditable ? 'pointer' : 'default'} isDisabled={!isEditable} />
                                         </FormControl>
                                     </Grid>
 
                                     <FormControl>
                                         <FormLabel>Notes</FormLabel>
-                                        <Input
-                                            value={notes}
-                                            onChange={(e) => setNotes(e.target.value)}
-                                            placeholder="Additional notes or comments"
-                                            isDisabled={loading}
-                                        />
+                                        <Input value={notes} onChange={(e) => setNotes(e.target.value)} isDisabled={!isEditable || loading} />
                                     </FormControl>
 
                                     <Text fontSize="lg" fontWeight="bold">Transferred Items</Text>
 
                                     {items.length === 0 ? (
-                                        <Text color="gray.500" fontStyle="italic" textAlign="center" py={4}>
-                                            No items added yet. Click "Add Item" to get started.
-                                        </Text>
+                                        <Text color="gray.500" fontStyle="italic" textAlign="center" py={4}>No items added yet.</Text>
                                     ) : (
-                                        <Grid templateColumns="1fr" gap={3}>
+                                        <VStack spacing={3} align="stretch">
                                             {items.map((item, index) => (
-                                                <GridItem
-                                                    key={item._key}
-                                                    p={3}
-                                                    borderWidth="1px"
-                                                    borderRadius="md"
-                                                    borderColor="gray.200"
-                                                    _dark={{ borderColor: "gray.600" }}
-                                                >
-                                                    <Grid templateColumns="1fr auto" gap={2} alignItems="center">
+                                                <Box key={item._key} p={3} borderWidth="1px" borderRadius="md">
+                                                    <Grid templateColumns="1fr auto" gap={3} alignItems="center">
                                                         <Grid templateColumns="repeat(2, 1fr)" gap={3}>
                                                             <FormControl isRequired>
                                                                 <FormLabel>Stock Item</FormLabel>
-                                                                <Button
-                                                                    variant="outline"
-                                                                    justifyContent="space-between"
-                                                                    onClick={() => openStockItemModal(index)}
-                                                                    px={3}
-                                                                    h={10}
-                                                                    width="100%"
-                                                                    textAlign="left"
-                                                                    isDisabled={loading}
-                                                                    rightIcon={<Icon as={FiSearch} color="gray.500" />}
-                                                                >
+                                                                <Button variant="outline" justifyContent="space-between" onClick={() => isEditable && openStockItemModal(index)} px={3} h={10} width="100%" isDisabled={!isEditable}>
                                                                     <Flex justify="space-between" align="center" h="100%">
-                                                                        {item.stockItem.name && item.stockItem.name !== 'Select a stock item' ? (
-                                                                            <VStack align="start" spacing={0}>
-                                                                                <Text fontSize="sm" fontWeight="medium">{item.stockItem.name}</Text>
-                                                                                {item.stockItem.sku && (
-                                                                                    <Text fontSize="xs" color="gray.500">SKU: {item.stockItem.sku}</Text>
-                                                                                )}
-                                                                                {item.stockItem.currentStock !== undefined && (
-                                                                                    <Text fontSize="xs" color="gray.500">
-                                                                                        Available: {item.stockItem.currentStock} {item.stockItem.unitOfMeasure}
-                                                                                    </Text>
-                                                                                )}
-                                                                            </VStack>
-                                                                        ) : (
-                                                                            <Text color="gray.500">Select a stock item</Text>
-                                                                        )}
-                                                                        <Icon as={FiSearch} color="gray.500" />
+                                                                        <VStack align="start" spacing={0}>
+                                                                            <Text fontSize="sm" fontWeight="medium">{item.stockItem.name || 'Select a stock item'}</Text>
+                                                                            {item.stockItem.sku && <Text fontSize="xs" color="gray.500">SKU: {item.stockItem.sku}</Text>}
+                                                                            {item.stockItem.currentStock !== undefined && <Text fontSize="xs" color="gray.500">Available: {item.stockItem.currentStock} {item.stockItem.unitOfMeasure}</Text>}
+                                                                        </VStack>
                                                                     </Flex>
                                                                 </Button>
                                                             </FormControl>
+
                                                             <FormControl isRequired>
                                                                 <FormLabel>Quantity</FormLabel>
-                                                                <NumberInput
-                                                                    value={item.transferredQuantity}
-                                                                    onChange={(valStr, valNum) => handleItemChange(item._key, 'transferredQuantity', valNum)}
-                                                                    min={0}
-                                                                    max={item.stockItem.currentStock || undefined}
-                                                                    isDisabled={loading || !item.stockItem._id}
-                                                                >
+                                                                <NumberInput value={item.transferredQuantity} min={0} onChange={(vStr, vNum) => handleItemChange(item._key, 'transferredQuantity', vNum)} isDisabled={!isEditable || !item.stockItem._id}>
                                                                     <NumberInputField />
                                                                     <NumberInputStepper>
                                                                         <NumberIncrementStepper />
@@ -644,48 +492,41 @@ export default function TransferModal({ isOpen, onClose, transfer, onSave }: Tra
                                                                 </NumberInput>
                                                             </FormControl>
                                                         </Grid>
-                                                        <IconButton
-                                                            aria-label="Remove item"
-                                                            icon={<FiTrash2 />}
-                                                            colorScheme="red"
-                                                            onClick={() => handleRemoveItem(item._key)}
-                                                            isDisabled={loading}
-                                                            mt={6}
-                                                        />
+
+                                                        <IconButton aria-label="Remove" icon={<FiTrash2 />} colorScheme="red" onClick={() => isEditable && handleRemoveItem(item._key)} isDisabled={!isEditable} />
                                                     </Grid>
-                                                </GridItem>
+                                                </Box>
                                             ))}
-                                        </Grid>
+                                        </VStack>
                                     )}
 
-                                    <Button
-                                        leftIcon={<FiPlus />}
-                                        onClick={handleAddItem}
-                                        alignSelf="start"
-                                        isDisabled={loading}
-                                    >
-                                        Add Item
-                                    </Button>
+                                    <Button leftIcon={<FiPlus />} onClick={handleAddItem} alignSelf="start" isDisabled={!isEditable || loading}>Add Item</Button>
                                 </VStack>
                             </ModalBody>
 
                             <ModalFooter>
-                                <Button colorScheme="gray" mr={3} onClick={onClose} isDisabled={loading}>
-                                    Cancel
-                                </Button>
-                                <Button colorScheme="blue" type="submit" isLoading={loading} leftIcon={<FiSave />}>
-                                    {transfer ? 'Save Changes' : 'Create Transfer'}
-                                </Button>
-                                {transfer && transfer.status === 'pending' && (
-                                    <Button
-                                        colorScheme="green"
-                                        onClick={handleComplete}
-                                        isLoading={loading}
-                                        ml={3}
-                                        leftIcon={<FiCheckCircle />}
-                                    >
-                                        Complete Transfer
-                                    </Button>
+                                <Button variant="outline" mr={3} onClick={onClose} isDisabled={loading || processing}>Cancel</Button>
+
+                                {isEditable ? (
+                                    <>
+                                        <Button colorScheme="blue" type="submit" isLoading={loading}> {transfer ? 'Save Changes' : 'Create Transfer'} </Button>
+                                        <Button colorScheme="orange" ml={3} onClick={handleSubmitForApproval} isLoading={processing || loading} leftIcon={<FiUpload> </FiUpload>}>
+                                            Submit for Approval
+                                        </Button>
+                                    </>
+                                ) : status === 'pending-approval' ? (
+                                    <Button colorScheme="gray" isDisabled>Pending approval</Button>
+                                ) : status === 'approved' ? (
+                                    <>
+                                        <Button colorScheme="green" ml={3} onClick={handleConfirmComplete} isLoading={processing} leftIcon={<FiCheckCircle />}>
+                                            Upload Evidence & Complete
+                                        </Button>
+                                        <Button colorScheme="teal" ml={3} onClick={handleDirectComplete} isLoading={processing}>
+                                            Complete without evidence
+                                        </Button>
+                                    </>
+                                ) : (
+                                    <Button isDisabled>View</Button>
                                 )}
                             </ModalFooter>
                         </form>
@@ -693,47 +534,29 @@ export default function TransferModal({ isOpen, onClose, transfer, onSave }: Tra
                 </ModalContent>
             </Modal>
 
-            <BinSelectorModal
-                isOpen={isFromBinModalOpen}
-                onClose={() => setIsFromBinModalOpen(false)}
-                onSelect={handleFromBinSelect}
+            <BinSelectorModal isOpen={isFromBinModalOpen} onClose={() => setIsFromBinModalOpen(false)} onSelect={(b: any) => { setFromBin(b._id); setFromBinName(`${b.name} (${b.site?.name})`); setIsFromBinModalOpen(false); }} />
+            <BinSelectorModal isOpen={isToBinModalOpen} onClose={() => setIsToBinModalOpen(false)} onSelect={(b: any) => { setToBin(b._id); setToBinName(`${b.name} (${b.site?.name})`); setIsToBinModalOpen(false); }} />
+
+            <StockItemSelectorModal isOpen={isStockItemModalOpen} onClose={() => { setIsStockItemModalOpen(false); setCurrentEditingItemIndex(null); }} onSelect={handleStockItemSelect} existingItemIds={existingItemIds} />
+
+            <FileUploadModal
+                isOpen={isFileModalOpen}
+                onClose={() => setIsFileModalOpen(false)}
+                onUploadComplete={handleEvidenceUploadComplete}
+                relatedToId={transfer?._id || ''}
+                fileType={evidenceType}
+                title={fileModalTitle}
+                description="Upload an image or document that proves the transfer happened (e.g., delivery note, photo)."
             />
 
-            <StockItemSelectorModal
-                isOpen={isStockItemModalOpen}
-                onClose={() => setIsStockItemModalOpen(false)}
-                onSelect={handleStockItemSelect}
-                existingItemIds={existingItemIds}
-            />
-
-            {/* Confirmation Dialog */}
-            <AlertDialog
-                isOpen={isConfirmOpen}
-                leastDestructiveRef={cancelRef}
-                onClose={() => setIsConfirmOpen(false)}
-            >
+            <AlertDialog isOpen={isConfirmOpen} leastDestructiveRef={cancelRef} onClose={() => setIsConfirmOpen(false)}>
                 <AlertDialogOverlay>
                     <AlertDialogContent>
-                        <AlertDialogHeader fontSize="lg" fontWeight="bold">
-                            Confirm Complete Transfer
-                        </AlertDialogHeader>
-
-                        <AlertDialogBody>
-                            Are you sure you want to mark this transfer as complete? This action cannot be undone.
-                        </AlertDialogBody>
-
+                        <AlertDialogHeader fontSize="lg" fontWeight="bold">Confirm Complete Transfer</AlertDialogHeader>
+                        <AlertDialogBody>Are you sure you want to mark this transfer as complete? This will move stock from the source bin to the destination bin.</AlertDialogBody>
                         <AlertDialogFooter>
-                            <Button ref={cancelRef} onClick={() => setIsConfirmOpen(false)}>
-                                Cancel
-                            </Button>
-                            <Button
-                                colorScheme="green"
-                                onClick={() => handleSave('completed')}
-                                ml={3}
-                                isLoading={loading}
-                            >
-                                Confirm Complete
-                            </Button>
+                            <Button ref={cancelRef} onClick={() => setIsConfirmOpen(false)}>Cancel</Button>
+                            <Button colorScheme="green" onClick={handleDirectComplete} ml={3}>Confirm Complete</Button>
                         </AlertDialogFooter>
                     </AlertDialogContent>
                 </AlertDialogOverlay>

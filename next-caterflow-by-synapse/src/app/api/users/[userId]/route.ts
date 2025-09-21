@@ -5,7 +5,7 @@ import { groq } from 'next-sanity';
 
 export async function GET(req: NextRequest, { params }: { params: { userId: string } }) {
     try {
-        const { userId } = params;
+        const { userId } = await params; // Add await here
 
         // Validate that a user ID was provided
         if (!userId) {

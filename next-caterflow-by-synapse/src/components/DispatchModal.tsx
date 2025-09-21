@@ -1,4 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react';
+// src/components/DispatchModal.tsx
+'use client';
+
+import React, { useState, useEffect } from 'react';
 import {
     Modal,
     ModalOverlay,
@@ -23,18 +26,22 @@ import {
     NumberIncrementStepper,
     NumberDecrementStepper,
     Box,
-    Flex,
-    Icon,
     Spinner,
     Grid,
     GridItem,
     Textarea,
-    InputGroup,
-    Divider
+    Divider,
+    Table,
+    Thead,
+    Tbody,
+    Tr,
+    Th,
+    Td,
+    TableContainer
 } from '@chakra-ui/react';
-import { FiPlus, FiTrash2, FiSearch, FiEdit } from 'react-icons/fi';
-import BinSelectorModal from './BinSelectorModal';
+import { FiPlus, FiTrash2 } from 'react-icons/fi';
 import StockItemSelectorModal from './StockItemSelectorModal';
+import FileUploadModal from './FileUploadModal';
 import { nanoid } from 'nanoid';
 import { useSession } from 'next-auth/react';
 
@@ -46,6 +53,7 @@ interface DispatchedItem {
         sku?: string;
         unitOfMeasure?: string;
         currentStock?: number;
+        unitPrice?: number;
     };
     dispatchedQuantity: number;
     totalCost?: number;
@@ -74,6 +82,8 @@ interface User {
     _id: string;
     name: string;
     email: string;
+    role: string;
+    associatedSite?: Site;
 }
 
 interface Dispatch {
@@ -89,7 +99,9 @@ interface Dispatch {
     sourceBin: Bin;
     dispatchedBy: User;
     peopleFed?: number;
-    evidenceStatus: 'pending' | 'partial' | 'complete';
+    evidenceStatus?: 'pending' | 'partial' | 'complete';
+    status?: string;
+    attachments?: { _id: string; url?: string; name?: string }[];
 }
 
 interface DispatchModalProps {
@@ -102,33 +114,51 @@ interface DispatchModalProps {
 export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: DispatchModalProps) {
     const [loading, setLoading] = useState(false);
     const [dispatchTypes, setDispatchTypes] = useState<DispatchType[]>([]);
+    const [allBins, setAllBins] = useState<Bin[]>([]);
     const [sourceBin, setSourceBin] = useState<Bin | null>(null);
     const [dispatchDate, setDispatchDate] = useState('');
     const [dispatchType, setDispatchType] = useState('');
     const [dispatchedItems, setDispatchedItems] = useState<DispatchedItem[]>([]);
     const [notes, setNotes] = useState('');
     const [peopleFed, setPeopleFed] = useState<number | undefined>(undefined);
-    const [isBinModalOpen, setIsBinModalOpen] = useState(false);
     const [isStockItemModalOpen, setIsStockItemModalOpen] = useState(false);
     const [editingIndex, setEditingIndex] = useState<number | null>(null);
+    const [itemsLoading, setItemsLoading] = useState(false);
+
+    const [isSaving, setIsSaving] = useState(false);
+    const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+    const [savedDispatchId, setSavedDispatchId] = useState<string>('');
 
     const toast = useToast();
     const { data: session, status: sessionStatus } = useSession();
+    const user = session?.user as unknown as User;
+    const userSite = user?.associatedSite;
+    const userRole = user?.role;
 
     const existingItemIds = dispatchedItems.filter(item => item.stockItem).map(item => item.stockItem._id);
 
+    // load dispatch types and bins when modal opens
     useEffect(() => {
-        const fetchDispatchTypes = async () => {
+        const fetchData = async () => {
+            setLoading(true);
             try {
-                setLoading(true);
-                const res = await fetch('/api/dispatch-types');
-                if (!res.ok) throw new Error('Failed to fetch dispatch types');
-                const data = await res.json();
-                setDispatchTypes(data);
+                const [dispatchTypesRes, binsRes] = await Promise.all([
+                    fetch('/api/dispatch-types'),
+                    fetch('/api/bins')
+                ]);
+
+                if (!dispatchTypesRes.ok) throw new Error('Failed to fetch dispatch types');
+                if (!binsRes.ok) throw new Error('Failed to fetch bins');
+
+                const dispatchTypesData = await dispatchTypesRes.json();
+                const binsData = await binsRes.json();
+
+                setDispatchTypes(dispatchTypesData);
+                setAllBins(binsData);
             } catch (error) {
-                console.error('Error fetching dispatch types:', error);
+                console.error('Error fetching data:', error);
                 toast({
-                    title: 'Error fetching dispatch types.',
+                    title: 'Error fetching data.',
                     description: 'Please try again later.',
                     status: 'error',
                     duration: 5000,
@@ -139,17 +169,21 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
             }
         };
 
-        fetchDispatchTypes();
-    }, [toast]);
+        if (isOpen) {
+            fetchData();
+        }
+    }, [isOpen, toast]);
 
+    // initialize form from dispatch prop (edit) or defaults (new)
     useEffect(() => {
         if (dispatch) {
-            setDispatchDate(dispatch.dispatchDate.split('T')[0]);
-            setDispatchType(dispatch.dispatchType._id);
-            setSourceBin(dispatch.sourceBin);
-            setDispatchedItems(dispatch.dispatchedItems);
+            setDispatchDate(dispatch.dispatchDate ? dispatch.dispatchDate.split('T')[0] : '');
+            setDispatchType(dispatch.dispatchType?._id || '');
+            setSourceBin(dispatch.sourceBin || null);
+            setDispatchedItems(dispatch.dispatchedItems || []);
             setNotes(dispatch.notes || '');
             setPeopleFed(dispatch.peopleFed);
+            setSavedDispatchId(dispatch._id || '');
         } else {
             const today = new Date().toISOString().split('T')[0];
             setDispatchDate(today);
@@ -159,51 +193,64 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
             setNotes('');
             setPeopleFed(undefined);
             setEditingIndex(null);
+            setSavedDispatchId('');
         }
-    }, [dispatch]);
+    }, [dispatch, isOpen]);
 
-    // New useEffect to handle default site and bin
     useEffect(() => {
+        let mounted = true;
+        const controller = new AbortController();
+
         const fetchDefaultBin = async () => {
-            // Only run if creating a new dispatch and the session is loaded
-            if (!dispatch && sessionStatus === 'authenticated' && session?.user?.id) {
+            // Only attempt on new dispatches when authenticated and have a site id
+            if (!dispatch && sessionStatus === 'authenticated' && user?.associatedSite?._id) {
                 setLoading(true);
                 try {
-                    // Fetch the user's details to get their assigned site
-                    const userRes = await fetch(`/api/users/${session.user.id}`);
-                    if (!userRes.ok) throw new Error('Failed to fetch user data');
-                    const user = await userRes.json();
+                    const binRes = await fetch(
+                        `/api/sites/${encodeURIComponent(user.associatedSite._id)}/main-bin`,
+                        { signal: controller.signal }
+                    );
+                    if (!binRes.ok) throw new Error('Failed to fetch main bin');
+                    const mainBin = await binRes.json();
 
-                    if (user.assignedSite?._id) {
-                        // Fetch the main bin for the user's assigned site
-                        const binRes = await fetch(`/api/sites/${user.assignedSite._id}/main-bin`);
-                        if (!binRes.ok) throw new Error('Failed to fetch main bin');
-                        const mainBin = await binRes.json();
+                    // only update state if component still mounted
+                    if (mounted) {
                         setSourceBin(mainBin);
                     }
-                } catch (error) {
-                    console.error('Error setting default bin:', error);
-                    toast({
-                        title: 'Error setting default bin.',
-                        description: 'Please select a bin manually.',
-                        status: 'warning',
-                        duration: 5000,
-                        isClosable: true,
-                    });
+                } catch (error: any) {
+                    // don't show error when aborting
+                    if (error.name === 'AbortError') return;
+                    console.log('Error fetching main bin:', error);
+                    if (mounted) {
+                        {/*toast({
+                            title: 'Error setting default bin.',
+                            description: 'Please select a bin manually.',
+                            status: 'warning',
+                            duration: 5000,
+                            isClosable: true,
+                        });*/}
+                        console.log('Error Setting Default Bin - ', error);
+                    }
                 } finally {
-                    setLoading(false);
+                    if (mounted) setLoading(false);
                 }
             }
         };
 
         fetchDefaultBin();
-    }, [dispatch, sessionStatus, session, toast]);
 
-    const handleBinSelect = (bin: Bin) => {
-        setSourceBin(bin);
-        setIsBinModalOpen(false);
-    };
+        return () => {
+            mounted = false;
+            controller.abort();
+        };
+    }, [dispatch, sessionStatus, user?.associatedSite?._id, toast]);
 
+    const isNew = !dispatch || dispatch._id?.startsWith?.('temp-');
+
+    // Determine editability based on evidenceStatus or status
+    const isEditable = !(dispatch?.evidenceStatus === 'complete' || dispatch?.status === 'completed');
+
+    // Stock item selection
     const handleStockItemSelect = (item: any) => {
         const newItem: DispatchedItem = {
             _key: nanoid(),
@@ -213,9 +260,10 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
                 sku: item.sku,
                 unitOfMeasure: item.unitOfMeasure,
                 currentStock: item.currentStock,
+                unitPrice: item.unitPrice,
             },
-            dispatchedQuantity: 0,
-            totalCost: 0,
+            dispatchedQuantity: 1,
+            totalCost: item.unitPrice || 0,
             notes: '',
         };
 
@@ -237,19 +285,15 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
         setDispatchedItems(prevItems => prevItems.filter(item => item._key !== key));
     };
 
-    const handleQuantityChange = (key: string, valueAsString: string, valueAsNumber: number) => {
+    const handleQuantityChange = (key: string, _valueAsString: string, valueAsNumber: number) => {
         setDispatchedItems(prevItems =>
-            prevItems.map(item =>
-                item._key === key ? { ...item, dispatchedQuantity: valueAsNumber } : item
-            )
-        );
-    };
-
-    const handleCostChange = (key: string, valueAsString: string, valueAsNumber: number) => {
-        setDispatchedItems(prevItems =>
-            prevItems.map(item =>
-                item._key === key ? { ...item, totalCost: valueAsNumber } : item
-            )
+            prevItems.map(item => {
+                if (item._key === key) {
+                    const totalCost = item.stockItem.unitPrice ? item.stockItem.unitPrice * valueAsNumber : 0;
+                    return { ...item, dispatchedQuantity: valueAsNumber, totalCost };
+                }
+                return item;
+            })
         );
     };
 
@@ -266,80 +310,203 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
         setIsStockItemModalOpen(true);
     };
 
-    const handleSubmit = async (event: React.FormEvent) => {
-        event.preventDefault();
-        setLoading(true);
+    const isSubmitDisabled = !dispatchDate || !dispatchType || !sourceBin || dispatchedItems.length === 0 || !isEditable;
 
-        const dispatchData = {
-            ...dispatch,
-            dispatchDate,
-            dispatchType: {
-                _type: 'reference',
-                _ref: dispatchType,
-            },
-            sourceBin: {
-                _type: 'reference',
-                _ref: sourceBin?._id,
-            },
-            dispatchedItems,
-            notes,
-            peopleFed,
-            dispatchedBy: {
-                _type: 'reference',
-                _ref: session?.user?.id,
-            },
-        };
-
+    // Save dispatch (create or update) - used for both Draft save and for preparing before upload
+    const saveDispatch = async (status: string = 'draft') => {
+        setIsSaving(true);
         try {
-            const method = 'POST'; // We will always use POST
-            const url = dispatch ? `/api/dispatches/${dispatch._id}` : '/api/dispatches';
+            if (!dispatchType || !sourceBin) {
+                toast({
+                    title: 'Missing Information',
+                    description: 'Please select a dispatch type and source bin.',
+                    status: 'warning',
+                    duration: 5000,
+                    isClosable: true,
+                });
+                throw new Error('Missing dispatch type or source bin');
+            }
+
+            const payload: any = {
+                dispatchDate: new Date(dispatchDate).toISOString(),
+                dispatchType: { _type: 'reference', _ref: dispatchType },
+                sourceBin: { _type: 'reference', _ref: sourceBin?._id },
+                dispatchedItems: dispatchedItems.map(item => ({
+                    _type: 'DispatchedItem',
+                    _key: item._key || nanoid(),
+                    stockItem: { _type: 'reference', _ref: item.stockItem._id },
+                    dispatchedQuantity: item.dispatchedQuantity,
+                    totalCost: item.totalCost || 0,
+                    notes: item.notes || '',
+                })),
+                notes,
+                peopleFed,
+                evidenceStatus: dispatch?.evidenceStatus || 'pending',
+                status,
+                dispatchedBy: { _type: 'reference', _ref: (session?.user as any)?.id || (session?.user as any)?._id || undefined }
+            };
+
+            let url = '/api/dispatches';
+            let method: 'POST' | 'PATCH' = 'POST';
+
+            if (!isNew && dispatch?._id) {
+                url = `/api/dispatches/${dispatch._id}`;
+                method = 'PATCH';
+            }
 
             const res = await fetch(url, {
                 method,
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(dispatchData),
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
             });
 
             if (!res.ok) {
-                const errorData = await res.json();
-                throw new Error(errorData.error || `Failed to ${dispatch ? 'update' : 'create'} dispatch`);
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err.error || 'Failed to save dispatch');
             }
 
+            const result = await res.json();
+            const id = result._id || result.id || dispatch?._id;
+            setSavedDispatchId(id);
+
             toast({
-                title: `Dispatch ${dispatch ? 'updated' : 'created'}.`,
-                description: `Successfully ${dispatch ? 'updated' : 'created'} the dispatch record.`,
+                title: status === 'draft' ? 'Draft saved' : 'Dispatch saved',
                 status: 'success',
-                duration: 5000,
+                duration: 2500,
                 isClosable: true,
             });
 
+            return result;
+        } catch (error: any) {
+            console.error('Save dispatch error:', error);
+            toast({
+                title: 'Error saving dispatch',
+                description: error?.message || 'An error occurred',
+                status: 'error',
+                duration: 5000,
+                isClosable: true,
+            });
+            throw error;
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    // Submit handler for the form (create/update without completing)
+    const handleSubmit = async (event: React.FormEvent) => {
+        event.preventDefault();
+        try {
+            await saveDispatch('draft');
+            onSave();
+            onClose();
+        } catch {
+            // saveDispatch already shows toast
+        }
+    };
+
+    // Check all items dispatched (used to enable complete action)
+    const isFullyDispatched = dispatchedItems.length > 0 && dispatchedItems.every(item => item.dispatchedQuantity > 0);
+
+    // Trigger the complete flow: ensure saved, then open upload modal
+    const handleCompleteDispatch = async () => {
+        if (!isFullyDispatched) {
+            toast({
+                title: 'Incomplete dispatch',
+                description: 'You must set dispatched quantities for all items before completing.',
+                status: 'error',
+                duration: 5000,
+                isClosable: true,
+            });
+            return;
+        }
+
+        try {
+            setIsSaving(true);
+            // If new or not yet saved, save as draft first to obtain ID
+            if (isNew || !dispatch?._id) {
+                const saved = await saveDispatch('draft');
+                const id = saved._id || saved.id;
+                setSavedDispatchId(id);
+            } else {
+                setSavedDispatchId(dispatch._id);
+            }
+
+            // open file upload modal to get evidence uploaded
+            setIsUploadModalOpen(true);
+        } catch (err) {
+            // errors handled in saveDispatch
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    // Called by FileUploadModal when upload completes; attachmentId is expected
+    const handleFinalizeDispatch = async (attachmentId: string) => {
+        // close upload modal
+        setIsUploadModalOpen(false);
+        setIsSaving(true);
+
+        try {
+            const idToUse = savedDispatchId || dispatch?._id;
+            if (!idToUse) throw new Error('No dispatch ID available to finalize');
+
+            // Patch the dispatch: set evidenceStatus to complete and add attachment reference
+            // This will replace attachments array in the document with the provided array.
+            // If you prefer append behavior, ensure your server side merges/append instead.
+            const body: any = {
+                evidenceStatus: 'complete',
+                status: 'completed',
+                completedAt: new Date().toISOString(),
+                attachments: [{ _type: 'reference', _ref: attachmentId }],
+            };
+
+            const res = await fetch(`/api/dispatches/${idToUse}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err.error || 'Failed to finalize dispatch');
+            }
+
+            toast({
+                title: 'Dispatch completed',
+                description: 'Evidence uploaded and dispatch marked as complete.',
+                status: 'success',
+                duration: 4000,
+                isClosable: true,
+            });
+
+            // notify parent to refresh and close
             onSave();
             onClose();
         } catch (error: any) {
-            console.error('Submission error:', error);
+            console.error('Finalize error:', error);
             toast({
-                title: `Error ${dispatch ? 'updating' : 'creating'} dispatch.`,
-                description: error.message,
+                title: 'Error finalizing dispatch',
+                description: error?.message || 'Failed to finalize dispatch',
                 status: 'error',
                 duration: 5000,
                 isClosable: true,
             });
         } finally {
-            setLoading(false);
+            setIsSaving(false);
         }
     };
 
-    const isSubmitDisabled = !dispatchDate || !dispatchType || !sourceBin || dispatchedItems.length === 0;
+    const filteredBins = userRole === 'admin'
+        ? allBins
+        : allBins.filter(bin => bin.site._id === userSite?._id);
 
     return (
         <>
-            <Modal isOpen={isOpen} onClose={onClose} size="3xl" closeOnOverlayClick={!loading}>
+            <Modal isOpen={isOpen} onClose={onClose} size="4xl" closeOnOverlayClick={!isSaving && !isUploadModalOpen}>
                 <ModalOverlay />
                 <ModalContent>
                     <ModalHeader>{dispatch ? 'Update Dispatch' : 'Create New Dispatch'}</ModalHeader>
-                    <ModalCloseButton isDisabled={loading} />
+                    <ModalCloseButton isDisabled={isSaving} />
                     {loading && !dispatch ? (
                         <Box p={8} textAlign="center">
                             <Spinner size="xl" />
@@ -349,40 +516,70 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
                         <form onSubmit={handleSubmit}>
                             <ModalBody>
                                 <VStack spacing={4} align="stretch">
-                                    <FormControl isRequired>
-                                        <FormLabel>Dispatch Type</FormLabel>
-                                        <Select
-                                            placeholder="Select dispatch type"
-                                            value={dispatchType}
-                                            onChange={(e) => setDispatchType(e.target.value)}
-                                            isDisabled={loading}
-                                        >
-                                            {dispatchTypes.map((type) => (
-                                                <option key={type._id} value={type._id}>
-                                                    {type.name}
-                                                </option>
-                                            ))}
-                                        </Select>
-                                    </FormControl>
-
-                                    <FormControl isRequired>
-                                        <FormLabel>Source Bin</FormLabel>
-                                        <InputGroup>
-                                            <Input
-                                                value={sourceBin ? `${sourceBin.name} (${sourceBin.site.name})` : ''}
-                                                placeholder="Select a source bin"
-                                                readOnly
-                                                isDisabled={loading}
-                                            />
-                                            <IconButton
-                                                aria-label="Select source bin"
-                                                icon={<FiSearch />}
-                                                onClick={() => setIsBinModalOpen(true)}
-                                                ml={2}
-                                                isDisabled={loading}
-                                            />
-                                        </InputGroup>
-                                    </FormControl>
+                                    <Grid templateColumns={{ base: '1fr', md: 'repeat(2, 1fr)' }} gap={4}>
+                                        <GridItem>
+                                            <FormControl isRequired>
+                                                <FormLabel>Dispatch Type</FormLabel>
+                                                <Select
+                                                    placeholder="Select dispatch type"
+                                                    value={dispatchType}
+                                                    onChange={(e) => setDispatchType(e.target.value)}
+                                                    isDisabled={!isEditable || loading}
+                                                >
+                                                    {dispatchTypes.map((type) => (
+                                                        <option key={type._id} value={type._id}>
+                                                            {type.name}
+                                                        </option>
+                                                    ))}
+                                                </Select>
+                                            </FormControl>
+                                        </GridItem>
+                                        <GridItem>
+                                            <FormControl isRequired>
+                                                <FormLabel>Source Bin</FormLabel>
+                                                <Select
+                                                    placeholder={filteredBins.length === 0 ? "No bins available" : "Select source bin"}
+                                                    value={sourceBin?._id || ''}
+                                                    onChange={(e) => {
+                                                        const selectedBin = filteredBins.find(bin => bin._id === e.target.value);
+                                                        if (selectedBin) {
+                                                            setSourceBin(selectedBin);
+                                                        }
+                                                    }}
+                                                    isDisabled={!isEditable || loading || filteredBins.length === 0 || !!dispatch}
+                                                >
+                                                    {filteredBins.map((bin) => (
+                                                        <option key={bin._id} value={bin._id}>
+                                                            {bin.name} ({bin.site.name})
+                                                        </option>
+                                                    ))}
+                                                </Select>
+                                                {dispatch ? (
+                                                    <Text fontSize="sm" color="gray.600" mt={1}>
+                                                        Source bin cannot be changed for existing dispatches
+                                                    </Text>
+                                                ) : (
+                                                    <>
+                                                        {userSite && userRole !== 'admin' && (
+                                                            <Text fontSize="sm" color="gray.600" mt={1}>
+                                                                Your site: {userSite.name}
+                                                            </Text>
+                                                        )}
+                                                        {userRole === 'admin' && (
+                                                            <Text fontSize="sm" color="gray.600" mt={1}>
+                                                                Admin: All bins available
+                                                            </Text>
+                                                        )}
+                                                        {filteredBins.length === 0 && (
+                                                            <Text fontSize="sm" color="red.500" mt={1}>
+                                                                No bins available for your site
+                                                            </Text>
+                                                        )}
+                                                    </>
+                                                )}
+                                            </FormControl>
+                                        </GridItem>
+                                    </Grid>
 
                                     <Grid templateColumns={{ base: '1fr', md: 'repeat(2, 1fr)' }} gap={4}>
                                         <GridItem>
@@ -392,7 +589,7 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
                                                     type="date"
                                                     value={dispatchDate}
                                                     onChange={(e) => setDispatchDate(e.target.value)}
-                                                    isDisabled={loading}
+                                                    isDisabled={!isEditable || loading}
                                                 />
                                             </FormControl>
                                         </GridItem>
@@ -402,8 +599,8 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
                                                 <NumberInput
                                                     value={peopleFed || 0}
                                                     min={0}
-                                                    onChange={(valueAsString, valueAsNumber) => setPeopleFed(valueAsNumber)}
-                                                    isDisabled={loading}
+                                                    onChange={(_s, n) => setPeopleFed(n)}
+                                                    isDisabled={!isEditable || loading}
                                                 >
                                                     <NumberInputField />
                                                     <NumberInputStepper>
@@ -421,91 +618,131 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
                                             value={notes}
                                             onChange={(e) => setNotes(e.target.value)}
                                             placeholder="Add any notes about this dispatch..."
-                                            isDisabled={loading}
+                                            isDisabled={!isEditable || loading}
                                         />
                                     </FormControl>
 
                                     <Divider />
 
-                                    <VStack spacing={4} align="stretch" key={dispatchedItems.length}>
-                                        <FormLabel>Dispatched Items</FormLabel>
-                                        {dispatchedItems.length === 0 && (
-                                            <Text textAlign="center" color="gray.500">
-                                                No items added yet.
-                                            </Text>
-                                        )}
-                                        {dispatchedItems.filter(item => item.stockItem).map((item, index) => (
-                                            <Box
-                                                key={item._key}
-                                                p={4}
-                                                borderWidth="1px"
-                                                borderRadius="md"
-                                            >
-                                                <HStack justifyContent="space-between" mb={2}>
-                                                    <Text fontWeight="bold" fontSize="lg">{item.stockItem?.name}</Text>
-                                                    <HStack>
-                                                        <IconButton
-                                                            aria-label="Remove item"
-                                                            icon={<FiTrash2 />}
-                                                            onClick={() => handleRemoveItem(item._key)}
-                                                            colorScheme="red"
-                                                            size="sm"
-                                                            variant="ghost"
-                                                            isDisabled={loading}
-                                                        />
-                                                    </HStack>
-                                                </HStack>
-                                                <FormControl isRequired>
-                                                    <FormLabel>Quantity ({item.stockItem.unitOfMeasure})</FormLabel>
-                                                    <NumberInput
-                                                        value={item.dispatchedQuantity || 0}
-                                                        min={0}
-                                                        onChange={(valueAsString, valueAsNumber) =>
-                                                            handleQuantityChange(item._key, valueAsString, valueAsNumber)
-                                                        }
-                                                        isDisabled={loading}
-                                                    >
-                                                        <NumberInputField />
-                                                        <NumberInputStepper>
-                                                            <NumberIncrementStepper />
-                                                            <NumberDecrementStepper />
-                                                        </NumberInputStepper>
-                                                    </NumberInput>
-                                                </FormControl>
-                                            </Box>
-                                        ))}
-                                    </VStack>
+                                    <VStack spacing={4} align="stretch">
+                                        <HStack justify="space-between" align="center">
+                                            <FormLabel mb={0}>Dispatched Items</FormLabel>
+                                            {itemsLoading && (
+                                                <Spinner size="sm" />
+                                            )}
+                                        </HStack>
 
-                                    <Button
-                                        leftIcon={<FiPlus />}
-                                        onClick={() => setIsStockItemModalOpen(true)}
-                                        variant="outline"
-                                        isDisabled={loading || !sourceBin}
-                                    >
-                                        Add Item
-                                    </Button>
+                                        {dispatchedItems.length === 0 ? (
+                                            <Box textAlign="center" py={4} color="gray.500">
+                                                No items added yet
+                                            </Box>
+                                        ) : (
+                                            <TableContainer>
+                                                <Table variant="simple" size="sm">
+                                                    <Thead>
+                                                        <Tr>
+                                                            <Th>Item</Th>
+                                                            <Th>Quantity</Th>
+                                                            <Th>Unit</Th>
+                                                            <Th>Actions</Th>
+                                                        </Tr>
+                                                    </Thead>
+                                                    <Tbody>
+                                                        {dispatchedItems.map((item, index) => (
+                                                            <Tr key={item._key}>
+                                                                <Td>{item.stockItem.name}</Td>
+                                                                <Td>
+                                                                    <NumberInput
+                                                                        value={item.dispatchedQuantity}
+                                                                        min={1}
+                                                                        onChange={(valueAsString, valueAsNumber) =>
+                                                                            handleQuantityChange(item._key, valueAsString, valueAsNumber)
+                                                                        }
+                                                                        size="sm"
+                                                                        width="100px"
+                                                                        isDisabled={!isEditable}
+                                                                    >
+                                                                        <NumberInputField />
+                                                                        <NumberInputStepper>
+                                                                            <NumberIncrementStepper />
+                                                                            <NumberDecrementStepper />
+                                                                        </NumberInputStepper>
+                                                                    </NumberInput>
+                                                                </Td>
+                                                                <Td>{item.stockItem.unitOfMeasure}</Td>
+                                                                <Td>
+                                                                    <HStack>
+                                                                        <IconButton
+                                                                            aria-label="Edit item"
+                                                                            icon={<FiPlus />}
+                                                                            size="sm"
+                                                                            onClick={() => handleEditItem(index)}
+                                                                            isDisabled={!isEditable}
+                                                                            title="Edit item (replace)"
+                                                                        />
+                                                                        <IconButton
+                                                                            aria-label="Remove item"
+                                                                            icon={<FiTrash2 />}
+                                                                            size="sm"
+                                                                            onClick={() => handleRemoveItem(item._key)}
+                                                                            isDisabled={!isEditable}
+                                                                        />
+                                                                    </HStack>
+                                                                </Td>
+                                                            </Tr>
+                                                        ))}
+                                                    </Tbody>
+                                                </Table>
+                                            </TableContainer>
+                                        )}
+
+                                        <Button
+                                            leftIcon={<FiPlus />}
+                                            onClick={() => setIsStockItemModalOpen(true)}
+                                            variant="outline"
+                                            isDisabled={loading || !sourceBin || !isEditable}
+                                            alignSelf="flex-start"
+                                        >
+                                            Add Item
+                                        </Button>
+                                    </VStack>
                                 </VStack>
                             </ModalBody>
 
                             <ModalFooter>
-                                <Button variant="outline" mr={3} onClick={onClose} isDisabled={loading}>
+                                <Button variant="outline" mr={3} onClick={onClose} isDisabled={isSaving || loading}>
                                     Cancel
                                 </Button>
-                                <Button colorScheme="brand" type="submit" isLoading={loading} isDisabled={isSubmitDisabled}>
-                                    {dispatch ? 'Update Dispatch' : 'Create Dispatch'}
-                                </Button>
+                                {isEditable ? (
+                                    <>
+                                        <Button
+                                            colorScheme="blue"
+                                            type="submit"
+                                            isLoading={isSaving}
+                                            isDisabled={isSubmitDisabled}
+                                            loadingText={dispatch ? "Updating..." : "Creating..."}
+                                            mr={3}
+                                        >
+                                            {dispatch ? 'Update Dispatch' : 'Create Dispatch'}
+                                        </Button>
+
+                                        <Button
+                                            colorScheme="green"
+                                            onClick={handleCompleteDispatch}
+                                            isLoading={isSaving}
+                                            isDisabled={!isFullyDispatched || dispatchedItems.length === 0 || isSaving}
+                                        >
+                                            {isNew ? 'Save & Upload Evidence' : 'Upload Evidence & Complete'}
+                                        </Button>
+                                    </>
+                                ) : (
+                                    <Text color="gray.600" fontSize="sm">Dispatch is completed — read-only.</Text>
+                                )}
                             </ModalFooter>
                         </form>
                     )}
                 </ModalContent>
             </Modal>
-
-            <BinSelectorModal
-                isOpen={isBinModalOpen}
-                onClose={() => setIsBinModalOpen(false)}
-                onSelect={handleBinSelect}
-                selectedSiteId={sourceBin?.site?._id}
-            />
 
             <StockItemSelectorModal
                 isOpen={isStockItemModalOpen}
@@ -516,6 +753,19 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
                 onSelect={handleStockItemSelect}
                 existingItemIds={existingItemIds}
                 sourceBinId={sourceBin?._id}
+            />
+
+            <FileUploadModal
+                isOpen={isUploadModalOpen}
+                onClose={() => setIsUploadModalOpen(false)}
+                onUploadComplete={(attachmentId: string) => {
+                    // FileUploadModal should call this with the uploaded attachment id
+                    handleFinalizeDispatch(attachmentId);
+                }}
+                relatedToId={savedDispatchId || dispatch?._id || ''}
+                fileType="dispatch"
+                title="Upload Dispatch Evidence"
+                description="Please upload photos or documents as evidence before completing the dispatch."
             />
         </>
     );
