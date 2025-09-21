@@ -79,7 +79,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
                 stockItem: { _type: 'reference', _ref: stockId },
                 quantity: 0,
             });
-            tx.patch(fromBinCountId).inc({ quantity: -qty });
+            (tx.patch(toBinCountId) as any).inc({ quantity: qty });
 
             // createIfNotExists and patch inc for to
             tx.createIfNotExists({
@@ -89,7 +89,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
                 stockItem: { _type: 'reference', _ref: stockId },
                 quantity: 0,
             });
-            tx.patch(toBinCountId).inc({ quantity: qty });
+            (tx.patch(toBinCountId) as any).inc({ quantity: qty });
 
             // Create movement log for each item
             const movementId = `stockmove-${id}-${item._key}`;
@@ -117,12 +117,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         if (attachmentId) {
             // Append to attachments array
             // If attachments doesn't exist yet this set will create it
-            tx.patch(id).set(setObj).append('attachments', [{
+            (tx.patch(id) as any).set(setObj).append('attachments', [{
                 _type: 'reference',
                 _ref: attachmentId,
             }]);
         } else {
-            tx.patch(id).set(setObj);
+            (tx.patch(id) as any).set(setObj);
         }
 
         const result = await tx.commit();

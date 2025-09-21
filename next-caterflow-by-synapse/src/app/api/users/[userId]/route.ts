@@ -3,9 +3,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { writeClient } from '@/lib/sanity';
 import { groq } from 'next-sanity';
 
-export async function GET(req: NextRequest, { params }: { params: { userId: string } }) {
+export async function GET(
+    req: NextRequest,
+    { params }: { params: Promise<{ userId: string }> } // Change params to be a Promise
+) {
     try {
-        const { userId } = await params; // Add await here
+        const { userId } = await params; // Await the params promise
 
         // Validate that a user ID was provided
         if (!userId) {
@@ -14,12 +17,12 @@ export async function GET(req: NextRequest, { params }: { params: { userId: stri
 
         // Sanity query to fetch a single user by ID, including the associated site details
         const query = groq`*[_type == "AppUser" && _id == $userId][0] {
-        _id,
-        name,
-        email,
-        role,
-        isActive,
-        "assignedSite": associatedSite->{_id, name}
+      _id,
+      name,
+      email,
+      role,
+      isActive,
+      "assignedSite": associatedSite->{_id, name}
     }`;
 
         const user = await writeClient.fetch(query, { userId });

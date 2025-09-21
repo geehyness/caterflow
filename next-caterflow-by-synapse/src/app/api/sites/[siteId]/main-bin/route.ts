@@ -3,9 +3,12 @@ import { NextResponse } from 'next/server';
 import { client } from '@/lib/sanity';
 import { groq } from 'next-sanity';
 
-export async function GET(request: Request, { params }: { params: { siteId: string } }) {
+export async function GET(
+    request: Request,
+    { params }: { params: Promise<{ siteId: string }> }
+) {
     try {
-        const { siteId } = params;
+        const { siteId } = await params; // Await the params promise
 
         if (!siteId) {
             return NextResponse.json(
@@ -14,15 +17,12 @@ export async function GET(request: Request, { params }: { params: { siteId: stri
             );
         }
 
-        // Decode the siteId in case it contains special characters
         const decodedSiteId = decodeURIComponent(siteId);
-
-        // Sanity query to find a bin with the binType "main-storage" for the given site
         const query = groq`*[_type == "Bin" && site._ref == $siteId && binType == "main-storage"][0] {
-            _id,
-            name,
-            "site": site->{_id, name}
-        }`;
+        _id,
+        name,
+        "site": site->{_id, name}
+    }`;
 
         const mainBin = await client.fetch(query, { siteId: decodedSiteId });
 

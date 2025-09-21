@@ -80,7 +80,7 @@ export async function GET(request: Request) {
             // Manually get unique supplier names from the fetched data
             const suppliers = purchaseOrder[0].orderedItems
                 .map((item: any) => item.supplier?.name)
-                .filter(name => name && name.trim() !== ''); // More robust filtering
+                .filter((name: string | undefined) => name && name.trim() !== ''); // More robust filtering // More robust filtering
 
             const uniqueSupplierNames = suppliers.length > 0
                 ? [...new Set(suppliers)].join(', ')
@@ -112,7 +112,7 @@ export async function GET(request: Request) {
         const processedOrders = (purchaseOrders || []).map((order: any) => {
             const suppliers = order.orderedItems
                 .map((item: any) => item.supplier?.name)
-                .filter(name => name && name.trim() !== '');
+                .filter((name: string | undefined) => name && name.trim() !== '');
 
             const uniqueSupplierNames = suppliers.length > 0
                 ? [...new Set(suppliers)].join(', ')

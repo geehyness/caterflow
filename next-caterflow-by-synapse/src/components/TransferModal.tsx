@@ -171,7 +171,7 @@ export default function TransferModal({ isOpen, onClose, transfer, onSave }: Tra
                     setItems((transfer.items || []).map(item => ({
                         _key: item._key || nanoid(),
                         stockItem: {
-                            _id: item.stockItem?._id || item.stockItem || '',
+                            _id: typeof item.stockItem === 'object' ? item.stockItem._id || '' : item.stockItem || '',
                             name: item.stockItem?.name || '',
                             sku: item.stockItem?.sku || '',
                             unitOfMeasure: item.stockItem?.unitOfMeasure || '',

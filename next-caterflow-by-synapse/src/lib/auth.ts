@@ -94,11 +94,16 @@ export const authOptions: NextAuthOptions = {
                 } catch (error) {
                     console.error('Authorization error:', error);
 
-                    // Re-throw specific errors to show proper messages
-                    if (error.message.includes('inactive')) {
-                        throw new Error('Account is inactive. Please contact administrator.');
+                    // Handle specific error cases
+                    if (error instanceof Error) {
+                        if (error.message.includes('inactive')) {
+                            throw new Error('Account is inactive. Please contact administrator.');
+                        }
+                        // Re-throw the original error if it's already an Error instance
+                        throw error;
                     }
 
+                    // For unknown error types, throw a generic error
                     throw new Error('Authentication failed. Please try again.');
                 }
             },

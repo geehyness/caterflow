@@ -372,7 +372,7 @@ export default function DispatchesPage() {
             <DispatchModal
                 isOpen={isOpen}
                 onClose={onClose}
-                dispatch={selectedDispatch}
+                dispatch={selectedDispatch as any} // or as Dispatch
                 onSave={handleSaveSuccess}
             />
         </Box>

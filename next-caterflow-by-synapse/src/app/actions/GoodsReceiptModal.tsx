@@ -416,12 +416,16 @@ export default function GoodsReceiptModal({
             if (isNewReceipt) {
                 const savedReceipt = await saveReceipt('draft');
                 finalReceiptId = savedReceipt._id;
-                setSavedReceiptId(finalReceiptId); // Store the real ID
+                if (finalReceiptId && typeof finalReceiptId === 'string') {
+                    setSavedReceiptId(finalReceiptId); // Store the real ID
+                }
 
                 // Update the local receipt state with the saved receipt
                 setReceiptNumber(savedReceipt.receiptNumber);
             } else {
-                setSavedReceiptId(finalReceiptId); // Store the existing ID
+                if (finalReceiptId && typeof finalReceiptId === 'string') {
+                    setSavedReceiptId(finalReceiptId); // Store the existing ID
+                }
             }
 
             if (!finalReceiptId) {

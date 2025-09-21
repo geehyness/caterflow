@@ -92,10 +92,10 @@ export default function CreatePurchaseOrderModal({
             // Initialize with default suppliers
             const initialItems = selectedItems.map(item => ({
                 stockItem: item._id,
-                supplier: item.primarySupplier?._ref ||
-                    (item.suppliers && item.suppliers.length > 0 ? item.suppliers[0]._ref : ''),
+                supplier: (item.primarySupplier as any)?._ref ||
+                    ((item.suppliers as any) && (item.suppliers as any).length > 0 ? (item.suppliers as any)[0]._ref : ''),
                 orderedQuantity: (item as any).orderQuantity || 1,
-                unitPrice: item.unitPrice || 0,
+                unitPrice: Number(item.unitPrice) || 0,
                 _key: Math.random().toString(36).substr(2, 9)
             }));
             setOrderItems(initialItems);

@@ -758,12 +758,9 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
             <FileUploadModal
                 isOpen={isUploadModalOpen}
                 onClose={() => setIsUploadModalOpen(false)}
-                onUploadComplete={(attachmentId: string) => {
-                    // FileUploadModal should call this with the uploaded attachment id
-                    handleFinalizeDispatch(attachmentId);
-                }}
+                onUploadComplete={handleFinalizeDispatch}
                 relatedToId={savedDispatchId || dispatch?._id || ''}
-                fileType="dispatch"
+                fileType="other" // Changed from "dispatch" to "other"
                 title="Upload Dispatch Evidence"
                 description="Please upload photos or documents as evidence before completing the dispatch."
             />
