@@ -1,14 +1,14 @@
 // schemas/dispatchLog.ts
-import { defineType, defineField } from 'sanity';
+import { defineType, defineField, ValidationContext } from 'sanity';
 import client from '../lib/client';
 
-const isUniqueDispatchNumber = async (dispatchNumber, context) => {
+const isUniqueDispatchNumber = async (dispatchNumber: string | undefined, context: ValidationContext) => {
     const { document, getClient } = context;
     if (!dispatchNumber) {
         return true;
     }
 
-    const id = document._id.replace('drafts.', '');
+    const id = document?._id.replace('drafts.', '');
     const client = getClient({ apiVersion: '2025-08-20' });
 
     const query = `
@@ -42,7 +42,7 @@ export default defineType({
                     }
                     return true;
                 }),
-            readOnly: ({ document }) => !!document.dispatchNumber,
+            readOnly: ({ document }) => !!document?.dispatchNumber,
             description: 'Unique Dispatch Log identifier.',
             initialValue: async () => {
                 const today = new Date().toISOString().slice(0, 10);
@@ -66,6 +66,14 @@ export default defineType({
             },
         }),
         defineField({
+            name: 'dispatchType',
+            title: 'Dispatch Type',
+            type: 'reference',
+            to: [{ type: 'DispatchType' }],
+            validation: (Rule) => Rule.required(),
+            description: 'Type of dispatch (Breakfast, Lunch, Supper, etc.)',
+        }),
+        defineField({
             name: 'dispatchDate',
             title: 'Dispatch Date',
             type: 'datetime',
@@ -83,14 +91,6 @@ export default defineType({
             to: [{ type: 'Bin' }],
             validation: (Rule) => Rule.required(),
             description: 'The bin from which stock was dispatched.',
-        }),
-        defineField({
-            name: 'destinationSite',
-            title: 'Destination Site',
-            type: 'reference',
-            to: [{ type: 'Site' }],
-            validation: (Rule) => Rule.required(),
-            description: 'The site receiving the dispatched stock.',
         }),
         defineField({
             name: 'dispatchedBy',
@@ -119,13 +119,20 @@ export default defineType({
             type: 'string',
             options: {
                 list: [
-                    { title: 'Pending', value: 'pending' },
+                    { title: 'Pending Dispatch', value: 'pending' },
                     { title: 'Partial', value: 'partial' },
                     { title: 'Complete', value: 'complete' },
                 ],
             },
             initialValue: 'pending',
             validation: (Rule) => Rule.required(),
+        }),
+        defineField({
+            name: 'peopleFed',
+            title: 'Number of People Fed',
+            type: 'number',
+            description: 'The number of people who benefited from this dispatch.',
+            validation: (Rule) => Rule.integer().min(0),
         }),
         defineField({
             name: 'notes',
@@ -138,15 +145,18 @@ export default defineType({
         select: {
             title: 'dispatchNumber',
             date: 'dispatchDate',
+            type: 'dispatchType.name',
             source: 'sourceBin.name',
-            destination: 'destinationSite.name',
             evidenceStatus: 'evidenceStatus',
+            peopleFed: 'peopleFed', // Add this line
         },
-        prepare({ title, date, source, destination, evidenceStatus }) {
+        prepare({ title, date, type, source, evidenceStatus, peopleFed }) {
             const statusText = evidenceStatus ? ` | Evidence: ${evidenceStatus}` : '';
+            const typeText = type ? ` | Type: ${type}` : '';
+            const peopleText = peopleFed ? ` | Fed: ${peopleFed} people` : ''; // Add this line
             return {
                 title: `Dispatch: ${title}`,
-                subtitle: `${date ? new Date(date).toLocaleDateString() : 'No date'} | From: ${source || 'No source'} To: ${destination || 'No destination'}${statusText}`,
+                subtitle: `${date ? new Date(date).toLocaleDateString() : 'No date'}${typeText} | From: ${source || 'No source'} ${peopleText}${statusText}`,
             };
         },
     },
@@ -165,6 +175,11 @@ export default defineType({
             name: 'dispatchNumberAsc',
             title: 'Dispatch Number (Ascending)',
             by: [{ field: 'dispatchNumber', direction: 'asc' }],
+        },
+        {
+            name: 'dispatchType',
+            title: 'Dispatch Type',
+            by: [{ field: 'dispatchType.name', direction: 'asc' }],
         },
     ],
 });

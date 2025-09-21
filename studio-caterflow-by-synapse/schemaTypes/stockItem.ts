@@ -1,14 +1,14 @@
 // schemas/stockItem.ts
-import { defineType, defineField } from 'sanity';
+import { defineType, defineField, ValidationContext } from 'sanity';
 import client from '../lib/client';
 
-const isUniqueSku = async (sku, context) => {
+const isUniqueSku = async (sku: string | undefined, context: ValidationContext) => {
     const { document, getClient } = context;
     if (!sku) {
         return true;
     }
 
-    const id = document._id.replace('drafts.', '');
+    const id = document?._id.replace('drafts.', '');
     const client = getClient({ apiVersion: '2025-08-20' });
 
     const query = `
@@ -49,7 +49,7 @@ export default defineType({
                     }
                     return true;
                 }),
-            readOnly: ({ document }) => !!document.sku,
+            readOnly: ({ document }) => !!document?.sku,
             description: 'A unique identifier for this stock item.',
             initialValue: async () => {
                 const query = `
@@ -136,28 +136,6 @@ export default defineType({
                 },
             ],
             description: 'List of suppliers that provide this item.',
-        }),
-        defineField({
-            name: 'primarySupplier',
-            title: 'Primary Supplier',
-            type: 'reference',
-            to: [{ type: 'Supplier' }],
-            description: 'The main supplier for this item.',
-            options: {
-                filter: ({ document }) => {
-                    if (!document.suppliers || !document.suppliers.length) {
-                        return { filter: '', params: {} };
-                    }
-                    const supplierIds = document.suppliers
-                        .filter(supplier => supplier && supplier._ref)
-                        .map(supplier => supplier._ref);
-
-                    return {
-                        filter: '_id in $supplierIds',
-                        params: { supplierIds }
-                    };
-                }
-            }
         }),
         defineField({
             name: 'minimumStockLevel',

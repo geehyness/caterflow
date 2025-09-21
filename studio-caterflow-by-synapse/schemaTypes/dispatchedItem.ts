@@ -26,6 +26,13 @@ export default defineType({
             description: 'This value is calculated automatically and cannot be edited.',
             readOnly: true,
         }),
+        defineField({
+            name: 'notes',
+            title: 'Item Notes',
+            type: 'text',
+            rows: 2,
+            description: 'Specific notes about this item in the dispatch',
+        }),
     ],
     preview: {
         select: {

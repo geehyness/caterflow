@@ -13,6 +13,7 @@ import inventoryCount from './inventoryCount';
 import appUser from './appUser';
 import notificationPreference from './notificationPreference';
 import fileAttachment from './fileAttachment';
+import dispatchType from './dispatchType'; // Add this import
 
 // Nested object schemas
 import orderedItem from './orderedItem';
@@ -38,6 +39,7 @@ export const schemaTypes = [
     appUser,
     notificationPreference,
     fileAttachment,
+    dispatchType, // Add this
 
     // Nested object types
     orderedItem,

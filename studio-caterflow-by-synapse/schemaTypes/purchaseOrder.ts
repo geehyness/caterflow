@@ -98,7 +98,7 @@ export default defineType({
                     { title: 'Draft', value: 'draft' },
                     { title: 'Pending Approval', value: 'pending-approval' },
                     { title: 'Approved', value: 'approved' },
-                    { title: 'Processing', value: 'processing' },
+                    { title: 'Processed', value: 'processed' },
                     { title: 'Partially Received', value: 'partially-received' },
                     { title: 'Complete', value: 'complete' },
                     { title: 'Cancelled', value: 'cancelled' },
