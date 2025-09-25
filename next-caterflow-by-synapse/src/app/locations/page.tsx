@@ -8,7 +8,6 @@ import {
     Text,
     Button,
     useDisclosure,
-    IconButton,
     HStack,
     useToast,
     Tabs,
@@ -17,9 +16,10 @@ import {
     Tab,
     TabPanel,
     Spinner,
+    useColorModeValue,
 } from '@chakra-ui/react';
 import DataTable, { Column } from '@/components/DataTable';
-import { EditIcon, DeleteIcon } from '@chakra-ui/icons';
+import { EditIcon } from '@chakra-ui/icons';
 import { useSession } from 'next-auth/react'
 import SiteModal from '@/components/SiteModal';
 import BinModal from '@/components/BinModal';
@@ -214,7 +214,7 @@ export default function LocationsPage() {
                         aria-label="Edit site"
                         leftIcon={<EditIcon />}
                         size="sm"
-                        colorScheme="brand" // Using the custom brand color
+                        colorScheme="brand"
                         onClick={(e) => {
                             e.stopPropagation();
                             handleEditSite(row);
@@ -242,7 +242,7 @@ export default function LocationsPage() {
                         aria-label="Edit bin"
                         leftIcon={<EditIcon />}
                         size="sm"
-                        colorScheme="brand" // Using the custom brand color
+                        colorScheme="brand"
                         onClick={(e) => {
                             e.stopPropagation();
                             handleEditBin(row);
@@ -259,9 +259,15 @@ export default function LocationsPage() {
         { accessorKey: 'locationDescription', header: 'Description', isSortable: false },
     ];
 
+    // Theming props
+    const bgPrimary = useColorModeValue('neutral.light.bg-primary', 'neutral.dark.bg-primary');
+    const primaryTextColor = useColorModeValue('neutral.light.text-primary', 'neutral.dark.text-primary');
+    const secondaryTextColor = useColorModeValue('neutral.light.text-secondary', 'neutral.dark.text-secondary');
+
+
     if (status === 'loading') {
         return (
-            <Flex justify="center" align="center" height="80vh">
+            <Flex justify="center" align="center" height="80vh" bg={bgPrimary}>
                 <Spinner size="xl" />
             </Flex>
         );
@@ -269,19 +275,19 @@ export default function LocationsPage() {
 
     if (!isSiteManagerOrAdmin) {
         return (
-            <Box p={8} flex="1" textAlign="center">
+            <Box p={{ base: 4, md: 8 }} flex="1" textAlign="center" bg={bgPrimary}>
                 <Text color="red.500" fontSize="lg" fontWeight="semibold">You do not have permission to view this page.</Text>
             </Box>
         );
     }
 
     return (
-        <Box p={8} flex="1">
-            <Heading as="h1" size="xl" mb={6}>
+        <Box p={{ base: 4, md: 8 }} flex="1" bg={bgPrimary}>
+            <Heading as="h1" size={{ base: 'xl', md: '2xl' }} mb={6} color={primaryTextColor}>
                 Locations Management
             </Heading>
 
-            <Tabs variant="enclosed" onChange={(index) => setActiveTab(index)}>
+            <Tabs variant="enclosed" onChange={(index) => setActiveTab(index)} colorScheme="brand">
                 <TabList>
                     <Tab>Sites</Tab>
                     <Tab>Storage Bins</Tab>
@@ -290,15 +296,15 @@ export default function LocationsPage() {
                 <TabPanels>
                     {/* Sites Tab */}
                     <TabPanel p={0} mt={6}>
-                        <Flex justify="space-between" align="center" mb={6}>
-                            <Heading as="h2" size="lg">
+                        <Flex justify="space-between" align="center" mb={6} flexWrap="wrap" gap={4}>
+                            <Heading as="h2" size={{ base: 'md', md: 'lg' }} color={primaryTextColor}>
                                 Sites
                             </Heading>
-                            <Button colorScheme="brand" onClick={handleAddSite}>
+                            <Button colorScheme="brand" onClick={handleAddSite} size="md">
                                 Add New Site
                             </Button>
                         </Flex>
-                        <Text mb={6} color="gray.600">
+                        <Text mb={6} color={secondaryTextColor}>
                             Manage and view all sites.
                         </Text>
                         <DataTable
@@ -310,15 +316,15 @@ export default function LocationsPage() {
 
                     {/* Bins Tab */}
                     <TabPanel p={0} mt={6}>
-                        <Flex justify="space-between" align="center" mb={6}>
-                            <Heading as="h2" size="lg">
+                        <Flex justify="space-between" align="center" mb={6} flexWrap="wrap" gap={4}>
+                            <Heading as="h2" size={{ base: 'md', md: 'lg' }} color={primaryTextColor}>
                                 Storage Bins
                             </Heading>
-                            <Button colorScheme="brand" onClick={handleAddBin}>
+                            <Button colorScheme="brand" onClick={handleAddBin} size="md">
                                 Add New Bin
                             </Button>
                         </Flex>
-                        <Text mb={6} color="gray.600">
+                        <Text mb={6} color={secondaryTextColor}>
                             Manage and view all storage bins.
                         </Text>
                         <DataTable
@@ -341,7 +347,7 @@ export default function LocationsPage() {
                 onClose={onBinModalClose}
                 bin={selectedBin}
                 onSave={handleItemSaved}
-                sites={sites}  // Pass sites as a prop
+                sites={sites}
             />
         </Box>
     );

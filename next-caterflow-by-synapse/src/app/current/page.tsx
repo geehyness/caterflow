@@ -1,4 +1,3 @@
-// src/app/current/page.tsx
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -323,6 +322,14 @@ export default function CurrentStockPage() {
         },
     ];
 
+    // Theming props
+    const bgPrimary = useColorModeValue('neutral.light.bg-primary', 'neutral.dark.bg-primary');
+    const bgCard = useColorModeValue('neutral.light.bg-card', 'neutral.dark.bg-card');
+    const primaryTextColor = useColorModeValue('neutral.light.text-primary', 'neutral.dark.text-primary');
+    const secondaryTextColor = useColorModeValue('neutral.light.text-secondary', 'neutral.dark.text-secondary');
+    const borderCard = useColorModeValue('neutral.light.border-color', 'neutral.dark.border-color');
+
+
     if (status === 'loading') {
         return (
             <Flex justifyContent="center" alignItems="center" minH="100vh">
@@ -332,10 +339,10 @@ export default function CurrentStockPage() {
     }
 
     return (
-        <Box p={8}>
+        <Box p={{ base: 3, md: 4 }} bg={bgPrimary} minH="100vh">
             <VStack spacing={6} align="stretch">
-                <Flex justify="space-between" align="center">
-                    <Heading as="h1" size="xl">
+                <Flex justify="space-between" align="center" flexWrap="wrap" gap={4}>
+                    <Heading as="h1" size={{ base: 'md', md: 'xl' }} color={primaryTextColor}>
                         Current Stock
                     </Heading>
                     <Button
@@ -343,6 +350,7 @@ export default function CurrentStockPage() {
                         onClick={handleRefresh}
                         isLoading={isRefreshing}
                         variant="outline"
+                        colorScheme="brand"
                         size="sm"
                     >
                         Refresh
@@ -352,20 +360,22 @@ export default function CurrentStockPage() {
                 {/* Search Input */}
                 <InputGroup>
                     <InputLeftElement pointerEvents="none">
-                        <FiSearch color="gray.300" />
+                        <FiSearch color={secondaryTextColor} />
                     </InputLeftElement>
                     <Input
                         placeholder="Search by item name, SKU, bin, or site..."
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
+                        borderColor={borderCard}
+                        _placeholder={{ color: secondaryTextColor }}
                     />
                 </InputGroup>
 
                 {/* Sites Section */}
                 {(user?.role === 'admin' || user?.role === 'auditor') && (
                     <>
-                        <Flex justify="space-between" align="center">
-                            <Heading as="h2" size="md">Sites</Heading>
+                        <Flex justify="space-between" align="center" flexWrap="wrap" gap={4}>
+                            <Heading as="h2" size="md" color={primaryTextColor}>Sites</Heading>
                             {sites.length > 3 && (
                                 <HStack>
                                     <IconButton
@@ -373,12 +383,16 @@ export default function CurrentStockPage() {
                                         icon={<FiArrowLeft />}
                                         onClick={() => handleScroll('left')}
                                         size="sm"
+                                        variant="ghost"
+                                        colorScheme="brand"
                                     />
                                     <IconButton
                                         aria-label="Scroll right"
                                         icon={<FiArrowRight />}
                                         onClick={() => handleScroll('right')}
                                         size="sm"
+                                        variant="ghost"
+                                        colorScheme="brand"
                                     />
                                 </HStack>
                             )}
@@ -389,7 +403,7 @@ export default function CurrentStockPage() {
                                 ref={sitesContainerRef}
                                 overflowX="auto"
                                 whiteSpace="nowrap"
-                                pb={4}
+                                pb={2}
                                 sx={{
                                     '::-webkit-scrollbar': { display: 'none' },
                                     msOverflowStyle: 'none',
@@ -400,27 +414,28 @@ export default function CurrentStockPage() {
                                     <Button
                                         key={site._id}
                                         onClick={() => handleSiteClick(site._id)}
-                                        mx={2}
+                                        mr={2}
                                         variant={selectedSiteId === site._id ? 'solid' : 'outline'}
-                                        colorScheme={selectedSiteId === site._id ? 'blue' : 'gray'}
+                                        colorScheme="brand"
                                         minW="120px"
+                                        _first={{ ml: 0 }}
                                     >
                                         {site.name}
                                     </Button>
                                 ))}
                             </Flex>
                         ) : (
-                            <Text color="gray.500">No sites found for your account.</Text>
+                            <Text color={secondaryTextColor}>No sites found for your account.</Text>
                         )}
                     </>
                 )}
 
                 {/* For site managers, show their associated site */}
                 {user?.role === 'siteManager' && user.associatedSite && (
-                    <Card>
+                    <Card bg={bgCard} borderColor={borderCard} borderWidth="1px">
                         <CardBody>
-                            <Text fontWeight="bold">Your Associated Site:</Text>
-                            <Text>{user.associatedSite.name}</Text>
+                            <Text fontWeight="bold" color={primaryTextColor}>Your Associated Site:</Text>
+                            <Text color={secondaryTextColor}>{user.associatedSite.name}</Text>
                         </CardBody>
                     </Card>
                 )}
@@ -428,25 +443,25 @@ export default function CurrentStockPage() {
                 {/* Stock Summary */}
                 {!isLoading && currentStockItems.length > 0 && (
                     <Flex gap={4} wrap="wrap">
-                        <Badge colorScheme="green" p={2} borderRadius="md">
+                        <Badge colorScheme="green" p={2} borderRadius="md" variant="subtle">
                             In Stock: {currentStockItems.filter(item => item.stockStatus === 'in-stock').length}
                         </Badge>
-                        <Badge colorScheme="orange" p={2} borderRadius="md">
+                        <Badge colorScheme="orange" p={2} borderRadius="md" variant="subtle">
                             Low Stock: {currentStockItems.filter(item => item.stockStatus === 'low-stock').length}
                         </Badge>
-                        <Badge colorScheme="red" p={2} borderRadius="md">
+                        <Badge colorScheme="red" p={2} borderRadius="md" variant="subtle">
                             Out of Stock: {currentStockItems.filter(item => item.stockStatus === 'out-of-stock').length}
                         </Badge>
                     </Flex>
                 )}
 
                 {/* Filter Tabs */}
-                <Tabs index={activeTab} onChange={setActiveTab} variant="enclosed">
+                <Tabs index={activeTab} onChange={setActiveTab} variant="enclosed" colorScheme="brand">
                     <TabList>
                         <Tab>All</Tab>
-                        <Tab color="green.500">In Stock</Tab>
-                        <Tab color="orange.500">Low Stock</Tab>
-                        <Tab color="red.500">Out of Stock</Tab>
+                        <Tab>In Stock</Tab>
+                        <Tab>Low Stock</Tab>
+                        <Tab>Out of Stock</Tab>
                     </TabList>
                     <TabPanels>
                         <TabPanel p={0} pt={4}>
@@ -475,7 +490,7 @@ export default function CurrentStockPage() {
                         </Button>
                     </Flex>
                 ) : filteredItems.length === 0 && !isLoading ? (
-                    <Text fontSize="lg" color="gray.500">
+                    <Text fontSize="lg" color={secondaryTextColor} textAlign="center" py={8}>
                         No stock items found {activeTab > 0 ? 'matching the selected filter' : `for ${selectedSiteId ? "this site." : "your account."}`}
                     </Text>
                 ) : (

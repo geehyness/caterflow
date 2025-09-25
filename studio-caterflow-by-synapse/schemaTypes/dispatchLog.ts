@@ -66,6 +66,23 @@ export default defineType({
             },
         }),
         defineField({
+            name: 'status',
+            title: 'Status',
+            type: 'string',
+            options: {
+                list: [
+                    { title: 'Draft', value: 'draft' },
+                    { title: 'Scheduled', value: 'scheduled' },
+                    { title: 'In Progress', value: 'in-progress' },
+                    { title: 'Completed', value: 'completed' },
+                    { title: 'Cancelled', value: 'cancelled' },
+                ],
+            },
+            initialValue: 'draft',
+            validation: (Rule) => Rule.required(),
+            description: 'Overall status of the dispatch',
+        }),
+        defineField({
             name: 'dispatchType',
             title: 'Dispatch Type',
             type: 'reference',
@@ -128,6 +145,12 @@ export default defineType({
             validation: (Rule) => Rule.required(),
         }),
         defineField({
+            name: 'completedAt',
+            title: 'Completed At',
+            type: 'datetime',
+            description: 'Date when the dispatch was marked as completed',
+        }),
+        defineField({
             name: 'peopleFed',
             title: 'Number of People Fed',
             type: 'number',
@@ -147,16 +170,18 @@ export default defineType({
             date: 'dispatchDate',
             type: 'dispatchType.name',
             source: 'sourceBin.name',
+            status: 'status',
             evidenceStatus: 'evidenceStatus',
-            peopleFed: 'peopleFed', // Add this line
+            peopleFed: 'peopleFed',
         },
-        prepare({ title, date, type, source, evidenceStatus, peopleFed }) {
-            const statusText = evidenceStatus ? ` | Evidence: ${evidenceStatus}` : '';
+        prepare({ title, date, type, source, status, evidenceStatus, peopleFed }) {
+            const statusText = status ? ` | Status: ${status}` : '';
+            const evidenceText = evidenceStatus ? ` | Evidence: ${evidenceStatus}` : '';
             const typeText = type ? ` | Type: ${type}` : '';
-            const peopleText = peopleFed ? ` | Fed: ${peopleFed} people` : ''; // Add this line
+            const peopleText = peopleFed ? ` | Fed: ${peopleFed} people` : '';
             return {
                 title: `Dispatch: ${title}`,
-                subtitle: `${date ? new Date(date).toLocaleDateString() : 'No date'}${typeText} | From: ${source || 'No source'} ${peopleText}${statusText}`,
+                subtitle: `${date ? new Date(date).toLocaleDateString() : 'No date'}${typeText} | From: ${source || 'No source'}${peopleText}${statusText}${evidenceText}`,
             };
         },
     },
@@ -180,6 +205,11 @@ export default defineType({
             name: 'dispatchType',
             title: 'Dispatch Type',
             by: [{ field: 'dispatchType.name', direction: 'asc' }],
+        },
+        {
+            name: 'status',
+            title: 'Status',
+            by: [{ field: 'status', direction: 'asc' }],
         },
     ],
 });

@@ -2,6 +2,21 @@
 import { getStockItems, getPurchaseOrders, getAppUsers } from '@/lib/queries';
 import Link from 'next/link';
 import { AppUser } from '@/lib/sanityTypes';
+import {
+    Box,
+    Heading,
+    Text,
+    Grid,
+    Badge,
+    Flex,
+    VStack,
+    HStack,
+    useColorModeValue,
+    List,
+    ListItem,
+    Button,
+    Divider,
+} from '@chakra-ui/react';
 
 export default async function DashboardPage() {
     const [stockItems, purchaseOrders, appUsers] = await Promise.all([
@@ -12,75 +27,113 @@ export default async function DashboardPage() {
 
     const activeUsers = appUsers.filter((user: AppUser) => user.isActive);
 
+    // Theming props based on your theme.ts file
+    const bgCard = useColorModeValue('neutral.light.bg-card', 'neutral.dark.bg-card');
+    const borderColor = useColorModeValue('neutral.light.border-color', 'neutral.dark.border-color');
+    const primaryTextColor = useColorModeValue('neutral.light.text-primary', 'neutral.dark.text-primary');
+    const secondaryTextColor = useColorModeValue('neutral.light.text-secondary', 'neutral.dark.text-secondary');
+
     return (
-        <div className="p-6">
-            <h1 className="text-2xl font-bold mb-6">Caterflow Dashboard</h1>
+        <Box p={{ base: 4, md: 6 }}>
+            <Heading as="h1" size={{ base: 'xl', md: '2xl' }} fontWeight="bold" mb={6} color={primaryTextColor}>
+                Caterflow Dashboard
+            </Heading>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                <div className="bg-white p-4 rounded shadow">
-                    <h2 className="text-lg font-semibold">Stock Items</h2>
-                    <p className="text-3xl">{stockItems.length}</p>
-                </div>
+            {/* Stat Cards */}
+            <Grid
+                templateColumns={{
+                    base: 'repeat(1, 1fr)',
+                    md: 'repeat(2, 1fr)',
+                    lg: 'repeat(4, 1fr)'
+                }}
+                gap={6}
+                mb={8}
+            >
+                <Box bg={bgCard} p={6} rounded="lg" shadow="sm" border="1px" borderColor={borderColor}>
+                    <Heading as="h2" size="md" fontWeight="semibold" mb={2} color={secondaryTextColor}>Stock Items</Heading>
+                    <Text fontSize="4xl" fontWeight="bold" color={primaryTextColor}>{stockItems.length}</Text>
+                </Box>
 
-                <div className="bg-white p-4 rounded shadow">
-                    <h2 className="text-lg font-semibold">Active Users</h2>
-                    <p className="text-3xl">{activeUsers.length}</p>
-                </div>
+                <Box bg={bgCard} p={6} rounded="lg" shadow="sm" border="1px" borderColor={borderColor}>
+                    <Heading as="h2" size="md" fontWeight="semibold" mb={2} color={secondaryTextColor}>Active Users</Heading>
+                    <Text fontSize="4xl" fontWeight="bold" color={primaryTextColor}>{activeUsers.length}</Text>
+                </Box>
 
-                <div className="bg-white p-4 rounded shadow">
-                    <h2 className="text-lg font-semibold">Purchase Orders</h2>
-                    <p className="text-3xl">{purchaseOrders.length}</p>
-                </div>
+                <Box bg={bgCard} p={6} rounded="lg" shadow="sm" border="1px" borderColor={borderColor}>
+                    <Heading as="h2" size="md" fontWeight="semibold" mb={2} color={secondaryTextColor}>Purchase Orders</Heading>
+                    <Text fontSize="4xl" fontWeight="bold" color={primaryTextColor}>{purchaseOrders.length}</Text>
+                </Box>
 
-                <div className="bg-white p-4 rounded shadow">
-                    <h2 className="text-lg font-semibold">Pending Orders</h2>
-                    <p className="text-3xl">
+                <Box bg={bgCard} p={6} rounded="lg" shadow="sm" border="1px" borderColor={borderColor}>
+                    <Heading as="h2" size="md" fontWeight="semibold" mb={2} color={secondaryTextColor}>Pending Orders</Heading>
+                    <Text fontSize="4xl" fontWeight="bold" color={primaryTextColor}>
                         {purchaseOrders.filter((po: any) => po.status === 'ordered').length}
-                    </p>
-                </div>
-            </div>
+                    </Text>
+                </Box>
+            </Grid>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="bg-white p-4 rounded shadow">
-                    <h2 className="text-lg font-semibold mb-4">Recent Stock Items</h2>
-                    <ul>
+            {/* Recent Activity Sections */}
+            <Grid
+                templateColumns={{
+                    base: 'repeat(1, 1fr)',
+                    lg: 'repeat(2, 1fr)'
+                }}
+                gap={6}
+            >
+                {/* Recent Stock Items */}
+                <Box bg={bgCard} p={6} rounded="lg" shadow="sm" border="1px" borderColor={borderColor}>
+                    <Heading as="h2" size="lg" fontWeight="semibold" mb={4} color={primaryTextColor}>Recent Stock Items</Heading>
+                    <List spacing={3}>
                         {stockItems.slice(0, 5).map((item: any) => (
-                            <li key={item._id} className="flex justify-between py-2 border-b">
-                                <span>{item.name}</span>
-                                <span>{item.sku}</span>
-                            </li>
+                            <ListItem key={item._id}>
+                                <Flex justify="space-between" align="center" py={2} borderBottom="1px" borderColor={borderColor}>
+                                    <Text color={primaryTextColor}>{item.name}</Text>
+                                    <Text color={secondaryTextColor}>{item.sku}</Text>
+                                </Flex>
+                            </ListItem>
                         ))}
-                    </ul>
-                    <Link href="/inventory" className="text-blue-500 mt-4 block">
-                        View All Inventory
+                    </List>
+                    <Link href="/inventory" passHref>
+                        <Button variant="link" colorScheme="brand" mt={4}>
+                            View All Inventory
+                        </Button>
                     </Link>
-                </div>
+                </Box>
 
-                <div className="bg-white p-4 rounded shadow">
-                    <h2 className="text-lg font-semibold mb-4">Recent Orders</h2>
-                    <ul>
+                {/* Recent Orders */}
+                <Box bg={bgCard} p={6} rounded="lg" shadow="sm" border="1px" borderColor={borderColor}>
+                    <Heading as="h2" size="lg" fontWeight="semibold" mb={4} color={primaryTextColor}>Recent Orders</Heading>
+                    <List spacing={3}>
                         {purchaseOrders.slice(0, 5).map((order: any) => (
-                            <li key={order._id} className="py-2 border-b">
-                                <div className="flex justify-between">
-                                    <span>{order.poNumber}</span>
-                                    <span className={`px-2 py-1 rounded text-xs ${order.status === 'received' ? 'bg-green-100 text-green-800' :
-                                        order.status === 'ordered' ? 'bg-yellow-100 text-yellow-800' :
-                                            'bg-gray-100 text-gray-800'
-                                        }`}>
-                                        {order.status}
-                                    </span>
-                                </div>
-                                <div className="text-sm text-gray-500">
-                                    {order.supplier?.name || 'No Supplier'} • {new Date(order.orderDate).toLocaleDateString()}
-                                </div>
-                            </li>
+                            <ListItem key={order._id}>
+                                <VStack align="stretch" py={2} borderBottom="1px" borderColor={borderColor}>
+                                    <Flex justify="space-between" align="center">
+                                        <Text fontWeight="medium" color={primaryTextColor}>{order.poNumber}</Text>
+                                        <Badge
+                                            colorScheme={
+                                                order.status === 'received' ? 'green' :
+                                                    order.status === 'ordered' ? 'orange' :
+                                                        'gray'
+                                            }
+                                            variant="subtle"
+                                        >
+                                            {order.status}
+                                        </Badge>
+                                    </Flex>
+                                    <Text fontSize="sm" color={secondaryTextColor}>
+                                        {order.supplier?.name || 'No Supplier'} • {new Date(order.orderDate).toLocaleDateString()}
+                                    </Text>
+                                </VStack>
+                            </ListItem>
                         ))}
-                    </ul>
-                    <Link href="/operations/purchases" className="text-blue-500 mt-4 block">
-                        View All Orders
+                    </List>
+                    <Link href="/operations/purchases" passHref>
+                        <Button variant="link" colorScheme="brand" mt={4}>
+                            View All Orders
+                        </Button>
                     </Link>
-                </div>
-            </div>
-        </div>
+                </Box>
+            </Grid>
+        </Box>
     );
 }

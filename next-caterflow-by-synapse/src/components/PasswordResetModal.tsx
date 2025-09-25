@@ -19,6 +19,7 @@ import {
     Alert,
     AlertIcon,
     HStack,
+    useColorModeValue, // Import useColorModeValue for theme-based colors
 } from '@chakra-ui/react';
 
 interface PasswordResetModalProps {
@@ -33,6 +34,10 @@ export default function PasswordResetModal({ isOpen, onClose }: PasswordResetMod
     const [isCodeSent, setIsCodeSent] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const toast = useToast();
+
+    // Get theme-based colors for consistency
+    const alertColorScheme = useColorModeValue('brand', 'brand');
+    const brandColor = useColorModeValue('brand', 'brand');
 
     const handleSendCode = async () => {
         setIsLoading(true);
@@ -56,18 +61,17 @@ export default function PasswordResetModal({ isOpen, onClose }: PasswordResetMod
                 setIsCodeSent(true);
             } else {
                 toast({
-                    title: 'Failed to send code.',
-                    description: data.message || 'An error occurred.',
+                    title: 'Error sending code.',
+                    description: data.error || 'Please check the email address and try again.',
                     status: 'error',
                     duration: 5000,
                     isClosable: true,
                 });
             }
         } catch (error) {
-            console.error('Error sending verification code:', error);
             toast({
-                title: 'Network error.',
-                description: 'Failed to connect to the server.',
+                title: 'Request failed.',
+                description: 'Unable to send verification code. Please try again later.',
                 status: 'error',
                 duration: 5000,
                 isClosable: true,
@@ -80,7 +84,7 @@ export default function PasswordResetModal({ isOpen, onClose }: PasswordResetMod
     const handleResetPassword = async () => {
         setIsLoading(true);
         try {
-            const response = await fetch('/api/auth/verify-and-reset-password', {
+            const response = await fetch('/api/auth/reset-password', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email, verificationCode, newPassword }),
@@ -90,32 +94,26 @@ export default function PasswordResetModal({ isOpen, onClose }: PasswordResetMod
 
             if (response.ok) {
                 toast({
-                    title: 'Password reset successful!',
+                    title: 'Password reset successful.',
                     description: data.message,
                     status: 'success',
                     duration: 5000,
                     isClosable: true,
                 });
-                // Reset and close modal
-                setEmail('');
-                setVerificationCode('');
-                setNewPassword('');
-                setIsCodeSent(false);
                 onClose();
             } else {
                 toast({
-                    title: 'Password reset failed.',
-                    description: data.message || 'An error occurred.',
+                    title: 'Error resetting password.',
+                    description: data.error || 'Invalid code or password. Please try again.',
                     status: 'error',
                     duration: 5000,
                     isClosable: true,
                 });
             }
         } catch (error) {
-            console.error('Error resetting password:', error);
             toast({
-                title: 'Network error.',
-                description: 'Failed to connect to the server.',
+                title: 'Request failed.',
+                description: 'Unable to reset password. Please try again later.',
                 status: 'error',
                 duration: 5000,
                 isClosable: true,
@@ -126,45 +124,41 @@ export default function PasswordResetModal({ isOpen, onClose }: PasswordResetMod
     };
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} isCentered>
+        <Modal isOpen={isOpen} onClose={onClose}>
             <ModalOverlay />
             <ModalContent>
-                <ModalHeader color="neutral.text-primary">Reset Password</ModalHeader>
+                <ModalHeader>Reset Password</ModalHeader>
+                <ModalCloseButton />
                 <ModalBody>
                     <VStack spacing={4}>
-                        {!isCodeSent ? (
+                        <Alert status="info" colorScheme={alertColorScheme}>
+                            <AlertIcon />
+                            <Text>
+                                Enter your email address to receive a verification code.
+                            </Text>
+                        </Alert>
+                        <FormControl>
+                            <FormLabel>Email Address</FormLabel>
+                            <Input
+                                type="email"
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                                placeholder="name@example.com"
+                                isDisabled={isCodeSent || isLoading}
+                            />
+                        </FormControl>
+
+                        {isCodeSent && (
                             <>
-                                <Text color="neutral.text-secondary">
-                                    Please enter your email to receive a verification code.
-                                </Text>
-                                <FormControl id="reset-email" isRequired>
-                                    <FormLabel>Email Address</FormLabel>
-                                    <Input
-                                        type="email"
-                                        value={email}
-                                        onChange={(e) => setEmail(e.target.value)}
-                                        placeholder="Enter your email"
-                                    />
-                                </FormControl>
-                            </>
-                        ) : (
-                            <>
-                                <Alert status="info" borderRadius="md">
-                                    <AlertIcon />
-                                    <Text>
-                                        A verification code has been sent to <strong>{email}</strong>.
-                                    </Text>
-                                </Alert>
-                                <FormControl id="verification-code" isRequired>
+                                <FormControl>
                                     <FormLabel>Verification Code</FormLabel>
                                     <Input
-                                        type="text"
                                         value={verificationCode}
                                         onChange={(e) => setVerificationCode(e.target.value)}
-                                        placeholder="Enter the 6-digit code"
+                                        placeholder="Enter the code from your email"
                                     />
                                 </FormControl>
-                                <FormControl id="new-password" isRequired>
+                                <FormControl>
                                     <FormLabel>New Password</FormLabel>
                                     <Input
                                         type="password"
@@ -179,22 +173,24 @@ export default function PasswordResetModal({ isOpen, onClose }: PasswordResetMod
                 </ModalBody>
                 <ModalFooter>
                     <HStack spacing={4}>
-                        <Button variant="ghost" onClick={onClose}>
+                        <Button variant="ghost" onClick={onClose} isDisabled={isLoading}>
                             Cancel
                         </Button>
                         {!isCodeSent ? (
                             <Button
-                                colorScheme="brand"
+                                colorScheme={brandColor}
                                 onClick={handleSendCode}
                                 isLoading={isLoading}
+                                isDisabled={!email}
                             >
                                 Send Code
                             </Button>
                         ) : (
                             <Button
-                                colorScheme="brand"
+                                colorScheme={brandColor}
                                 onClick={handleResetPassword}
                                 isLoading={isLoading}
+                                isDisabled={!verificationCode || !newPassword}
                             >
                                 Reset Password
                             </Button>

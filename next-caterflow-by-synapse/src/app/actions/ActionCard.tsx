@@ -1,77 +1,99 @@
+// src/components/ActionCard.tsx
 import {
     Card,
     CardBody,
-    VStack,
-    HStack,
-    Badge,
-    Button,
     Text,
+    Badge,
+    Flex,
+    Spacer,
     Heading,
+    Icon,
     useColorModeValue,
+    Box,
+    Button,
+    VStack,
 } from '@chakra-ui/react';
-import { FiCheckCircle, FiPaperclip } from 'react-icons/fi';
-import { PendingAction } from './types';
+import { BsArrowRight } from 'react-icons/bs';
+import Link from 'next/link';
 
 interface ActionCardProps {
-    action: PendingAction;
-    onOpenReview: () => void;
-    onOpenUploadModal: () => void;
+    title: string;
+    description: string;
+    count: number;
+    type: 'pending' | 'draft' | 'lowStock' | 'outOfStock' | 'alert';
+    link: string;
 }
 
-const priorityColors = {
-    high: 'red',
-    medium: 'orange',
-    low: 'blue',
-};
-
-export default function ActionCard({ action, onOpenReview, onOpenUploadModal }: ActionCardProps) {
+export const ActionCard = ({ title, description, count, type, link }: ActionCardProps) => {
     const cardBg = useColorModeValue('neutral.light.bg-card', 'neutral.dark.bg-card');
+    const textColor = useColorModeValue('neutral.light.text-primary', 'neutral.dark.text-primary');
+    const descriptionColor = useColorModeValue('neutral.light.text-secondary', 'neutral.dark.text-secondary');
+    const dividerColor = useColorModeValue('neutral.light.border-color', 'neutral.dark.border-color');
+
+    const getBadgeColorScheme = (cardType: ActionCardProps['type']) => {
+        switch (cardType) {
+            case 'pending':
+                return 'orange';
+            case 'draft':
+                return 'blue';
+            case 'lowStock':
+                return 'yellow';
+            case 'outOfStock':
+                return 'red';
+            case 'alert':
+                return 'red';
+            default:
+                return 'gray';
+        }
+    };
 
     return (
-        <Card bg={cardBg}>
+        <Card
+            boxShadow="md"
+            bg={cardBg}
+            sx={{
+                _dark: {
+                    boxShadow: 'dark-md',
+                },
+            }}
+            size={{ base: 'sm', md: 'md' }}
+            height="100%"
+        >
             <CardBody>
-                <HStack mb={2} justifyContent="space-between">
-                    <Badge colorScheme={priorityColors[action.priority]}>
-                        {action.priority.toUpperCase()}
-                    </Badge>
-                    <Text fontSize="sm" color="gray.500">
-                        {new Date(action.createdAt).toLocaleDateString()}
+                <VStack align="flex-start" spacing={3} h="full">
+                    <Flex align="center" width="full">
+                        <Heading size={{ base: 'sm', md: 'md' }} color={textColor} noOfLines={1}>
+                            {title}
+                        </Heading>
+                        <Spacer />
+                        {count > 0 && (
+                            <Badge colorScheme={getBadgeColorScheme(type)} variant="solid" borderRadius="full" px={2}>
+                                {count}
+                            </Badge>
+                        )}
+                    </Flex>
+
+                    <Text fontSize={{ base: 'sm', md: 'md' }} color={descriptionColor} noOfLines={2} flex="1">
+                        {description}
                     </Text>
-                </HStack>
-                <VStack align="start" spacing={1}>
-                    <Heading as="h3" size="md">
-                        {action.title}
-                    </Heading>
-                    <Text fontSize="sm" color="gray.600">
-                        {action.description}
-                    </Text>
-                    <Text fontSize="sm" color="gray.500" fontStyle="italic">
-                        Site: {action.siteName}
-                    </Text>
+
+                    <Box width="full" pt={2} borderTop="1px solid" borderColor={dividerColor}>
+                        <Link href={link} passHref>
+                            <Button
+                                as="a"
+                                variant="ghost"
+                                colorScheme="brand"
+                                size="sm"
+                                width="full"
+                                justifyContent="space-between"
+                                rightIcon={<Icon as={BsArrowRight} />}
+                            >
+                                View Details
+                            </Button>
+                        </Link>
+                    </Box>
                 </VStack>
-                <HStack mt={4} spacing={4}>
-                    <Button
-                        size="sm"
-                        colorScheme="blue"
-                        onClick={onOpenReview}
-                        leftIcon={<FiCheckCircle />}
-                        flexGrow={1}
-                    >
-                        Resolve Action
-                    </Button>
-                    {action.evidenceRequired && (
-                        <Button
-                            size="sm"
-                            variant="outline"
-                            colorScheme={action.evidenceStatus === 'complete' ? 'green' : 'orange'}
-                            onClick={onOpenUploadModal}
-                            leftIcon={<FiPaperclip />}
-                        >
-                            Evidence
-                        </Button>
-                    )}
-                </HStack>
             </CardBody>
         </Card>
     );
-}
+};

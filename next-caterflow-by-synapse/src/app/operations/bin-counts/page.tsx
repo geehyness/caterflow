@@ -1,4 +1,3 @@
-// src/app/operations/bin-counts/page.tsx
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
@@ -21,6 +20,7 @@ import {
     Icon,
     Text,
     HStack,
+    VStack,
 } from '@chakra-ui/react';
 import { FiPlus, FiSearch, FiEdit, FiEye, FiClipboard, FiFilter } from 'react-icons/fi';
 import DataTable from '@/components/DataTable';
@@ -72,11 +72,22 @@ export default function BinCountsPage() {
     const toast = useToast();
     const [viewMode, setViewMode] = useState<'actionRequired' | 'all'>('all');
 
-    const cardBg = useColorModeValue('white', 'gray.700');
-    const borderColor = useColorModeValue('gray.200', 'gray.600');
-    const inputBg = useColorModeValue('white', 'gray.800');
-    const searchIconColor = useColorModeValue('gray.300', 'gray.500');
+    // Theming props
+    const bgPrimary = useColorModeValue('neutral.light.bg-primary', 'neutral.dark.bg-primary');
+    const bgCard = useColorModeValue('neutral.light.bg-card', 'neutral.dark.bg-card');
+    const borderColor = useColorModeValue('neutral.light.border-color', 'neutral.dark.border-color');
+    const primaryTextColor = useColorModeValue('neutral.light.text-primary', 'neutral.dark.text-primary');
     const secondaryTextColor = useColorModeValue('neutral.light.text-secondary', 'neutral.dark.text-secondary');
+
+    const getStatusColor = useCallback((status: string) => {
+        switch (status) {
+            case 'draft': return 'orange';
+            case 'in-progress': return 'blue';
+            case 'completed': return 'green';
+            case 'adjusted': return 'purple';
+            default: return 'gray';
+        }
+    }, []);
 
     const fetchBinCounts = useCallback(async () => {
         setLoading(true);
@@ -104,8 +115,10 @@ export default function BinCountsPage() {
     }, [toast]);
 
     useEffect(() => {
-        fetchBinCounts();
-    }, [fetchBinCounts]);
+        if (status === 'authenticated') {
+            fetchBinCounts();
+        }
+    }, [fetchBinCounts, status]);
 
     useEffect(() => {
         let filtered = binCounts.filter(count => {
@@ -120,11 +133,10 @@ export default function BinCountsPage() {
             ? filtered.filter(count => count.status === 'draft' || count.status === 'in-progress')
             : filtered;
 
-        // Sort the displayed counts by count number, highest first
         countsToDisplay.sort((a, b) => {
             const numA = parseInt(a.countNumber?.split('-')[1] || '0', 10);
             const numB = parseInt(b.countNumber?.split('-')[1] || '0', 10);
-            return numB - numA; // Sort in descending order (highest number first)
+            return numB - numA;
         });
 
         setFilteredCounts(countsToDisplay);
@@ -141,24 +153,6 @@ export default function BinCountsPage() {
         onOpen();
     }, [onOpen]);
 
-    const getStatusColor = (status: string) => {
-        switch (status) {
-            case 'draft': return 'gray';
-            case 'in-progress': return 'orange';
-            case 'completed': return 'green';
-            case 'adjusted': return 'purple';
-            default: return 'gray';
-        }
-    };
-
-    const getItemList = (count: BinCount) => {
-        if (!count.countedItems || count.countedItems.length === 0) return 'No items';
-        const items = count.countedItems.slice(0, 3).map(item =>
-            `${item.stockItem?.name || 'Unknown'}`
-        );
-        return items.join(', ') + (count.countedItems.length > 3 ? '...' : '');
-    };
-
     const columns = useMemo(
         () => [
             {
@@ -167,32 +161,36 @@ export default function BinCountsPage() {
                 cell: (row: any) => (
                     <Button
                         size="sm"
-                        colorScheme={row.status === 'draft' || row.status === 'in-progress' ? 'brand' : 'gray'}
-                        variant={row.status === 'draft' || row.status === 'in-progress' ? 'solid' : 'outline'}
+                        colorScheme="brand"
+                        variant={row.status === 'completed' || row.status === 'adjusted' ? 'outline' : 'solid'}
                         onClick={() => handleViewOrEdit(row)}
-                        leftIcon={<Icon as={row.status === 'draft' || row.status === 'in-progress' ? FiEdit : FiEye} />}
+                        leftIcon={<Icon as={row.status === 'completed' || row.status === 'adjusted' ? FiEye : FiEdit} />}
                     >
-                        {row.status === 'draft' || row.status === 'in-progress' ? 'Edit' : 'View'}
+                        {row.status === 'completed' || row.status === 'adjusted' ? 'View' : 'Edit'}
                     </Button>
                 )
             },
             {
                 accessorKey: 'countNumber',
                 header: 'Count #',
+                isSortable: true,
             },
             {
                 accessorKey: 'bin.name',
                 header: 'Bin',
+                isSortable: true,
                 cell: (row: any) => row.bin?.name || 'N/A'
             },
             {
                 accessorKey: 'bin.site.name',
                 header: 'Site',
+                isSortable: true,
                 cell: (row: any) => row.bin?.site?.name || 'N/A'
             },
             {
                 accessorKey: 'countDate',
                 header: 'Count Date',
+                isSortable: true,
                 cell: (row: any) => {
                     try {
                         return new Date(row.countDate).toLocaleDateString();
@@ -204,6 +202,7 @@ export default function BinCountsPage() {
             {
                 accessorKey: 'status',
                 header: 'Status',
+                isSortable: true,
                 cell: (row: any) => (
                     <Badge colorScheme={getStatusColor(row.status)} variant="subtle">
                         {row.status?.replace('-', ' ').toUpperCase() || 'UNKNOWN'}
@@ -213,11 +212,13 @@ export default function BinCountsPage() {
             {
                 accessorKey: 'totalItems',
                 header: 'Total Items',
+                isSortable: true,
                 cell: (row: any) => row.totalItems || 0
             },
             {
                 accessorKey: 'totalVariance',
                 header: 'Total Variance',
+                isSortable: true,
                 cell: (row: any) => {
                     const value = row.totalVariance || 0;
                     return (
@@ -228,12 +229,12 @@ export default function BinCountsPage() {
                 },
             },
         ],
-        [handleViewOrEdit]
+        [handleViewOrEdit, getStatusColor]
     );
 
     if (loading || status === 'loading') {
         return (
-            <Box p={{ base: 2, md: 4 }}>
+            <Box p={{ base: 4, md: 8 }} bg={bgPrimary}>
                 <Flex justifyContent="center" alignItems="center" height="50vh">
                     <Spinner size="xl" />
                 </Flex>
@@ -242,63 +243,81 @@ export default function BinCountsPage() {
     }
 
     return (
-        <Box p={{ base: 2, md: 4 }}>
-            <Flex
-                justifyContent="space-between"
-                alignItems={{ base: 'flex-start', md: 'center' }}
-                py={4}
-                mb={6}
-                flexDirection={{ base: 'column', md: 'row' }}
-                gap={{ base: 4, md: 3 }}
-            >
-                <Heading as="h1" size="xl">
-                    Bin Counts
-                </Heading>
-                <HStack spacing={3} flexWrap="wrap">
-                    <Button
-                        leftIcon={<FiEye />}
-                        colorScheme={viewMode === 'all' ? 'brand' : 'gray'}
-                        onClick={() => setViewMode('all')}
-                        variant="outline"
-                    >
-                        View All
-                    </Button>
+        <Box p={{ base: 4, md: 8 }} bg={bgPrimary} minH="100vh">
+            <VStack spacing={{ base: 4, md: 6 }} align="stretch">
+                <Flex
+                    justifyContent="space-between"
+                    alignItems={{ base: 'flex-start', md: 'center' }}
+                    flexDirection={{ base: 'column', md: 'row' }}
+                    gap={{ base: 4, md: 3 }}
+                >
+                    <Heading as="h1" size={{ base: 'xl', md: '2xl' }} color={primaryTextColor}>
+                        Bin Counts
+                    </Heading>
+                    <HStack spacing={3} flexWrap="wrap">
+                        <InputGroup maxW={{ base: 'full', md: '300px' }}>
+                            <InputLeftElement
+                                pointerEvents="none"
+                                children={<FiSearch color={secondaryTextColor} />}
+                            />
+                            <Input
+                                type="text"
+                                placeholder="Search counts..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                borderColor={borderColor}
+                                bg={bgCard}
+                                _hover={{ borderColor: 'brand.500' }}
+                                _focus={{ borderColor: 'brand.500', boxShadow: '0 0 0 1px var(--chakra-colors-brand-500)' }}
+                                color={primaryTextColor}
+                                _placeholder={{ color: secondaryTextColor }}
+                            />
+                        </InputGroup>
+                        <Button
+                            leftIcon={<FiEye />}
+                            colorScheme="brand"
+                            variant={viewMode === 'all' ? 'solid' : 'outline'}
+                            onClick={() => setViewMode('all')}
+                        >
+                            View All
+                        </Button>
 
-                    <Button
-                        leftIcon={<FiFilter />}
-                        colorScheme={viewMode === 'actionRequired' ? 'brand' : 'gray'}
-                        onClick={() => setViewMode('actionRequired')}
-                        variant="outline"
-                    >
-                        Action Required
-                    </Button>
-                    <Button
-                        leftIcon={<FiPlus />}
-                        colorScheme="brand"
-                        onClick={handleAddBinCount}
-                    >
-                        New Count
-                    </Button>
-                </HStack>
-            </Flex>
+                        <Button
+                            leftIcon={<FiFilter />}
+                            colorScheme="brand"
+                            variant={viewMode === 'actionRequired' ? 'solid' : 'outline'}
+                            onClick={() => setViewMode('actionRequired')}
+                        >
+                            Action Required
+                        </Button>
+                        <Button
+                            leftIcon={<FiPlus />}
+                            colorScheme="brand"
+                            onClick={handleAddBinCount}
+                        >
+                            New Count
+                        </Button>
+                    </HStack>
+                </Flex>
 
-            {/* Bin Counts Table */}
-            <Card>
-                <CardBody p={0}>
-                    <DataTable
-                        columns={columns}
-                        data={filteredCounts}
-                        loading={false}
-                    />
-                </CardBody>
-            </Card>
+                {/* Bin Counts Table */}
+                <Card bg={bgCard} border="1px" borderColor={borderColor}>
+                    <CardBody p={0}>
+                        <DataTable
+                            columns={columns}
+                            data={filteredCounts}
+                            loading={false}
+                        />
+                    </CardBody>
+                </Card>
 
-            <BinCountModal
-                isOpen={isOpen}
-                onClose={onClose}
-                binCount={selectedBinCount}
-                onSave={fetchBinCounts}
-            />
+                <BinCountModal
+                    isOpen={isOpen}
+                    onClose={onClose}
+                    binCount={selectedBinCount}
+                    onSave={fetchBinCounts}
+                />
+            </VStack>
         </Box>
     );
 }

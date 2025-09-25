@@ -1,14 +1,26 @@
-// src/app/stock-items/page.tsx
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Box, Heading, Flex, Text, Button, useDisclosure, IconButton, HStack, useToast, Tag } from '@chakra-ui/react';
+import {
+    Box,
+    Heading,
+    Flex,
+    Text,
+    Button,
+    useDisclosure,
+    IconButton,
+    HStack,
+    useToast,
+    Tag,
+    useColorModeValue,
+    Spinner,
+} from '@chakra-ui/react';
 import { client } from '@/lib/sanity';
 import { groq } from 'next-sanity';
 import DataTable, { Column } from '@/components/DataTable';
 import { useRouter } from 'next/navigation';
 import StockItemModal from '@/components/StockItemModal';
-import { EditIcon, DeleteIcon } from '@chakra-ui/icons';
+import { EditIcon, DeleteIcon, AddIcon } from '@chakra-ui/icons';
 import { useSession } from 'next-auth/react'
 
 interface StockItem {
@@ -44,20 +56,27 @@ export default function InventoryPage() {
     const [isMounted, setIsMounted] = useState(false);
     const toast = useToast();
 
+    // Theming values from theme.ts
+    const pageBg = useColorModeValue('neutral.light.bg-primary', 'neutral.dark.bg-primary');
+    const headingColor = useColorModeValue('neutral.light.text-primary', 'neutral.dark.text-primary');
+    const secondaryTextColor = useColorModeValue('neutral.light.text-secondary', 'neutral.dark.text-secondary');
+    const brand500 = useColorModeValue('brand.500', 'brand.300');
+
+    // FIX: Memoize fetchStockItems to avoid unnecessary re-renders
     const fetchStockItems = useCallback(async () => {
         const query = groq`
-      *[_type == "StockItem"]{
-        _id,
-        name,
-        sku,
-        minimumStockLevel,
-        quantityInStock,
-        "category": category->{_id, title},
-        "suppliers": suppliers[]->{_id, name},
-        "primarySupplier": primarySupplier->{_id, name},
-        unitOfMeasure
-      }
-    `;
+            *[_type == "StockItem"]{
+                _id,
+                name,
+                sku,
+                minimumStockLevel,
+                quantityInStock,
+                "category": category->{_id, title},
+                "suppliers": suppliers[]->{_id, name},
+                "primarySupplier": primarySupplier->{_id, name},
+                unitOfMeasure
+            }
+        `;
         try {
             setLoading(true);
             const data = await client.fetch(query);
@@ -121,28 +140,39 @@ export default function InventoryPage() {
         fetchStockItems();
     };
 
+    // Assuming 'admin' and 'manager' roles have CRUD permissions
+    const canManage = user?.role === 'admin' || user?.role === 'manager';
+
     const columns: Column[] = [
-        {
+        ...(canManage ? [{
             accessorKey: 'actions',
             header: 'Actions',
             isSortable: false,
             cell: (row: StockItem) => (
                 <HStack spacing={2}>
-                    <Button
+                    <IconButton
                         aria-label="Edit item"
-                        leftIcon={<EditIcon />}
+                        icon={<EditIcon />}
                         size="sm"
                         colorScheme="blue"
                         onClick={(e) => {
                             e.stopPropagation();
                             handleEdit(row);
                         }}
-                    >
-                        Edit
-                    </Button>
+                    />
+                    <IconButton
+                        aria-label="Delete item"
+                        icon={<DeleteIcon />}
+                        size="sm"
+                        colorScheme="red"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            handleDelete(row);
+                        }}
+                    />
                 </HStack>
             ),
-        },
+        }] : []),
         {
             accessorKey: 'name',
             header: 'Item Name',
@@ -158,7 +188,7 @@ export default function InventoryPage() {
             header: 'Min. Level',
             isSortable: true,
             cell: (row: StockItem) => (
-                <Text>
+                <Text color={secondaryTextColor}>
                     {row.minimumStockLevel} {row.unitOfMeasure}
                 </Text>
             ),
@@ -167,7 +197,7 @@ export default function InventoryPage() {
             accessorKey: 'category.title',
             header: 'Category',
             isSortable: true,
-            cell: (row: StockItem) => <Text>{row.category?.title || 'N/A'}</Text>,
+            cell: (row: StockItem) => <Text color={secondaryTextColor}>{row.category?.title || 'N/A'}</Text>,
         },
         {
             accessorKey: 'suppliers',
@@ -179,13 +209,13 @@ export default function InventoryPage() {
                         <Tag
                             key={supplier._id}
                             size="sm"
-                            colorScheme={row.primarySupplier?._id === supplier._id ? 'blue' : 'gray'}
+                            colorScheme={row.primarySupplier?._id === supplier._id ? 'brand' : 'gray'}
                             variant={row.primarySupplier?._id === supplier._id ? 'solid' : 'subtle'}
                         >
                             {supplier.name}
                             {row.primarySupplier?._id === supplier._id && ' (Primary)'}
                         </Tag>
-                    )) || <Text>N/A</Text>}
+                    )) || <Text color={secondaryTextColor}>N/A</Text>}
                 </HStack>
             ),
         },
@@ -196,21 +226,31 @@ export default function InventoryPage() {
         },
     ];
 
-    if (!isMounted) {
-        return null;
+    if (!isMounted || status === 'loading') {
+        return (
+            <Flex justifyContent="center" alignItems="center" height="100vh">
+                <Spinner size="xl" color={brand500} />
+            </Flex>
+        );
     }
 
     return (
-        <Box p={8} flex="1">
+        <Box p={{ base: 4, md: 8 }} flex="1" bg={pageBg}>
             <Flex justify="space-between" align="center" mb={6}>
-                <Heading as="h1" size="xl">
+                <Heading as="h1" size="xl" color={headingColor}>
                     Stock Items
                 </Heading>
-                <Button colorScheme="blue" onClick={handleNewItem}>
-                    Add New Item
-                </Button>
+                {canManage && (
+                    <Button
+                        colorScheme="brand"
+                        onClick={handleNewItem}
+                        leftIcon={<AddIcon />}
+                    >
+                        Add New Item
+                    </Button>
+                )}
             </Flex>
-            <Text mb={6} color="gray.600">
+            <Text mb={6} color={secondaryTextColor}>
                 Manage and view all stock items in your inventory.
             </Text>
             <DataTable

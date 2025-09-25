@@ -71,23 +71,24 @@ export default function GoodsReceiptsPage() {
     const [approvedPurchaseOrders, setApprovedPurchaseOrders] = useState<any[]>([]);
     const [allPurchaseOrders, setAllPurchaseOrders] = useState<any[]>([]);
     const [goodsReceiptsList, setGoodsReceiptsList] = useState<any[]>([]);
-    //const [loadingPOs, setLoadingPOs] = useState(false);
-    //const [loadingReceipts, setLoadingReceipts] = useState(false);
     const [preSelectedPO, setPreSelectedPO] = useState<string | null>(null);
-    const searchIconColor = useColorModeValue('gray.300', 'gray.500');
 
-    // Also update the fetch functions to remove their individual loading states:
+    // Theme-based color values
+    const bgPrimary = useColorModeValue('neutral.light.bg-primary', 'neutral.dark.bg-primary');
+    const bgCard = useColorModeValue('neutral.light.bg-card', 'neutral.dark.bg-card');
+    const borderColor = useColorModeValue('neutral.light.border-color', 'neutral.dark.border-color');
+    const primaryTextColor = useColorModeValue('neutral.light.text-primary', 'neutral.dark.text-primary');
+    const secondaryTextColor = useColorModeValue('neutral.light.text-secondary', 'neutral.dark.text-secondary');
+    const accentColor = useColorModeValue('brand.500', 'brand.300');
+
     const fetchGoodsReceipts = useCallback(async () => {
         try {
-            console.log('Fetching goods receipts...');
             const response = await fetch('/api/goods-receipts');
             if (response.ok) {
                 const data = await response.json();
-                console.log('Goods receipts fetched:', data);
                 setGoodsReceipts(data || []);
                 setGoodsReceiptsList(data || []);
             } else {
-                console.error('Failed to fetch goods receipts:', response.status);
                 throw new Error('Failed to fetch goods receipts');
             }
         } catch (error) {
@@ -104,17 +105,11 @@ export default function GoodsReceiptsPage() {
 
     const fetchAllPurchaseOrders = useCallback(async () => {
         try {
-            console.log('Fetching all purchase orders...');
             const response = await fetch('/api/purchase-orders');
             if (response.ok) {
                 const data = await response.json();
-                console.log('Purchase orders fetched:', data);
                 setAllPurchaseOrders(data || []);
-
-                // Also log the approved ones specifically
                 const approvedPOs = data.filter((po: any) => po.status === 'processed');
-                console.log('Approved purchase orders:', approvedPOs);
-
                 setApprovedPurchaseOrders(approvedPOs || []);
             } else {
                 console.error('Failed to fetch purchase orders:', response.status);
@@ -124,7 +119,6 @@ export default function GoodsReceiptsPage() {
         }
     }, []);
 
-    // Replace the useEffect that fetches data with this:
     useEffect(() => {
         const fetchData = async () => {
             setLoading(true);
@@ -157,43 +151,19 @@ export default function GoodsReceiptsPage() {
         setFilteredReceipts(receiptsToDisplay);
     }, [goodsReceipts, searchTerm, viewMode]);
 
-    // Get approved POs without receipts
-    // Update your getApprovedPOsWithoutReceipts function with detailed logging
     const getApprovedPOsWithoutReceipts = (): any[] => {
-        console.log('=== DEBUG: getApprovedPOsWithoutReceipts START ===');
-
-        // Log all goods receipts
-        console.log('All goods receipts:', goodsReceiptsList);
-
-        // Get all PO IDs that have receipts
         const poIdsWithReceipts = new Set(
             goodsReceiptsList
                 .filter(receipt => receipt.purchaseOrder)
-                .map(receipt => {
-                    const poId = getReferenceId(receipt.purchaseOrder);
-                    console.log(`Receipt ${receipt._id} has PO ID: ${poId}`);
-                    return poId;
-                })
+                .map(receipt => getReferenceId(receipt.purchaseOrder))
         );
 
-        console.log('PO IDs with receipts:', Array.from(poIdsWithReceipts));
-
-        // Log all purchase orders
-        console.log('All purchase orders:', allPurchaseOrders);
-
-        // Filter approved POs that don't have receipts
         const approvedPOs = allPurchaseOrders.filter(po => {
             const isApproved = po.status === 'processed';
             const hasReceipt = poIdsWithReceipts.has(po._id);
-
-            console.log(`PO ${po._id} (${po.poNumber}): status=${po.status}, hasReceipt=${hasReceipt}, isApproved=${isApproved}`);
-
             return isApproved && !hasReceipt;
         });
 
-        console.log('Approved POs without receipts:', approvedPOs);
-
-        // Transform the data
         const result = approvedPOs.map(po => {
             const transformed = {
                 _id: po._id,
@@ -213,13 +183,8 @@ export default function GoodsReceiptsPage() {
                 orderedBy: po.orderedBy || '',
                 totalAmount: po.totalAmount || 0
             };
-
-            console.log(`Transformed PO ${po._id}:`, transformed);
             return transformed;
         });
-
-        console.log('Final result:', result);
-        console.log('=== DEBUG: getApprovedPOsWithoutReceipts END ===');
 
         return result;
     };
@@ -227,7 +192,6 @@ export default function GoodsReceiptsPage() {
     const approvedPOsWithoutReceipts = getApprovedPOsWithoutReceipts();
 
     const handleViewReceipt = (receipt: GoodsReceipt) => {
-        // Don't transform the data - pass it as-is from API
         setSelectedGoodsReceipt(receipt);
         setPreSelectedPO(null);
         onReceiptModalOpen();
@@ -250,19 +214,6 @@ export default function GoodsReceiptsPage() {
         onPOSelectionModalOpen();
     };
 
-    const handleNewReceiptWithPO = () => {
-        const newReceipt = {
-            _id: `temp-${uuidv4()}`,
-            _type: 'GoodsReceipt',
-            receiptNumber: 'New Receipt',
-            receiptDate: new Date().toISOString(),
-            status: 'draft',
-            receivedItems: [],
-        };
-        setSelectedGoodsReceipt(newReceipt);
-        onPOSelectionModalOpen();
-    };
-
     const columns = [
         {
             accessorKey: 'workflowAction',
@@ -282,16 +233,20 @@ export default function GoodsReceiptsPage() {
                 );
             },
         },
-        { accessorKey: 'receiptNumber', header: 'Receipt Number' },
+        {
+            accessorKey: 'receiptNumber',
+            header: 'Receipt Number',
+            cell: (row: any) => <Text fontWeight="bold" color={primaryTextColor}>{row.receiptNumber || 'N/A'}</Text>,
+        },
         {
             accessorKey: 'poNumber',
             header: 'PO Number',
-            cell: (row: any) => getPopulatedData(row.purchaseOrder, 'poNumber') || 'N/A',
+            cell: (row: any) => <Text color={secondaryTextColor}>{getPopulatedData(row.purchaseOrder, 'poNumber') || 'N/A'}</Text>,
         },
         {
             accessorKey: 'receiptDate',
             header: 'Receipt Date',
-            cell: (row: any) => new Date(row.receiptDate).toLocaleDateString(),
+            cell: (row: any) => <Text color={secondaryTextColor}>{new Date(row.receiptDate).toLocaleDateString()}</Text>,
         },
         {
             accessorKey: 'status',
@@ -304,9 +259,68 @@ export default function GoodsReceiptsPage() {
         },
     ];
 
+    const poSelectionColumns = [
+        {
+            accessorKey: 'receiveAction',
+            header: 'Action',
+            cell: (row: any) => (
+                <Button
+                    size="sm"
+                    colorScheme="green"
+                    onClick={() => handleReceiveGoods(row)}
+                    leftIcon={<FiPackage />}
+                >
+                    Receive
+                </Button>
+            ),
+        },
+        {
+            accessorKey: 'poNumber',
+            header: 'PO Number',
+            isSortable: true,
+            cell: (row: any) => <Text fontWeight="bold" color={primaryTextColor}>{row.poNumber || 'N/A'}</Text>
+        },
+        {
+            accessorKey: 'supplierName',
+            header: 'Supplier',
+            isSortable: true,
+            cell: (row: any) => <Text color={secondaryTextColor}>{row.supplier?.name || 'N/A'}</Text>
+        },
+        {
+            accessorKey: 'siteName',
+            header: 'Site',
+            isSortable: true,
+            cell: (row: any) => <Text color={primaryTextColor}>{row.site?.name || 'N/A'}</Text>
+        },
+        {
+            accessorKey: 'orderedItems',
+            header: 'Items',
+            isSortable: false,
+            cell: (row: any) => (
+                <Box>
+                    {row.orderedItems?.slice(0, 2).map((item: any, index: number) => (
+                        <Text key={index} fontSize="sm" color={secondaryTextColor}>
+                            {item.stockItem?.name || 'Unknown Item'} (x{item.orderedQuantity || 0})
+                        </Text>
+                    ))}
+                    {row.orderedItems?.length > 2 && (
+                        <Text fontSize="sm" color={secondaryTextColor}>
+                            +{row.orderedItems.length - 2} more items
+                        </Text>
+                    )}
+                    {(!row.orderedItems || row.orderedItems.length === 0) && (
+                        <Text fontSize="sm" color={secondaryTextColor}>
+                            No items
+                        </Text>
+                    )}
+                </Box>
+            ),
+        },
+    ];
+
     if (loading || status === 'loading') {
         return (
-            <Box p={{ base: 2, md: 4 }}>
+            <Box p={4} bg={bgPrimary}>
                 <Flex justifyContent="center" alignItems="center" height="50vh">
                     <Spinner size="xl" />
                 </Flex>
@@ -315,7 +329,7 @@ export default function GoodsReceiptsPage() {
     }
 
     return (
-        <Box p={{ base: 2, md: 4 }}>
+        <Box p={{ base: 4, md: 8 }} bg={bgPrimary} minH="100vh">
             <Flex
                 justifyContent="space-between"
                 alignItems={{ base: 'flex-start', md: 'center' }}
@@ -324,37 +338,55 @@ export default function GoodsReceiptsPage() {
                 flexDirection={{ base: 'column', md: 'row' }}
                 gap={{ base: 4, md: 3 }}
             >
-                <Heading as="h1" size="xl">
+                <Heading as="h1" size={{ base: 'xl', md: '2xl' }} color={primaryTextColor}>
                     Goods Receipt
                 </Heading>
                 <HStack spacing={3} flexWrap="wrap">
+                    <InputGroup maxW={{ base: 'full', md: '300px' }}>
+                        <InputLeftElement
+                            pointerEvents="none"
+                            children={<FiSearch color={secondaryTextColor} />}
+                        />
+                        <Input
+                            type="text"
+                            placeholder="Search receipts..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            borderColor={borderColor}
+                            bg={bgCard}
+                            _hover={{ borderColor: accentColor }}
+                            _focus={{ borderColor: accentColor, boxShadow: '0 0 0 1px var(--chakra-colors-brand-500)' }}
+                            color={primaryTextColor}
+                            _placeholder={{ color: secondaryTextColor }}
+                        />
+                    </InputGroup>
                     <Button
                         leftIcon={<FiEye />}
-                        colorScheme={viewMode === 'all' ? 'brand' : 'gray'}
+                        colorScheme="brand"
+                        variant={viewMode === 'all' ? 'solid' : 'outline'}
                         onClick={() => setViewMode('all')}
-                        variant="outline"
                     >
                         View All
                     </Button>
 
                     <Button
                         leftIcon={<FiFilter />}
-                        colorScheme={viewMode === 'actionRequired' ? 'brand' : 'gray'}
+                        colorScheme="brand"
+                        variant={viewMode === 'actionRequired' ? 'solid' : 'outline'}
                         onClick={() => setViewMode('actionRequired')}
-                        variant="outline"
                     >
                         Action Required
                     </Button>
                     <Button
                         leftIcon={<Icon as={FiPlus} />}
-                        colorScheme="blue"
+                        colorScheme="brand"
                         onClick={handleAddReceipt}
                     >
                         New Receipt
                     </Button>
                 </HStack>
             </Flex>
-            <Card>
+            <Card bg={bgCard} border="1px" borderColor={borderColor}>
                 <CardBody p={0}>
                     <DataTable
                         columns={columns}
@@ -367,10 +399,10 @@ export default function GoodsReceiptsPage() {
             {/* PO Selection Modal */}
             <Modal isOpen={isPOSelectionModalOpen} onClose={onPOSelectionModalClose} size="4xl">
                 <ModalOverlay />
-                <ModalContent>
-                    <ModalHeader>Select Purchase Order for Receiving</ModalHeader>
+                <ModalContent bg={bgCard} border="1px" borderColor={borderColor}>
+                    <ModalHeader color={primaryTextColor}>Select Purchase Order for Receiving</ModalHeader>
                     <ModalBody>
-                        <Heading as="h3" size="md" mb={4}>
+                        <Heading as="h3" size="md" mb={4} color={primaryTextColor}>
                             Approved Purchase Orders Ready for Receiving
                         </Heading>
 
@@ -379,76 +411,13 @@ export default function GoodsReceiptsPage() {
                                 <Spinner size="xl" />
                             </Flex>
                         ) : approvedPOsWithoutReceipts.length === 0 ? (
-                            <Text fontSize="lg" color="gray.500">
+                            <Text fontSize="lg" color={secondaryTextColor}>
                                 No approved purchase orders available for receiving.
                             </Text>
                         ) : (
                             <DataTable
-                                columns={[
-                                    {
-                                        accessorKey: 'receiveAction',
-                                        header: 'Action',
-                                        cell: (row: any) => (
-                                            <Button
-                                                size="sm"
-                                                colorScheme="green"
-                                                onClick={() => handleReceiveGoods(row)}
-                                                leftIcon={<FiPackage />}
-                                            >
-                                                Receive
-                                            </Button>
-                                        )
-                                    },
-                                    {
-                                        accessorKey: 'poNumber',
-                                        header: 'PO Number',
-                                        isSortable: true,
-                                        cell: (row: any) => <Text>{row.poNumber || 'N/A'}</Text>
-                                    },
-                                    {
-                                        accessorKey: 'supplierName',
-                                        header: 'Supplier',
-                                        isSortable: true,
-                                        cell: (row: any) => <Text>{row.supplier?.name || 'N/A'}</Text>
-                                    },
-                                    {
-                                        accessorKey: 'siteName',
-                                        header: 'Site',
-                                        isSortable: true,
-                                        cell: (row: any) => <Text>{row.site?.name || 'N/A'}</Text>
-                                    },
-                                    {
-                                        accessorKey: 'orderedItems',
-                                        header: 'Items',
-                                        isSortable: false,
-                                        cell: (row: any) => (
-                                            <Box>
-                                                {row.orderedItems?.slice(0, 2).map((item: any, index: number) => (
-                                                    <Text key={index} fontSize="sm">
-                                                        {item.stockItem?.name || 'Unknown Item'} (x{item.orderedQuantity || 0})
-                                                    </Text>
-                                                ))}
-                                                {row.orderedItems?.length > 2 && (
-                                                    <Text fontSize="sm" color="gray.500">
-                                                        +{row.orderedItems.length - 2} more items
-                                                    </Text>
-                                                )}
-                                                {(!row.orderedItems || row.orderedItems.length === 0) && (
-                                                    <Text fontSize="sm" color="gray.500">
-                                                        No items
-                                                    </Text>
-                                                )}
-                                            </Box>
-                                        )
-                                    }
-                                ]}
-                                data={approvedPOsWithoutReceipts.map(po => ({
-                                    _id: po._id,
-                                    poNumber: po.poNumber || '',
-                                    supplier: po.supplier || { name: '' },
-                                    site: po.site || { name: '' },
-                                    orderedItems: po.orderedItems || []
-                                }))}
+                                columns={poSelectionColumns}
+                                data={approvedPOsWithoutReceipts}
                                 loading={loading}
                                 onActionClick={() => { }}
                                 hideStatusColumn={true}
@@ -456,7 +425,7 @@ export default function GoodsReceiptsPage() {
                             />
                         )}
                     </ModalBody>
-                    <ModalFooter>
+                    <ModalFooter borderTopWidth="1px" borderColor={borderColor}>
                         <Button variant="ghost" onClick={onPOSelectionModalClose}>
                             Cancel
                         </Button>
@@ -472,8 +441,8 @@ export default function GoodsReceiptsPage() {
                     receipt={selectedGoodsReceipt}
                     onSave={() => {
                         handleModalClose();
-                        fetchGoodsReceipts(); // Refresh the list after saving
-                        fetchAllPurchaseOrders(); // Refresh POs as well
+                        fetchGoodsReceipts();
+                        fetchAllPurchaseOrders();
                     }}
                     approvedPurchaseOrders={approvedPOsWithoutReceipts}
                     preSelectedPO={preSelectedPO}

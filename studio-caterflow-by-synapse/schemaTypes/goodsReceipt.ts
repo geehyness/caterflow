@@ -66,6 +66,22 @@ export default defineType({
             },
         }),
         defineField({
+            name: 'status',
+            title: 'Status',
+            type: 'string',
+            options: {
+                list: [
+                    { title: 'Draft', value: 'draft' },
+                    { title: 'Partially Received', value: 'partially-received' },
+                    { title: 'Completed', value: 'completed' },
+                    { title: 'Cancelled', value: 'cancelled' },
+                ],
+            },
+            initialValue: 'draft',
+            validation: (Rule) => Rule.required(),
+            description: 'Overall status of the goods receipt',
+        }),
+        defineField({
             name: 'receiptDate',
             title: 'Receipt Date',
             type: 'datetime',
@@ -127,6 +143,12 @@ export default defineType({
             validation: (Rule) => Rule.required(),
         }),
         defineField({
+            name: 'completedAt',
+            title: 'Completed At',
+            type: 'datetime',
+            description: 'Date when the receipt was marked as completed',
+        }),
+        defineField({
             name: 'notes',
             title: 'Notes',
             type: 'text',
@@ -139,14 +161,16 @@ export default defineType({
             date: 'receiptDate',
             po: 'purchaseOrder.poNumber',
             bin: 'receivingBin.name',
+            status: 'status',
             evidenceStatus: 'evidenceStatus',
         },
-        prepare({ title, date, po, bin, evidenceStatus }) {
+        prepare({ title, date, po, bin, status, evidenceStatus }) {
             const poText = po ? ` | PO: ${po}` : '';
-            const statusText = evidenceStatus ? ` | Evidence: ${evidenceStatus}` : '';
+            const statusText = status ? ` | Status: ${status}` : '';
+            const evidenceText = evidenceStatus ? ` | Evidence: ${evidenceStatus}` : '';
             return {
                 title: `Receipt: ${title}`,
-                subtitle: `${date ? new Date(date).toLocaleDateString() : 'No date'} | To: ${bin || 'No bin'}${poText}${statusText}`,
+                subtitle: `${date ? new Date(date).toLocaleDateString() : 'No date'} | To: ${bin || 'No bin'}${poText}${statusText}${evidenceText}`,
             };
         },
     },
@@ -165,6 +189,11 @@ export default defineType({
             name: 'receiptNumberAsc',
             title: 'Receipt Number (Ascending)',
             by: [{ field: 'receiptNumber', direction: 'asc' }],
+        },
+        {
+            name: 'status',
+            title: 'Status',
+            by: [{ field: 'status', direction: 'asc' }],
         },
     ],
 });

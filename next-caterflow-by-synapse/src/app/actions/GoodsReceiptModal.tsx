@@ -1,4 +1,3 @@
-// Please replace the entire file content with this code block
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -35,6 +34,7 @@ import {
     Spinner,
     Flex,
     Box,
+    useColorModeValue,
 } from '@chakra-ui/react';
 import { FiCheck, FiSave, FiX, FiCheckCircle } from 'react-icons/fi';
 import FileUploadModal from '@/components/FileUploadModal';
@@ -133,6 +133,14 @@ export default function GoodsReceiptModal({
     const [savedReceiptId, setSavedReceiptId] = useState<string>('');
 
     const isNewReceipt = !receipt || receipt._id.startsWith('temp-');
+
+    const modalBg = useColorModeValue('neutral.light.bg-card', 'neutral.dark.bg-card');
+    const borderColor = useColorModeValue('neutral.light.border-color', 'neutral.dark.border-color');
+    const inputBg = useColorModeValue('neutral.light.bg-card', 'neutral.dark.bg-card');
+    const primaryTextColor = useColorModeValue('neutral.light.text-primary', 'neutral.dark.text-primary');
+    const secondaryTextColor = useColorModeValue('neutral.light.text-secondary', 'neutral.dark.text-secondary');
+    const tableHeaderBg = useColorModeValue('neutral.light.bg-card-hover', 'neutral.dark.bg-card-hover');
+    const tableHoverBg = useColorModeValue('neutral.light.bg-card-hover', 'neutral.dark.bg-card-hover');
 
     const fetchBinsForSite = useCallback(async (siteId: string) => {
         if (!siteId) {
@@ -460,10 +468,10 @@ export default function GoodsReceiptModal({
 
     return (
         <>
-            <Modal isOpen={isOpen} onClose={onClose} size="6xl" scrollBehavior="inside">
+            <Modal isOpen={isOpen} onClose={onClose} size={{ base: 'full', md: '6xl' }} scrollBehavior="inside">
                 <ModalOverlay />
-                <ModalContent maxW="1200px" mx="auto" my={8} borderRadius="xl" boxShadow="xl" height="90vh">
-                    <ModalHeader borderBottomWidth="1px">{modalTitle}</ModalHeader>
+                <ModalContent bg={modalBg} maxW={{ base: '100%', md: '1200px' }} mx="auto" my={{ base: 0, md: 8 }} borderRadius={{ base: 'none', md: 'xl' }} boxShadow="xl" height="90vh">
+                    <ModalHeader borderBottomWidth="1px" borderColor={borderColor}>{modalTitle}</ModalHeader>
                     <ModalCloseButton position="absolute" right="12px" top="12px" />
                     <ModalBody pb={6} overflowY="auto" maxH="calc(90vh - 140px)">
                         {isLoading ? (
@@ -471,23 +479,31 @@ export default function GoodsReceiptModal({
                                 <Spinner size="xl" />
                             </Flex>
                         ) : (
-                            <VStack spacing={4} align="stretch">
-                                <HStack>
+                            <VStack spacing={4} align="stretch" color={primaryTextColor}>
+                                <HStack
+                                    flexDirection={{ base: 'column', sm: 'row' }}
+                                    alignItems={{ base: 'flex-start', sm: 'center' }}
+                                    spacing={{ base: 4, sm: 2 }}
+                                >
+                                    {!isNewReceipt && (
+                                        <FormControl isRequired>
+                                            <FormLabel color={secondaryTextColor}>Receipt Number</FormLabel>
+                                            <Input value={formData.receiptNumber || ''} isReadOnly bg={inputBg} borderColor={borderColor} />
+                                        </FormControl>
+                                    )}
                                     <FormControl isRequired>
-                                        <FormLabel>Receipt Number</FormLabel>
-                                        <Input value={formData.receiptNumber || ''} isReadOnly />
-                                    </FormControl>
-                                    <FormControl isRequired>
-                                        <FormLabel>Receipt Date</FormLabel>
+                                        <FormLabel color={secondaryTextColor}>Receipt Date</FormLabel>
                                         <Input
                                             type="date"
                                             value={formData.receiptDate || ''}
                                             onChange={(e) => handleFieldChange('receiptDate', e.target.value)}
                                             isReadOnly={!isEditable}
+                                            bg={inputBg}
+                                            borderColor={borderColor}
                                         />
                                     </FormControl>
                                     <FormControl>
-                                        <FormLabel>Status</FormLabel>
+                                        <FormLabel color={secondaryTextColor}>Status</FormLabel>
                                         <Badge
                                             colorScheme={getStatusColor(formData.status || 'draft')}
                                             fontSize="md" px={3} py={1} borderRadius="full"
@@ -497,19 +513,25 @@ export default function GoodsReceiptModal({
                                     </FormControl>
                                 </HStack>
 
-                                <HStack>
+                                <HStack
+                                    flexDirection={{ base: 'column', sm: 'row' }}
+                                    alignItems={{ base: 'flex-start', sm: 'center' }}
+                                    spacing={{ base: 4, sm: 2 }}
+                                >
                                     <FormControl isRequired>
-                                        <FormLabel>Purchase Order</FormLabel>
-                                        <Input value={formData.purchaseOrder?.poNumber || 'N/A'} isReadOnly />
+                                        <FormLabel color={secondaryTextColor}>Purchase Order</FormLabel>
+                                        <Input value={formData.purchaseOrder?.poNumber || 'N/A'} isReadOnly bg={inputBg} borderColor={borderColor} />
                                     </FormControl>
                                     <FormControl isRequired>
-                                        <FormLabel>Receiving Bin</FormLabel>
+                                        <FormLabel color={secondaryTextColor}>Receiving Bin</FormLabel>
                                         <HStack>
                                             <Select
                                                 value={formData.receivingBin?._id || ''}
                                                 onChange={(e) => handleBinSelect(availableBins.find(b => b._id === e.target.value)!)}
                                                 placeholder="Select Bin"
                                                 isDisabled={!isEditable || availableBins.length === 0}
+                                                bg={inputBg}
+                                                borderColor={borderColor}
                                             >
                                                 {availableBins.map(bin => (
                                                     <option key={bin._id} value={bin._id}>
@@ -521,6 +543,7 @@ export default function GoodsReceiptModal({
                                                 onClick={() => setIsBinSelectorOpen(true)}
                                                 isDisabled={!isEditable}
                                                 variant="outline"
+                                                colorScheme="brand"
                                             >
                                                 Browse Bins
                                             </Button>
@@ -529,7 +552,7 @@ export default function GoodsReceiptModal({
                                 </HStack>
 
                                 {formData.purchaseOrder && (
-                                    <Box p={4} borderWidth={1} borderColor="gray.200" borderRadius="md" mt={2}>
+                                    <Box p={4} borderWidth={1} borderColor={borderColor} borderRadius="md" mt={2} bg={tableHeaderBg}>
                                         <VStack align="stretch" spacing={2}>
                                             <Text fontWeight="bold" fontSize="lg">Purchase Order Details</Text>
                                             <HStack justifyContent="space-between">
@@ -549,12 +572,14 @@ export default function GoodsReceiptModal({
                                 )}
 
                                 <FormControl>
-                                    <FormLabel>Notes</FormLabel>
+                                    <FormLabel color={secondaryTextColor}>Notes</FormLabel>
                                     <Input
                                         value={formData.notes || ''}
                                         onChange={(e) => handleFieldChange('notes', e.target.value)}
                                         placeholder="Additional notes or comments"
                                         isDisabled={!isEditable}
+                                        bg={inputBg}
+                                        borderColor={borderColor}
                                     />
                                 </FormControl>
 
@@ -568,21 +593,21 @@ export default function GoodsReceiptModal({
                                     <TableContainer w="100%">
                                         <Table variant="simple" size="sm">
                                             <Thead>
-                                                <Tr>
-                                                    <Th>Item</Th>
-                                                    <Th isNumeric>Ordered</Th>
-                                                    <Th isNumeric>Received</Th>
-                                                    <Th>Condition</Th>
-                                                    <Th>Batch No.</Th>
-                                                    <Th>Expiry Date</Th>
+                                                <Tr bg={tableHeaderBg}>
+                                                    <Th color={secondaryTextColor} borderColor={borderColor}>Item</Th>
+                                                    <Th isNumeric color={secondaryTextColor} borderColor={borderColor}>Ordered</Th>
+                                                    <Th isNumeric color={secondaryTextColor} borderColor={borderColor}>Received</Th>
+                                                    <Th color={secondaryTextColor} borderColor={borderColor}>Condition</Th>
+                                                    <Th color={secondaryTextColor} borderColor={borderColor}>Batch No.</Th>
+                                                    <Th color={secondaryTextColor} borderColor={borderColor}>Expiry Date</Th>
                                                 </Tr>
                                             </Thead>
                                             <Tbody>
                                                 {(formData.receivedItems || []).map(item => (
-                                                    <Tr key={item._key}>
-                                                        <Td>{item.stockItem?.name || 'Unknown Item'}</Td>
-                                                        <Td isNumeric>{item.orderedQuantity || 0}</Td>
-                                                        <Td>
+                                                    <Tr key={item._key} _hover={{ bg: tableHoverBg }}>
+                                                        <Td borderColor={borderColor}>{item.stockItem?.name || 'Unknown Item'}</Td>
+                                                        <Td isNumeric borderColor={borderColor}>{item.orderedQuantity || 0}</Td>
+                                                        <Td borderColor={borderColor}>
                                                             <NumberInput
                                                                 value={item.receivedQuantity}
                                                                 onChange={(_, valueAsNumber) =>
@@ -592,37 +617,43 @@ export default function GoodsReceiptModal({
                                                                 max={item.orderedQuantity}
                                                                 isDisabled={!isEditable}
                                                             >
-                                                                <NumberInputField />
+                                                                <NumberInputField bg={inputBg} borderColor={borderColor} />
                                                                 <NumberInputStepper>
-                                                                    <NumberIncrementStepper />
-                                                                    <NumberDecrementStepper />
+                                                                    <NumberIncrementStepper borderColor={borderColor} />
+                                                                    <NumberDecrementStepper borderColor={borderColor} />
                                                                 </NumberInputStepper>
                                                             </NumberInput>
                                                         </Td>
-                                                        <Td>
+                                                        <Td borderColor={borderColor}>
                                                             <Select
                                                                 value={item.condition}
                                                                 onChange={(e) => handleItemChange(item._key, 'condition', e.target.value)}
                                                                 size="sm" isDisabled={!isEditable}
+                                                                bg={inputBg}
+                                                                borderColor={borderColor}
                                                             >
                                                                 <option value="good">Good</option>
                                                                 <option value="damaged">Damaged</option>
                                                             </Select>
                                                         </Td>
-                                                        <Td>
+                                                        <Td borderColor={borderColor}>
                                                             <Input
                                                                 type="text"
                                                                 value={item.batchNumber || ''}
                                                                 onChange={(e) => handleItemChange(item._key, 'batchNumber', e.target.value)}
                                                                 size="sm" isDisabled={!isEditable}
+                                                                bg={inputBg}
+                                                                borderColor={borderColor}
                                                             />
                                                         </Td>
-                                                        <Td>
+                                                        <Td borderColor={borderColor}>
                                                             <Input
                                                                 type="date"
                                                                 value={item.expiryDate || ''}
                                                                 onChange={(e) => handleItemChange(item._key, 'expiryDate', e.target.value)}
                                                                 size="sm" isDisabled={!isEditable}
+                                                                bg={inputBg}
+                                                                borderColor={borderColor}
                                                             />
                                                         </Td>
                                                     </Tr>
@@ -634,14 +665,14 @@ export default function GoodsReceiptModal({
                             </VStack>
                         )}
                     </ModalBody>
-                    <ModalFooter borderTopWidth="1px">
+                    <ModalFooter borderTopWidth="1px" borderColor={borderColor}>
                         <Button colorScheme="gray" mr={3} onClick={onClose} isDisabled={isSaving || isLoading} variant="outline">
                             Cancel
                         </Button>
                         {isEditable && (
                             <>
                                 <Button
-                                    colorScheme="blue" variant="outline" onClick={handleSaveDraft}
+                                    colorScheme="brand" variant="outline" onClick={handleSaveDraft}
                                     isLoading={isSaving} leftIcon={<FiSave />}
                                     isDisabled={!formData.purchaseOrder || (formData.receivedItems || []).length === 0 || !formData.receivingBin}
                                 >

@@ -17,7 +17,7 @@ export interface OrderedItem {
     stockItem: {
         _id: string;
         name: string;
-        unitOfMeasure?: string;   // 👈 add this
+        unitOfMeasure?: string;
     } | null;
     supplier: {
         _id: string;
@@ -56,7 +56,7 @@ interface PurchaseOrderModalProps {
     setEditedQuantities: Dispatch<SetStateAction<{ [key: string]: number | undefined }>>;
     isSaving: boolean;
     onSave: () => void;
-    onApproveRequest: () => void; // Prop changed to reflect new purpose
+    onApproveRequest: () => void;
     onRemoveItem: (itemKey: string) => void;
 }
 
@@ -171,9 +171,9 @@ export default function PurchaseOrderModal({
                                                 <Thead>
                                                     <Tr>
                                                         <Th>Item</Th>
-                                                        <Th isNumeric>Qty</Th>{/*}
+                                                        <Th isNumeric>Qty</Th>
                                                         <Th isNumeric>Unit Price</Th>
-                                                        <Th isNumeric>Subtotal</Th>*/}
+                                                        <Th isNumeric>Subtotal</Th>
                                                         {isEditable && <Th></Th>}
                                                     </Tr>
                                                 </Thead>
@@ -211,7 +211,6 @@ export default function PurchaseOrderModal({
                                                                     </VStack>
                                                                 </Td>
 
-                                                                {/*
                                                                 <Td isNumeric>
                                                                     <NumberInput size="sm" value={price?.toFixed(2)} onChange={(val) => handlePriceChange(item._key, parseFloat(val))} min={0} precision={2} isDisabled={!isEditable} w="120px">
                                                                         <NumberInputField />
@@ -220,7 +219,6 @@ export default function PurchaseOrderModal({
                                                                 <Td isNumeric>
                                                                     <Text fontWeight="bold" color={primaryTextColor}>E{(quantity * price).toFixed(2)}</Text>
                                                                 </Td>
-                                                                */}
 
                                                                 {isEditable && (
                                                                     <Td>
@@ -237,11 +235,11 @@ export default function PurchaseOrderModal({
                                         </TableContainer>
                                     </Box>
 
-                                    {/*<Flex justify="flex-end" w="full" mt={4}>
+                                    <Flex justify="flex-end" w="full" mt={4}>
                                         <Text fontWeight="bold" fontSize="xl" color={primaryTextColor}>
                                             Total: E{totalAmount.toFixed(2)}
                                         </Text>
-                                    </Flex>*/}
+                                    </Flex>
                                 </VStack>
                             ) : (
                                 <Flex justify="center" align="center" direction="column" py={8}>
@@ -268,7 +266,7 @@ export default function PurchaseOrderModal({
                                     </Button>
                                     <Button
                                         colorScheme="green"
-                                        onClick={onApproveRequest} // Calls the new prop
+                                        onClick={onApproveRequest}
                                         isLoading={isSaving}
                                         isDisabled={hasIncompleteItems}
                                         leftIcon={<FaCheck />}

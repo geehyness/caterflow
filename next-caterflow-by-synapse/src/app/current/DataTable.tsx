@@ -1,5 +1,4 @@
-// /app/current/DataTable.tsx
-
+'use client';
 import React, { useState, useMemo, ChangeEvent } from 'react';
 import {
     Table,
@@ -19,16 +18,18 @@ import {
     chakra,
     Spinner,
     Checkbox,
+    Badge,
+    useColorModeValue,
 } from '@chakra-ui/react';
 import { ChevronLeftIcon, ChevronRightIcon, ChevronUpIcon, ChevronDownIcon } from '@chakra-ui/icons';
 import { FiPackage } from 'react-icons/fi';
+import { PendingAction } from '@/app/actions/types'; // Assuming this type is available
 
 // Define a flexible column type for better control over rendering
-// Now explicitly stating that the cell function receives a 'row' object
 export interface Column {
-    accessorKey: string;
+    accessorKey: keyof PendingAction | string; // Use keyof PendingAction for type safety
     header: string | React.ReactNode;
-    cell?: (row: any) => React.ReactNode;
+    cell?: (row: any, index?: number) => React.ReactNode;
     isSortable?: boolean;
 }
 
@@ -58,7 +59,17 @@ export default function DataTable({
     const [sortDirection, setSortDirection] = useState<'asc' | 'desc' | null>(null);
     const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
 
-    // Add checkbox handler
+    // Theme colors
+    const tableBg = useColorModeValue('neutral.light.bg-card', 'neutral.dark.bg-card');
+    const headerBg = useColorModeValue('neutral.light.bg-card-hover', 'neutral.dark.bg-card-hover');
+    const borderColor = useColorModeValue('neutral.light.border-color', 'neutral.dark.border-color');
+    const inputBg = useColorModeValue('neutral.light.bg-input', 'neutral.dark.bg-input');
+    const primaryTextColor = useColorModeValue('neutral.light.text-primary', 'neutral.dark.text-primary');
+    const secondaryTextColor = useColorModeValue('neutral.light.text-secondary', 'neutral.dark.text-secondary');
+    const hoverBg = useColorModeValue('neutral.light.bg-card-hover', 'neutral.dark.bg-card-hover');
+    const actionButtonColor = useColorModeValue('brand.light', 'brand.dark');
+
+    // Selection handlers
     const handleRowSelection = (id: string) => {
         const newSelected = new Set(selectedRows);
         if (newSelected.has(id)) {
@@ -72,14 +83,109 @@ export default function DataTable({
 
     // Add select all handler
     const handleSelectAll = () => {
-        if (selectedRows.size === data.length) {
+        const allIds = new Set(data.map(item => item._id));
+        if (selectedRows.size === allIds.size) {
             setSelectedRows(new Set());
             onSelectionChange?.([]);
         } else {
-            const allIds = new Set(data.map(item => item._id));
             setSelectedRows(allIds);
             onSelectionChange?.(data);
         }
+    };
+
+    const getStatusColor = (status: string) => {
+        switch (status) {
+            case 'draft': return 'gray';
+            case 'pending': return 'orange';
+            case 'in-progress': return 'blue';
+            case 'completed': return 'green';
+            case 'pending-approval': return 'purple';
+            default: return 'gray';
+        }
+    };
+
+    // Custom action button renderer based on action type
+    const renderActionButton = (row: any) => {
+        if (!onActionClick) return null;
+
+        if (actionType === 'GoodsReceipt') {
+            return (
+                <Button
+                    size="sm"
+                    colorScheme="green"
+                    onClick={() => onActionClick(row)}
+                    leftIcon={<FiPackage />}
+                >
+                    Receive
+                </Button>
+            );
+        } else {
+            return (
+                <Button
+                    size="sm"
+                    colorScheme="blue"
+                    onClick={() => onActionClick(row)}
+                >
+                    View
+                </Button>
+            );
+        }
+    };
+
+    // Function to search across all available data including nested objects
+    const searchAllData = (row: PendingAction, searchTerm: string): boolean => {
+        if (!searchTerm) return true;
+
+        const searchTermLower = searchTerm.toLowerCase();
+
+        const basicProperties = [
+            row.title,
+            row.description,
+            row.siteName,
+            row.priority,
+            row.status,
+            row.poNumber,
+            row.supplierName,
+            row.actionType,
+            row.receiptNumber
+        ];
+
+        if (basicProperties.some(prop =>
+            prop && typeof prop === 'string' && prop.toLowerCase().includes(searchTermLower)
+        )) {
+            return true;
+        }
+
+        const dateProperties = [row.createdAt];
+        if (dateProperties.some(date =>
+            date && new Date(date).toLocaleDateString().toLowerCase().includes(searchTermLower)
+        )) {
+            return true;
+        }
+
+        if (row.actionType === 'PurchaseOrder' && row.orderedItems) {
+            const hasMatchingItem = row.orderedItems.some((item: any) => {
+                return (
+                    (item.stockItem.name && item.stockItem.name.toLowerCase().includes(searchTermLower)) ||
+                    (item.orderedQuantity && item.orderedQuantity.toString().includes(searchTerm)) ||
+                    (item.unitPrice && item.unitPrice.toString().includes(searchTerm))
+                );
+            });
+            if (hasMatchingItem) return true;
+        }
+
+        if (row.actionType === 'GoodsReceipt' && row.receivedItems) {
+            const hasMatchingItem = row.receivedItems.some((item: any) => {
+                return (
+                    (item.stockItem?.name && item.stockItem.name.toLowerCase().includes(searchTermLower)) ||
+                    (item.receivedQuantity && item.receivedQuantity.toString().includes(searchTerm)) ||
+                    (item.batchNumber && item.batchNumber.toLowerCase().includes(searchTermLower))
+                );
+            });
+            if (hasMatchingItem) return true;
+        }
+
+        return false;
     };
 
     const processedData = useMemo(() => {
@@ -116,7 +222,6 @@ export default function DataTable({
         return filtered;
     }, [data, searchTerm, sortColumn, sortDirection]);
 
-    // 3. Paginate Data
     const totalPages = Math.ceil(processedData.length / itemsPerPage);
     const paginatedData = processedData.slice(
         (currentPage - 1) * itemsPerPage,
@@ -151,70 +256,18 @@ export default function DataTable({
         );
     };
 
-    // Custom action button renderer based on action type
-    const renderActionButton = (row: any) => {
-        if (!onActionClick) return null;
-
-        if (actionType === 'GoodsReceipt') {
-            return (
-                <Button
-                    size="sm"
-                    colorScheme="green"
-                    onClick={() => onActionClick(row)}
-                    leftIcon={<FiPackage />}
-                >
-                    Receive
-                </Button>
-            );
-        } else {
-            return (
-                <Button
-                    size="sm"
-                    colorScheme="blue"
-                    onClick={() => onActionClick(row)}
-                >
-                    View
-                </Button>
-            );
-        }
-    };
-
-    // Add to columns definition for checkbox column
-    const checkboxColumn: Column = {
-        accessorKey: 'select',
-        header: (
-            <Checkbox
-                isChecked={selectedRows.size === paginatedData.length && paginatedData.length > 0}
-                isIndeterminate={selectedRows.size > 0 && selectedRows.size < paginatedData.length}
-                onChange={handleSelectAll}
-            />
-        ),
-        cell: (row) => (
-            <Checkbox
-                isChecked={selectedRows.has(row._id)}
-                onChange={() => handleRowSelection(row._id)}
-            />
-        ),
-        isSortable: false,
-    };
-
-    // Action column
-    const actionColumn: Column = {
-        accessorKey: 'actions',
-        header: 'Actions',
-        cell: (row) => renderActionButton(row),
-        isSortable: false,
-    };
-
-    // Build columns in correct order: Action -> Checkbox -> Other columns
-    const allColumns = [
-        ...(onActionClick ? [actionColumn] : []),
-        ...(onSelectionChange ? [checkboxColumn] : []),
-        ...columns
-    ].filter(Boolean);
+    // The 'action' and 'status' columns are now handled entirely by the parent component.
+    const allColumns = columns;
 
     return (
-        <Box p={4} borderRadius="md" borderWidth="1px" overflowX="auto" className="shadow-sm">
+        <Box
+            p={{ base: 2, md: 4 }}
+            borderRadius="md"
+            borderWidth="1px"
+            bg={tableBg}
+            boxShadow="sm"
+            sx={{ _dark: { boxShadow: 'dark-sm' } }}
+        >
             <Flex
                 direction={{ base: 'column', md: 'row' }}
                 gap={{ base: 4, md: 8 }}
@@ -224,6 +277,7 @@ export default function DataTable({
                 p={4}
                 borderWidth="1px"
                 borderRadius="md"
+                borderColor={borderColor}
             >
                 <Input
                     placeholder="Search across all data..."
@@ -233,6 +287,10 @@ export default function DataTable({
                         setCurrentPage(1); // Reset to first page on search
                     }}
                     flex={{ base: '1', md: '0.6' }}
+                    bg={tableBg}
+                    color={primaryTextColor}
+                    _placeholder={{ color: secondaryTextColor }}
+                    borderColor={borderColor}
                 />
                 <HStack
                     spacing={4}
@@ -240,7 +298,7 @@ export default function DataTable({
                     mt={{ base: 4, md: 0 }}
                     flex={{ base: '1', md: '0.4' }}
                 >
-                    <Text flexShrink={0} fontSize="sm" color="gray.600">
+                    <Text flexShrink={0} fontSize="sm" color={secondaryTextColor}>
                         Items per page:
                     </Text>
                     <Select
@@ -251,6 +309,8 @@ export default function DataTable({
                         }}
                         maxW="100px"
                         size="sm"
+                        bg={tableBg}
+                        borderColor={borderColor}
                     >
                         {[5, 10, 25, 50].map((size) => (
                             <option key={size} value={size}>
@@ -266,57 +326,86 @@ export default function DataTable({
                     <Spinner size="xl" />
                 </Flex>
             ) : (
-                <Table variant="simple" size="sm" className="min-w-full divide-y divide-gray-200">
-                    <Thead>
-                        <Tr className="bg-gray-50">
-                            {allColumns.map((column) => (
-                                <Th
-                                    key={column.accessorKey}
-                                    onClick={() => handleSort(column.accessorKey, column.isSortable)}
-                                    cursor={column.isSortable ? 'pointer' : 'default'}
-                                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                                    _hover={{ bg: column.isSortable ? 'gray.100' : 'gray.50' }}
-                                >
-                                    <Flex alignItems="center">
-                                        {column.header}
-                                        {renderSortIcon(column.accessorKey)}
-                                    </Flex>
-                                </Th>
-                            ))}
-                        </Tr>
-                    </Thead>
-                    <Tbody>
-                        {paginatedData.length > 0 ? (
-                            paginatedData.map((row, rowIndex) => (
-                                <Tr key={`${row._id}-${row.binName}`}>
-                                    {allColumns.map((column) => (
-                                        <Td
-                                            key={column.accessorKey}
-                                            className="px-6 py-4 whitespace-nowrap text-sm text-gray-900"
-                                        >
-                                            {column.cell ? (
-                                                column.cell(row)
-                                            ) : (
-                                                <Text>{row[column.accessorKey]}</Text>
-                                            )}
-                                        </Td>
-                                    ))}
-                                </Tr>
-                            ))
-                        ) : (
-                            <Tr>
-                                <Td colSpan={allColumns.length} textAlign="center" py={10}>
-                                    No results found.
-                                </Td>
+                <Box overflowX="auto">
+                    <Table variant="simple" size="sm">
+                        <Thead>
+                            <Tr bg={headerBg}>
+                                {/* Checkbox column - only show if onSelectionChange is provided */}
+                                {onSelectionChange && (
+                                    <Th width="50px" borderColor={borderColor}>
+                                        <Checkbox
+                                            onChange={handleSelectAll}
+                                            isChecked={selectedRows.size === data.length}
+                                            isIndeterminate={selectedRows.size > 0 && selectedRows.size < data.length}
+                                        />
+                                    </Th>
+                                )}
+                                {columns.map((column) => (
+                                    <Th
+                                        key={column.accessorKey}
+                                        onClick={() => handleSort(column.accessorKey, column.isSortable)}
+                                        cursor={column.isSortable ? 'pointer' : 'default'}
+                                        _hover={{ bg: column.isSortable ? hoverBg : headerBg }}
+                                        borderColor={borderColor}
+                                        color={primaryTextColor}
+                                    >
+                                        <Flex alignItems="center">
+                                            {column.header}
+                                            {renderSortIcon(column.accessorKey)}
+                                        </Flex>
+                                    </Th>
+                                ))}
                             </Tr>
-                        )}
-                    </Tbody>
-                </Table>
+                        </Thead>
+                        <Tbody>
+                            {paginatedData.length > 0 ? (
+                                paginatedData.map((row, rowIndex) => (
+                                    <Tr key={`${row._id}-${row.binName}`} _hover={{ bg: hoverBg }} borderBottomWidth="1px" borderColor={borderColor}>
+                                        {/* Selection checkbox - only show if onSelectionChange is provided */}
+                                        {onSelectionChange && (
+                                            <Td borderColor={borderColor}>
+                                                <Checkbox
+                                                    onChange={() => handleRowSelection(row._id)}
+                                                    isChecked={selectedRows.has(row._id)}
+                                                />
+                                            </Td>
+                                        )}
+                                        {columns.map((column) => (
+                                            <Td
+                                                key={column.accessorKey}
+                                                color={primaryTextColor}
+                                                borderColor={borderColor}
+                                            >
+                                                {column.cell ? (
+                                                    column.cell(row)
+                                                ) : (
+                                                    <Text>{row[column.accessorKey]}</Text>
+                                                )}
+                                            </Td>
+                                        ))}
+                                    </Tr>
+                                ))
+                            ) : (
+                                <Tr>
+                                    <Td
+                                        colSpan={columns.length + (onSelectionChange ? 1 : 0)}
+                                        textAlign="center"
+                                        py={10}
+                                        color={secondaryTextColor}
+                                        borderColor={borderColor}
+                                    >
+                                        No results found.
+                                    </Td>
+                                </Tr>
+                            )}
+                        </Tbody>
+                    </Table>
+                </Box>
             )}
 
             {/* Pagination Controls */}
-            <Flex justifyContent="space-between" alignItems="center" mt={4} px={2}>
-                <Text fontSize="sm" className="font-medium text-gray-600">
+            <Flex justifyContent="space-between" alignItems="center" mt={4} px={2} direction={{ base: 'column', md: 'row' }}>
+                <Text fontSize="sm" color={secondaryTextColor} mb={{ base: 2, md: 0 }}>
                     Showing {paginatedData.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0} to {Math.min(currentPage * itemsPerPage, processedData.length)} of {processedData.length} entries
                 </Text>
                 <HStack spacing={2}>
@@ -327,12 +416,12 @@ export default function DataTable({
                         isDisabled={currentPage === 1}
                         size="sm"
                         variant="outline"
-                        borderColor="gray.300"
-                        color="gray.600"
-                        _hover={{ bg: 'gray.100' }}
+                        borderColor={borderColor}
+                        color={secondaryTextColor}
+                        _hover={{ bg: hoverBg }}
                         rounded="md"
                     />
-                    <Text fontSize="sm" className="font-medium text-gray-600">
+                    <Text fontSize="sm" color={secondaryTextColor}>
                         Page {totalPages === 0 ? 0 : currentPage} of {totalPages === 0 ? 0 : totalPages}
                     </Text>
                     <IconButton
@@ -342,13 +431,13 @@ export default function DataTable({
                         isDisabled={currentPage === totalPages || totalPages === 0}
                         size="sm"
                         variant="outline"
-                        borderColor="gray.300"
-                        color="gray.600"
-                        _hover={{ bg: 'gray.100' }}
+                        borderColor={borderColor}
+                        color={secondaryTextColor}
+                        _hover={{ bg: hoverBg }}
                         rounded="md"
                     />
                 </HStack>
             </Flex>
-        </Box>
+        </Box >
     );
 }

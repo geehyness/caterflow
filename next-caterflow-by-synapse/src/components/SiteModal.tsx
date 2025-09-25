@@ -15,6 +15,7 @@ import {
     useToast,
     Spinner,
     Text,
+    useColorModeValue
 } from '@chakra-ui/react';
 
 interface Site {
@@ -49,6 +50,10 @@ export default function SiteModal({ isOpen, onClose, site, onSave }: SiteModalPr
     const [loading, setLoading] = useState(false);
     const [managers, setManagers] = useState<Manager[]>([]);
     const toast = useToast();
+
+    // Theme-aware colors
+    const brandColorScheme = useColorModeValue('brand', 'brand');
+    const neutralColorScheme = useColorModeValue('gray', 'gray');
 
     useEffect(() => {
         const fetchManagers = async () => {
@@ -224,10 +229,10 @@ export default function SiteModal({ isOpen, onClose, site, onSave }: SiteModalPr
                     </ModalBody>
 
                     <ModalFooter>
-                        <Button colorScheme="gray" mr={3} onClick={onClose} isDisabled={loading}>
+                        <Button variant="ghost" mr={3} onClick={onClose} isDisabled={loading} colorScheme={neutralColorScheme}>
                             Cancel
                         </Button>
-                        <Button colorScheme="blue" type="submit" isLoading={loading}>
+                        <Button colorScheme={brandColorScheme} type="submit" isLoading={loading}>
                             {site ? 'Update Site' : 'Add Site'}
                         </Button>
                     </ModalFooter>

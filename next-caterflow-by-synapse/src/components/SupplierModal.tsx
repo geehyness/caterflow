@@ -13,6 +13,7 @@ import {
     Input,
     Textarea,
     useToast,
+    useColorModeValue,
 } from '@chakra-ui/react';
 
 interface Supplier {
@@ -41,6 +42,10 @@ export default function SupplierModal({ isOpen, onClose, supplier, onSave }: Sup
     const [terms, setTerms] = useState('');
     const [loading, setLoading] = useState(false);
     const toast = useToast();
+
+    // Use theme-aware colors
+    const brandColorScheme = useColorModeValue('brand', 'brand');
+    const neutralColorScheme = useColorModeValue('neutral.light.text-primary', 'neutral.dark.text-primary');
 
     useEffect(() => {
         if (supplier) {
@@ -180,10 +185,10 @@ export default function SupplierModal({ isOpen, onClose, supplier, onSave }: Sup
                     </ModalBody>
 
                     <ModalFooter>
-                        <Button colorScheme="gray" mr={3} onClick={onClose} isDisabled={loading}>
+                        <Button colorScheme={neutralColorScheme} mr={3} onClick={onClose} isDisabled={loading}>
                             Cancel
                         </Button>
-                        <Button colorScheme="blue" type="submit" isLoading={loading}>
+                        <Button colorScheme={brandColorScheme} type="submit" isLoading={loading}>
                             {supplier ? 'Update Supplier' : 'Add Supplier'}
                         </Button>
                     </ModalFooter>

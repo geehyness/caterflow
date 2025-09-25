@@ -1,7 +1,6 @@
-// src/app/users/page.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
     Box,
     Heading,
@@ -23,13 +22,14 @@ import {
     Switch,
     FormLabel,
     Select,
+    VStack,
+    Tooltip,
 } from '@chakra-ui/react';
-import { FiPlus, FiSearch, FiFilter } from 'react-icons/fi';
-import DataTable from '@/components/DataTable';
+import { FiPlus, FiSearch, FiFilter, FiEdit } from 'react-icons/fi';
+import DataTable, { Column } from '@/components/DataTable';
 import UserManagementModal from '@/components/UserManagementModal';
 import { AppUser, Site, Reference } from '@/lib/sanityTypes';
 import { useSession } from 'next-auth/react'
-import { EditIcon } from '@chakra-ui/icons';
 
 // Interface for display with expanded site reference
 interface AppUserWithSite {
@@ -60,73 +60,68 @@ export default function UsersPage() {
     const { isOpen, onOpen, onClose } = useDisclosure();
     const toast = useToast();
 
-    const cardBg = useColorModeValue('white', 'gray.700');
-    const borderColor = useColorModeValue('gray.200', 'gray.600');
-    const inputBg = useColorModeValue('white', 'gray.800');
+    // Theming values from theme.ts
+    const pageBg = useColorModeValue('neutral.light.bg-primary', 'neutral.dark.bg-primary');
+    const headingColor = useColorModeValue('neutral.light.text-primary', 'neutral.dark.text-primary');
+    const cardBg = useColorModeValue('neutral.light.bg-card', 'neutral.dark.bg-card');
+    const borderColor = useColorModeValue('neutral.light.border-color', 'neutral.dark.border-color');
+    const inputBg = useColorModeValue('neutral.light.bg-input', 'neutral.dark.bg-input');
+    const brand500 = useColorModeValue('brand.500', 'brand.300');
+    const secondaryTextColor = useColorModeValue('neutral.light.text-secondary', 'neutral.dark.text-secondary');
 
-    // Fetch users and sites
-    useEffect(() => {
-        const fetchData = async () => {
-            setLoading(true);
-            try {
-                const [usersResponse, sitesResponse] = await Promise.all([
-                    fetch('/api/users'),
-                    fetch('/api/sites')
-                ]);
+    const fetchData = useCallback(async () => {
+        setLoading(true);
+        try {
+            const [usersResponse, sitesResponse] = await Promise.all([
+                fetch('/api/users'),
+                fetch('/api/sites')
+            ]);
 
-                if (!usersResponse.ok || !sitesResponse.ok) {
-                    throw new Error('Failed to fetch data');
-                }
-
-                const [usersData, sitesData] = await Promise.all([
-                    usersResponse.json(),
-                    sitesResponse.json()
-                ]);
-
-                // Transform users data to include expanded site information
-                const usersWithSites = usersData.map((user: AppUser) => {
-                    let associatedSite: Site | undefined;
-
-                    if (user.associatedSite && typeof user.associatedSite === 'object' && '_id' in user.associatedSite) {
-                        // If associatedSite is already expanded (has _id property)
-                        associatedSite = user.associatedSite as unknown as Site;
-                    } else if (user.associatedSite && typeof user.associatedSite === 'object' && '_ref' in user.associatedSite) {
-                        // If associatedSite is a reference (has _ref property)
-                        const siteRef = (user.associatedSite as Reference)._ref;
-                        associatedSite = sitesData.find((site: Site) => site._id === siteRef);
-                    }
-
-                    return {
-                        ...user,
-                        associatedSite
-                    };
-                });
-
-                setUsers(usersWithSites);
-                setFilteredUsers(usersWithSites);
-                setSites(sitesData);
-            } catch (error) {
-                console.error('Error fetching data:', error);
-                toast({
-                    title: 'Error',
-                    description: 'Failed to load users. Please try again.',
-                    status: 'error',
-                    duration: 5000,
-                    isClosable: true,
-                });
-            } finally {
-                setLoading(false);
+            if (!usersResponse.ok || !sitesResponse.ok) {
+                throw new Error('Failed to fetch data');
             }
-        };
 
-        fetchData();
+            const [usersData, sitesData] = await Promise.all([
+                usersResponse.json(),
+                sitesResponse.json()
+            ]);
+
+            const usersWithSites = usersData.map((user: AppUser) => {
+                let associatedSite: Site | undefined;
+                if (user.associatedSite && typeof user.associatedSite === 'object' && '_ref' in user.associatedSite) {
+                    const siteRef = (user.associatedSite as Reference)._ref;
+                    associatedSite = sitesData.find((site: Site) => site._id === siteRef);
+                }
+                return {
+                    ...user,
+                    associatedSite
+                };
+            });
+
+            setUsers(usersWithSites);
+            setFilteredUsers(usersWithSites);
+            setSites(sitesData);
+        } catch (error) {
+            console.error('Error fetching data:', error);
+            toast({
+                title: 'Error',
+                description: 'Failed to load users. Please try again.',
+                status: 'error',
+                duration: 5000,
+                isClosable: true,
+            });
+        } finally {
+            setLoading(false);
+        }
     }, [toast]);
 
-    // Filter users based on search term and filters
+    useEffect(() => {
+        fetchData();
+    }, [fetchData]);
+
     useEffect(() => {
         let result = users;
 
-        // Apply search filter
         if (searchTerm) {
             const term = searchTerm.toLowerCase();
             result = result.filter((user: AppUserWithSite) =>
@@ -135,12 +130,10 @@ export default function UsersPage() {
             );
         }
 
-        // Apply role filter
         if (roleFilter !== 'all') {
             result = result.filter((user: AppUserWithSite) => user.role === roleFilter);
         }
 
-        // Apply status filter
         if (statusFilter !== 'all') {
             const status = statusFilter === 'active';
             result = result.filter((user: AppUserWithSite) => user.isActive === status);
@@ -155,54 +148,18 @@ export default function UsersPage() {
     };
 
     const handleEditUser = (user: AppUserWithSite) => {
-        // Convert back to AppUser format for the modal
-        const userForModal = {
+        setSelectedUser({
             ...user,
             associatedSite: user.associatedSite ? { _ref: user.associatedSite._id } as Reference : undefined
-        };
-        setSelectedUser(userForModal as any);
+        } as any);
         onOpen();
-    };
-
-    const handleDeleteUser = async (userId: string) => {
-        if (window.confirm('Are you sure you want to delete this user?')) {
-            try {
-                const response = await fetch(`/api/users?id=${userId}`, {
-                    method: 'DELETE'
-                });
-
-                if (!response.ok) {
-                    throw new Error('Failed to delete user');
-                }
-
-                setUsers(users.filter(user => user._id !== userId));
-                toast({
-                    title: 'User deleted.',
-                    description: 'The user has been successfully deleted.',
-                    status: 'success',
-                    duration: 3000,
-                    isClosable: true,
-                });
-            } catch (error) {
-                console.error('Error deleting user:', error);
-                toast({
-                    title: 'Error',
-                    description: 'Failed to delete user. Please try again.',
-                    status: 'error',
-                    duration: 5000,
-                    isClosable: true,
-                });
-            }
-        }
     };
 
     const handleToggleStatus = async (user: AppUserWithSite) => {
         try {
             const response = await fetch('/api/users', {
                 method: 'PATCH',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     _id: user._id,
                     isActive: !user.isActive
@@ -213,7 +170,8 @@ export default function UsersPage() {
                 throw new Error('Failed to update user status');
             }
 
-            setUsers(users.map(u =>
+            // Efficiently update state without refetching all data
+            setUsers(prevUsers => prevUsers.map(u =>
                 u._id === user._id ? { ...u, isActive: !u.isActive } : u
             ));
 
@@ -237,46 +195,8 @@ export default function UsersPage() {
     };
 
     const handleSaveSuccess = () => {
-        // Refresh the users list
-        fetch('/api/users')
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error('Failed to fetch users');
-                }
-                return response.json();
-            })
-            .then(usersData => {
-                // Transform the data again
-                const usersWithSites = usersData.map((user: AppUser) => {
-                    let associatedSite: Site | undefined;
-
-                    if (user.associatedSite && typeof user.associatedSite === 'object' && '_id' in user.associatedSite) {
-                        associatedSite = user.associatedSite as unknown as Site;
-                    } else if (user.associatedSite && typeof user.associatedSite === 'object' && '_ref' in user.associatedSite) {
-                        const siteRef = (user.associatedSite as Reference)._ref;
-                        associatedSite = sites.find((site: Site) => site._id === siteRef);
-                    }
-
-                    return {
-                        ...user,
-                        associatedSite
-                    };
-                });
-
-                setUsers(usersWithSites);
-            })
-            .catch(error => {
-                console.error('Error fetching users:', error);
-                toast({
-                    title: 'Error',
-                    description: 'Failed to refresh users list.',
-                    status: 'error',
-                    duration: 5000,
-                    isClosable: true,
-                });
-            });
-
         onClose();
+        fetchData(); // Refetch all data to ensure the list is up-to-date
     };
 
     const getRoleColor = (role: string) => {
@@ -290,22 +210,20 @@ export default function UsersPage() {
         }
     };
 
-    const getStatusColor = (isActive: boolean) => {
-        return isActive ? 'green' : 'red';
-    };
-
     const formatRoleName = (role: string) => {
         return role.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
     };
 
-    const columns = [
-        {
+    const canManageUsers = currentUser?.role === 'admin';
+
+    const columns: Column[] = [
+        ...(canManageUsers ? [{
             accessorKey: 'actions',
             header: 'Actions',
             cell: (row: AppUserWithSite) => (
                 <IconButton
-                    aria-label="Edit item"
-                    icon={<EditIcon />}
+                    aria-label={`Edit user ${row.name}`}
+                    icon={<FiEdit />}
                     size="sm"
                     colorScheme="blue"
                     onClick={(e) => {
@@ -314,7 +232,7 @@ export default function UsersPage() {
                     }}
                 />
             ),
-        },
+        }] : []),
         {
             accessorKey: 'name',
             header: 'Name',
@@ -340,7 +258,9 @@ export default function UsersPage() {
             header: 'Site',
             isSortable: true,
             cell: (row: AppUserWithSite) => (
-                <Text fontSize="sm">{row.associatedSite?.name || 'N/A'}</Text>
+                <Text fontSize="sm" color={secondaryTextColor}>
+                    {row.associatedSite?.name || 'N/A'}
+                </Text>
             ),
         },
         {
@@ -349,15 +269,18 @@ export default function UsersPage() {
             isSortable: true,
             cell: (row: AppUserWithSite) => (
                 <Flex align="center">
-                    <Switch
-                        isChecked={row.isActive}
-                        onChange={() => handleToggleStatus(row)}
-                        colorScheme={getStatusColor(row.isActive)}
-                        size="md"
-                        mr={2}
-                        isDisabled={row._id === currentUser?.id} // Changed from currentUser?._id to currentUser?.id
-                    />
-                    <Badge colorScheme={getStatusColor(row.isActive)}>
+                    <Tooltip label={row.isActive ? 'Deactivate user' : 'Activate user'} hasArrow>
+                        <Switch
+                            isChecked={row.isActive}
+                            onChange={() => handleToggleStatus(row)}
+                            colorScheme={row.isActive ? 'green' : 'red'}
+                            size="md"
+                            mr={2}
+                            isDisabled={!canManageUsers || row._id === currentUser?.id}
+                            aria-label={row.isActive ? `Deactivate ${row.name}` : `Activate ${row.name}`}
+                        />
+                    </Tooltip>
+                    <Badge colorScheme={row.isActive ? 'green' : 'red'}>
                         {row.isActive ? 'Active' : 'Inactive'}
                     </Badge>
                 </Flex>
@@ -367,101 +290,108 @@ export default function UsersPage() {
 
     if (loading || status === 'loading') {
         return (
-            <Box p={4}>
-                <Flex justifyContent="center" alignItems="center" height="50vh">
-                    <Spinner size="xl" />
-                </Flex>
-            </Box>
+            <Flex justifyContent="center" alignItems="center" height="100vh">
+                <Spinner size="xl" color={brand500} />
+            </Flex>
         );
     }
 
     return (
-        <Box p={4}>
-            <Flex justifyContent="space-between" alignItems="center" mb={6}>
-                <Heading as="h1" size="lg">User Management</Heading>
-                <Button
-                    leftIcon={<FiPlus />}
-                    colorScheme="blue"
-                    onClick={handleAddUser}
-                >
-                    Add User
-                </Button>
-            </Flex>
-
-            {/* Filters */}
-            <Card bg={cardBg} border="1px" borderColor={borderColor} borderRadius="md" mb={4} p={4}>
-                <Flex direction={{ base: 'column', md: 'row' }} gap={4}>
-                    <InputGroup maxW="300px">
-                        <InputLeftElement pointerEvents="none">
-                            <FiSearch color="gray.300" />
-                        </InputLeftElement>
-                        <Input
-                            placeholder="Search users..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            bg={inputBg}
-                        />
-                    </InputGroup>
-
-                    <HStack spacing={4}>
-                        <Flex align="center">
-                            <FiFilter style={{ marginRight: '8px' }} />
-                            <FormLabel htmlFor="role-filter" mb="0" whiteSpace="nowrap">
-                                Role:
-                            </FormLabel>
-                            <Select
-                                id="role-filter"
-                                value={roleFilter}
-                                onChange={(e) => setRoleFilter(e.target.value)}
-                                size="sm"
-                                bg={inputBg}
-                                maxW="150px"
-                            >
-                                <option value="all">All Roles</option>
-                                <option value="admin">Admin</option>
-                                <option value="siteManager">Site Manager</option>
-                                <option value="stockController">Stock Controller</option>
-                                <option value="dispatchStaff">Dispatch Staff</option>
-                                <option value="auditor">Auditor</option>
-                            </Select>
-                        </Flex>
-
-                        <Flex align="center">
-                            <FormLabel htmlFor="status-filter" mb="0" whiteSpace="nowrap">
-                                Status:
-                            </FormLabel>
-                            <Select
-                                id="status-filter"
-                                value={statusFilter}
-                                onChange={(e) => setStatusFilter(e.target.value)}
-                                size="sm"
-                                bg={inputBg}
-                                maxW="120px"
-                            >
-                                <option value="all">All</option>
-                                <option value="active">Active</option>
-                                <option value="inactive">Inactive</option>
-                            </Select>
-                        </Flex>
-                    </HStack>
+        <Box p={{ base: 4, md: 8 }} bg={pageBg}>
+            <VStack spacing={6} align="stretch" maxW="full">
+                <Flex justifyContent="space-between" alignItems="center">
+                    <Heading as="h1" size="xl" color={headingColor}>User Management</Heading>
+                    {canManageUsers && (
+                        <Button
+                            leftIcon={<FiPlus />}
+                            colorScheme="brand"
+                            onClick={handleAddUser}
+                        >
+                            Add User
+                        </Button>
+                    )}
                 </Flex>
-            </Card>
 
-            {/* Users Table */}
-            <Card bg={cardBg} border="1px" borderColor={borderColor} borderRadius="md">
-                <CardBody p={0}>
-                    <DataTable
-                        columns={columns}
-                        data={filteredUsers}
-                        loading={false}
-                    />
-                </CardBody>
-            </Card>
+                <Card bg={cardBg} border="1px" borderColor={borderColor} borderRadius="md" boxShadow="md" p={4}>
+                    <Flex
+                        direction={{ base: 'column', md: 'row' }}
+                        gap={4}
+                        justify="space-between"
+                        align={{ base: 'stretch', md: 'center' }}
+                    >
+                        <InputGroup maxW={{ base: 'full', md: '300px' }}>
+                            <InputLeftElement pointerEvents="none" color={secondaryTextColor}>
+                                <FiSearch />
+                            </InputLeftElement>
+                            <Input
+                                placeholder="Search users..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                bg={inputBg}
+                                borderColor={borderColor}
+                                _hover={{ borderColor: brand500 }}
+                                _focus={{ borderColor: brand500, boxShadow: `0 0 0 1px ${brand500}` }}
+                                color={headingColor}
+                            />
+                        </InputGroup>
+
+                        <HStack spacing={4} flexWrap="wrap">
+                            <Flex align="center">
+                                <FiFilter color={secondaryTextColor} style={{ marginRight: '8px' }} />
+                                <Text color={secondaryTextColor} mr={2}>Role:</Text>
+                                <Select
+                                    value={roleFilter}
+                                    onChange={(e) => setRoleFilter(e.target.value)}
+                                    size="sm"
+                                    bg={inputBg}
+                                    color={headingColor}
+                                    borderColor={borderColor}
+                                    maxW="150px"
+                                >
+                                    <option value="all">All Roles</option>
+                                    <option value="admin">Admin</option>
+                                    <option value="siteManager">Site Manager</option>
+                                    <option value="stockController">Stock Controller</option>
+                                    <option value="dispatchStaff">Dispatch Staff</option>
+                                    <option value="auditor">Auditor</option>
+                                </Select>
+                            </Flex>
+
+                            <Flex align="center">
+                                <Text color={secondaryTextColor} mr={2}>Status:</Text>
+                                <Select
+                                    value={statusFilter}
+                                    onChange={(e) => setStatusFilter(e.target.value)}
+                                    size="sm"
+                                    bg={inputBg}
+                                    color={headingColor}
+                                    borderColor={borderColor}
+                                    maxW="120px"
+                                >
+                                    <option value="all">All</option>
+                                    <option value="active">Active</option>
+                                    <option value="inactive">Inactive</option>
+                                </Select>
+                            </Flex>
+                        </HStack>
+                    </Flex>
+                </Card>
+
+                <Card bg={cardBg} border="1px" borderColor={borderColor} borderRadius="md" boxShadow="md">
+                    <CardBody p={0}>
+                        <DataTable
+                            columns={columns}
+                            data={filteredUsers}
+                            loading={false}
+                        />
+                    </CardBody>
+                </Card>
+            </VStack>
 
             <UserManagementModal
                 isOpen={isOpen}
                 onClose={onClose}
-                userToEdit={selectedUser as any} // Cast to any to avoid type issues
+                userToEdit={selectedUser as any}
                 sites={sites}
                 onSaveSuccess={handleSaveSuccess}
             />

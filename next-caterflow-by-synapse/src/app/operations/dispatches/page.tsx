@@ -1,7 +1,6 @@
-// src/app/operations/dispatches/page.tsx  (or wherever your original file lives)
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
     Box,
     Heading,
@@ -21,6 +20,7 @@ import {
     Text,
     Icon,
     HStack,
+    VStack,
 } from '@chakra-ui/react';
 import { FiPlus, FiSearch, FiEye, FiFilter, FiEdit } from 'react-icons/fi';
 import DataTable from '@/components/DataTable';
@@ -85,11 +85,21 @@ export default function DispatchesPage() {
     const toast = useToast();
     const [viewMode, setViewMode] = useState<'actionRequired' | 'all'>('all');
 
-    const cardBg = useColorModeValue('white', 'gray.700');
-    const borderColor = useColorModeValue('gray.200', 'gray.600');
-    const inputBg = useColorModeValue('white', 'gray.800');
+    // Theming props
+    const bgPrimary = useColorModeValue('neutral.light.bg-primary', 'neutral.dark.bg-primary');
+    const bgCard = useColorModeValue('neutral.light.bg-card', 'neutral.dark.bg-card');
+    const borderColor = useColorModeValue('neutral.light.border-color', 'neutral.dark.border-color');
+    const primaryTextColor = useColorModeValue('neutral.light.text-primary', 'neutral.dark.text-primary');
     const secondaryTextColor = useColorModeValue('neutral.light.text-secondary', 'neutral.dark.text-secondary');
-    const searchIconColor = useColorModeValue('gray.300', 'gray.500');
+
+    const getEvidenceStatusColor = useCallback((status: string) => {
+        switch (status) {
+            case 'pending': return 'yellow';
+            case 'partial': return 'orange';
+            case 'complete': return 'green';
+            default: return 'gray';
+        }
+    }, []);
 
     const fetchDispatches = useCallback(async () => {
         setLoading(true);
@@ -116,8 +126,10 @@ export default function DispatchesPage() {
     }, [toast]);
 
     useEffect(() => {
-        fetchDispatches();
-    }, [fetchDispatches]);
+        if (status === 'authenticated') {
+            fetchDispatches();
+        }
+    }, [fetchDispatches, status]);
 
     useEffect(() => {
         const filtered = searchTerm
@@ -135,6 +147,13 @@ export default function DispatchesPage() {
             ? filtered.filter(dispatch => dispatch.evidenceStatus === 'pending' || dispatch.evidenceStatus === 'partial')
             : filtered;
 
+        // Sort by dispatch number, highest first
+        dispatchesToDisplay.sort((a, b) => {
+            const numA = parseInt(a.dispatchNumber?.split('-')[1] || '0', 10);
+            const numB = parseInt(b.dispatchNumber?.split('-')[1] || '0', 10);
+            return numB - numA;
+        });
+
         setFilteredDispatches(dispatchesToDisplay);
     }, [dispatches, searchTerm, viewMode]);
 
@@ -143,7 +162,6 @@ export default function DispatchesPage() {
         onOpen();
     };
 
-    // Fetch latest single dispatch before opening modal to ensure attachments + evidenceStatus are fresh
     const handleViewDispatch = async (rowOrRecord: DispatchRecord) => {
         const record = (rowOrRecord as any)?.original ?? rowOrRecord;
         if (!record?._id) {
@@ -184,15 +202,6 @@ export default function DispatchesPage() {
         onClose();
     };
 
-    const getEvidenceStatusColor = (status: string) => {
-        switch (status) {
-            case 'pending': return 'yellow';
-            case 'partial': return 'orange';
-            case 'complete': return 'green';
-            default: return 'gray';
-        }
-    };
-
     const getItemList = (dispatch: DispatchRecord) => {
         if (!dispatch.dispatchedItems || dispatch.dispatchedItems.length === 0) return 'No items';
 
@@ -203,22 +212,20 @@ export default function DispatchesPage() {
         return items.join(', ') + (dispatch.dispatchedItems.length > 3 ? '...' : '');
     };
 
-    const columns = [
+    const columns = useMemo(() => [
         {
             accessorKey: 'workflowAction',
             header: 'Action',
             cell: (row: any) => {
-                // support both React-Table style row objects and direct row data
                 const d: DispatchRecord = row?.original ?? row;
                 const isComplete = d?.evidenceStatus === 'complete';
-                const isEditable = !isComplete;
                 const LabelIcon = isComplete ? FiEye : FiEdit;
 
                 return (
                     <Button
                         size="sm"
-                        colorScheme={!isComplete ? 'brand' : 'gray'}
-                        variant={!isComplete ? 'solid' : 'outline'}
+                        colorScheme="brand"
+                        variant={isComplete ? 'outline' : 'solid'}
                         onClick={() => handleViewDispatch(d)}
                         leftIcon={<Icon as={LabelIcon} />}
                         isDisabled={!user}
@@ -231,26 +238,30 @@ export default function DispatchesPage() {
         {
             accessorKey: 'dispatchNumber',
             header: 'Dispatch Number',
+            isSortable: true,
         },
         {
             accessorKey: 'dispatchDate',
             header: 'Dispatch Date',
+            isSortable: true,
             cell: (row: any) => {
                 const d: DispatchRecord = row?.original ?? row;
                 return d?.dispatchDate ? new Date(d.dispatchDate).toLocaleDateString() : '-';
             },
         },
         {
-            accessorKey: 'dispatchType',
+            accessorKey: 'dispatchType.name',
             header: 'Dispatch Type',
+            isSortable: true,
             cell: (row: any) => {
                 const d: DispatchRecord = row?.original ?? row;
                 return d?.dispatchType?.name || '-';
             },
         },
         {
-            accessorKey: 'sourceBin',
+            accessorKey: 'sourceBin.name',
             header: 'Source Bin',
+            isSortable: true,
             cell: (row: any) => {
                 const d: DispatchRecord = row?.original ?? row;
                 return (
@@ -262,8 +273,9 @@ export default function DispatchesPage() {
             },
         },
         {
-            accessorKey: 'dispatchedBy',
+            accessorKey: 'dispatchedBy.name',
             header: 'Dispatched By',
+            isSortable: true,
             cell: (row: any) => {
                 const d: DispatchRecord = row?.original ?? row;
                 return d?.dispatchedBy?.name || '-';
@@ -272,6 +284,7 @@ export default function DispatchesPage() {
         {
             accessorKey: 'description',
             header: 'Items',
+            isSortable: false,
             cell: (row: any) => {
                 const d: DispatchRecord = row?.original ?? row;
                 return (
@@ -286,6 +299,7 @@ export default function DispatchesPage() {
         {
             accessorKey: 'peopleFed',
             header: 'People Fed',
+            isSortable: true,
             cell: (row: any) => {
                 const d: DispatchRecord = row?.original ?? row;
                 return d?.peopleFed ?? 'N/A';
@@ -294,6 +308,7 @@ export default function DispatchesPage() {
         {
             accessorKey: 'evidenceStatus',
             header: 'Evidence Status',
+            isSortable: true,
             cell: (row: any) => {
                 const d: DispatchRecord = row?.original ?? row;
                 const statusStr = d?.evidenceStatus || 'pending';
@@ -304,77 +319,93 @@ export default function DispatchesPage() {
                 );
             },
         },
-    ];
+    ], [handleViewDispatch, user, getEvidenceStatusColor, secondaryTextColor]);
 
     if (loading || status === 'loading') {
         return (
-            <Box p={4}>
-                <Flex justifyContent="center" alignItems="center" height="50vh">
-                    <Spinner size="xl" />
-                </Flex>
-            </Box>
+            <Flex justifyContent="center" alignItems="center" height="50vh" bg={bgPrimary}>
+                <Spinner size="xl" />
+            </Flex>
         );
     }
 
     return (
-        <Box p={{ base: 2, md: 4 }}>
-            <Flex
-                justifyContent="space-between"
-                alignItems={{ base: 'flex-start', md: 'center' }}
-                py={4}
-                mb={6}
-                flexDirection={{ base: 'column', md: 'row' }}
-                gap={{ base: 4, md: 3 }}
-            >
-                <Heading as="h1" size="xl">
-                    Dispatches
-                </Heading>
-                <HStack spacing={3} flexWrap="wrap">
-                    <Button
-                        leftIcon={<FiEye />}
-                        colorScheme={viewMode === 'all' ? 'brand' : 'gray'}
-                        onClick={() => setViewMode('all')}
-                        variant="outline"
-                    >
-                        View All
-                    </Button>
+        <Box p={{ base: 4, md: 8 }} bg={bgPrimary} minH="100vh">
+            <VStack spacing={{ base: 4, md: 6 }} align="stretch">
+                <Flex
+                    justifyContent="space-between"
+                    alignItems={{ base: 'flex-start', md: 'center' }}
+                    flexDirection={{ base: 'column', md: 'row' }}
+                    gap={{ base: 4, md: 3 }}
+                >
+                    <Heading as="h1" size={{ base: 'xl', md: '2xl' }} color={primaryTextColor}>
+                        Dispatches
+                    </Heading>
+                    <HStack spacing={3} flexWrap="wrap">
+                        <InputGroup maxW={{ base: 'full', md: '300px' }}>
+                            <InputLeftElement
+                                pointerEvents="none"
+                                children={<FiSearch color={secondaryTextColor} />}
+                            />
+                            <Input
+                                type="text"
+                                placeholder="Search dispatches..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                borderColor={borderColor}
+                                bg={bgCard}
+                                _hover={{ borderColor: 'brand.500' }}
+                                _focus={{ borderColor: 'brand.500', boxShadow: '0 0 0 1px var(--chakra-colors-brand-500)' }}
+                                color={primaryTextColor}
+                                _placeholder={{ color: secondaryTextColor }}
+                            />
+                        </InputGroup>
+                        <Button
+                            leftIcon={<FiEye />}
+                            colorScheme="brand"
+                            variant={viewMode === 'all' ? 'solid' : 'outline'}
+                            onClick={() => setViewMode('all')}
+                        >
+                            View All
+                        </Button>
 
-                    <Button
-                        leftIcon={<FiFilter />}
-                        colorScheme={viewMode === 'actionRequired' ? 'brand' : 'gray'}
-                        onClick={() => setViewMode('actionRequired')}
-                        variant="outline"
-                    >
-                        Action Required
-                    </Button>
+                        <Button
+                            leftIcon={<FiFilter />}
+                            colorScheme="brand"
+                            variant={viewMode === 'actionRequired' ? 'solid' : 'outline'}
+                            onClick={() => setViewMode('actionRequired')}
+                        >
+                            Action Required
+                        </Button>
 
-                    <Button
-                        leftIcon={<FiPlus />}
-                        colorScheme="brand"
-                        onClick={handleAddDispatch}
-                        isDisabled={!user}
-                    >
-                        New Dispatch
-                    </Button>
-                </HStack>
-            </Flex>
+                        <Button
+                            leftIcon={<FiPlus />}
+                            colorScheme="brand"
+                            onClick={handleAddDispatch}
+                            isDisabled={!user}
+                        >
+                            New Dispatch
+                        </Button>
+                    </HStack>
+                </Flex>
 
-            <Card bg={cardBg} border="1px" borderColor={borderColor} borderRadius="md">
-                <CardBody p={0}>
-                    <DataTable
-                        columns={columns}
-                        data={filteredDispatches}
-                        loading={false}
-                    />
-                </CardBody>
-            </Card>
+                <Card bg={bgCard} border="1px" borderColor={borderColor}>
+                    <CardBody p={0}>
+                        <DataTable
+                            columns={columns}
+                            data={filteredDispatches}
+                            loading={false}
+                        />
+                    </CardBody>
+                </Card>
 
-            <DispatchModal
-                isOpen={isOpen}
-                onClose={onClose}
-                dispatch={selectedDispatch as any} // or as Dispatch
-                onSave={handleSaveSuccess}
-            />
+                <DispatchModal
+                    isOpen={isOpen}
+                    onClose={onClose}
+                    dispatch={selectedDispatch as any}
+                    onSave={handleSaveSuccess}
+                />
+            </VStack>
         </Box>
     );
 }

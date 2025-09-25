@@ -18,6 +18,7 @@ import {
     useToast,
     VStack,
     FormErrorMessage,
+    useColorModeValue,
 } from '@chakra-ui/react';
 import { AppUser, Site, Reference } from '@/lib/sanityTypes';
 
@@ -45,6 +46,10 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({
     const [loading, setLoading] = useState(false);
     const [errors, setErrors] = useState<Record<string, string>>({});
     const toast = useToast();
+
+    // Use theme-aware colors
+    const brandColorScheme = useColorModeValue('brand', 'brand');
+    const neutralColorScheme = useColorModeValue('gray', 'gray');
 
     useEffect(() => {
         if (userToEdit) {
@@ -243,11 +248,11 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({
                     </ModalBody>
 
                     <ModalFooter>
-                        <Button variant="ghost" mr={3} onClick={onClose}>
+                        <Button variant="ghost" colorScheme={neutralColorScheme} mr={3} onClick={onClose}>
                             Cancel
                         </Button>
                         <Button
-                            colorScheme="blue"
+                            colorScheme={brandColorScheme}
                             type="submit"
                             isLoading={loading}
                             loadingText="Saving"

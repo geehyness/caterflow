@@ -1,7 +1,6 @@
-// src/app/operations/procurement/page.tsx
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
     Box,
     Heading,
@@ -39,6 +38,7 @@ import {
     AlertIcon,
     AlertTitle,
     AlertDescription,
+    useColorModeValue,
 } from '@chakra-ui/react';
 import { useSession } from 'next-auth/react';
 import { FiCheck, FiEdit, FiInfo } from 'react-icons/fi';
@@ -95,6 +95,17 @@ export default function ProcurementPage() {
     const [editedSuppliers, setEditedSuppliers] = useState<{ [key: string]: string | undefined }>({});
     const [editedPrices, setEditedPrices] = useState<{ [key: string]: number | undefined }>({});
     const [defaultSupplierFlags, setDefaultSupplierFlags] = useState<{ [key: string]: boolean }>({});
+
+    // Theming props
+    const bgPrimary = useColorModeValue('neutral.light.bg-primary', 'neutral.dark.bg-primary');
+    const bgCard = useColorModeValue('neutral.light.bg-card', 'neutral.dark.bg-card');
+    const borderColor = useColorModeValue('neutral.light.border-color', 'neutral.dark.border-color');
+    const primaryTextColor = useColorModeValue('neutral.light.text-primary', 'neutral.dark.text-primary');
+    const secondaryTextColor = useColorModeValue('neutral.light.text-secondary', 'neutral.dark.text-secondary');
+    const accentColor = useColorModeValue('brand.500', 'brand.300');
+    const errorBg = useColorModeValue('red.50', 'red.900');
+    const errorTextColor = useColorModeValue('red.500', 'red.300');
+
 
     /* ---------- Fetch helpers ---------- */
 
@@ -436,7 +447,7 @@ export default function ProcurementPage() {
             cell: (row: PurchaseOrder) => (
                 <Button
                     size="sm"
-                    colorScheme="blue"
+                    colorScheme="brand"
                     leftIcon={<Icon as={FiEdit} />}
                     onClick={() => handleEditPO(row)}
                 >
@@ -448,13 +459,13 @@ export default function ProcurementPage() {
             accessorKey: 'poNumber',
             header: 'PO Number',
             cell: (row: PurchaseOrder) => (
-                <Text fontWeight="bold">{row.poNumber}</Text>
+                <Text fontWeight="bold" color={primaryTextColor}>{row.poNumber}</Text>
             )
         },
         {
             accessorKey: 'site',
             header: 'Site',
-            cell: (row: PurchaseOrder) => row.site?.name || 'N/A'
+            cell: (row: PurchaseOrder) => <Text color={secondaryTextColor}>{row.site?.name || 'N/A'}</Text>
         },
         {
             accessorKey: 'items',
@@ -463,7 +474,7 @@ export default function ProcurementPage() {
                 <VStack align="start" spacing={1}>
                     {row.orderedItems.map(item => (
                         <HStack key={item._key} spacing={2}>
-                            <Text fontSize="sm">
+                            <Text fontSize="sm" color={primaryTextColor}>
                                 {item.stockItem.name} ({item.orderedQuantity} {item.stockItem.unitOfMeasure})
                             </Text>
                             {(!item.supplier || item.unitPrice <= 0) && (
@@ -484,7 +495,7 @@ export default function ProcurementPage() {
         {
             accessorKey: 'totalAmount',
             header: 'Total Amount',
-            cell: (row: PurchaseOrder) => `E${row.totalAmount?.toFixed(2)}`
+            cell: (row: PurchaseOrder) => <Text color={primaryTextColor}>E{row.totalAmount?.toFixed(2)}</Text>
         },
         {
             accessorKey: 'status',
@@ -498,7 +509,7 @@ export default function ProcurementPage() {
         {
             accessorKey: 'orderDate',
             header: 'Order Date',
-            cell: (row: PurchaseOrder) => new Date(row.orderDate).toLocaleDateString()
+            cell: (row: PurchaseOrder) => <Text color={secondaryTextColor}>{new Date(row.orderDate).toLocaleDateString()}</Text>
         },
 
     ];
@@ -627,55 +638,57 @@ export default function ProcurementPage() {
 
     if (status === 'loading' || loading) {
         return (
-            <Flex justifyContent="center" alignItems="center" minH="100vh">
+            <Flex justifyContent="center" alignItems="center" minH="100vh" bg={bgPrimary}>
                 <Spinner size="xl" />
             </Flex>
         );
     }
 
     return (
-        <Box p={8}>
-            <Heading as="h1" size="xl" mb={6}>
-                Procurement Processing
-            </Heading>
-            <Text mb={6} color="gray.600">
-                Process approved purchase orders and manage supplier relationships
-            </Text>
+        <Box p={{ base: 4, md: 8 }} bg={bgPrimary} minH="100vh">
+            <VStack spacing={6} align="stretch">
+                <Heading as="h1" size={{ base: 'xl', md: '2xl' }} color={primaryTextColor}>
+                    Procurement Processing
+                </Heading>
+                <Text color={secondaryTextColor}>
+                    Process approved purchase orders and manage supplier relationships
+                </Text>
 
-            <Card>
-                <CardBody>
-                    {purchaseOrders.length === 0 ? (
-                        <Text textAlign="center" color="gray.500" py={8}>
-                            No approved purchase orders to process
-                        </Text>
-                    ) : (
-                        <DataTable
-                            columns={columns}
-                            data={purchaseOrders}
-                            loading={loading}
-                        />
-                    )}
-                </CardBody>
-            </Card>
+                <Card bg={bgCard} border="1px" borderColor={borderColor}>
+                    <CardBody>
+                        {purchaseOrders.length === 0 ? (
+                            <Text textAlign="center" color={secondaryTextColor} py={8}>
+                                No approved purchase orders to process
+                            </Text>
+                        ) : (
+                            <DataTable
+                                columns={columns}
+                                data={purchaseOrders}
+                                loading={loading}
+                            />
+                        )}
+                    </CardBody>
+                </Card>
+            </VStack>
 
             {/* Edit Modal */}
-            <Modal isOpen={isEditModalOpen} onClose={onEditModalClose} size="4xl">
+            <Modal isOpen={isEditModalOpen} onClose={onEditModalClose} size="4xl" scrollBehavior="inside">
                 <ModalOverlay />
-                <ModalContent>
-                    <ModalHeader>
+                <ModalContent bg={bgCard} border="1px" borderColor={borderColor}>
+                    <ModalHeader color={primaryTextColor}>
                         Set Suppliers & Prices: {selectedPO?.poNumber}
                     </ModalHeader>
                     <ModalBody>
                         {selectedPO && (
                             <VStack spacing={4} align="stretch">
-                                <Text fontSize="sm" color="gray.600">
+                                <Text fontSize="sm" color={secondaryTextColor}>
                                     Enter <strong>total price</strong> for each item (total price for the ordered quantity).
                                 </Text>
-                                <Text fontSize="sm" color="gray.600">
+                                <Text fontSize="sm" color={secondaryTextColor}>
                                     The system will calculate the <strong>unit price</strong> (total ÷ quantity) and save it to the stock item and the purchase order.
                                 </Text>
 
-                                <TableContainer>
+                                <TableContainer border="1px" borderColor={borderColor} borderRadius="md">
                                     <Table variant="simple" size="sm">
                                         <Thead>
                                             <Tr>
@@ -697,21 +710,23 @@ export default function ProcurementPage() {
                                                 const totalPriceValue = typeof currentPrice === 'number' ? currentPrice : (item.unitPrice > 0 ? item.unitPrice * item.orderedQuantity : undefined);
 
                                                 return (
-                                                    <Tr key={item._key} borderRadius="md" bg={rowError ? 'red.50' : undefined}>
-                                                        <Td>
+                                                    <Tr key={item._key} bg={rowError ? errorBg : undefined} _hover={{ bg: useColorModeValue('gray.50', 'gray.700') }}>
+                                                        <Td borderColor={borderColor}>
                                                             <VStack align="start" spacing={0}>
-                                                                <Text fontWeight="medium">{item.stockItem.name}</Text>
-                                                                <Text fontSize="sm" color="gray.600">
+                                                                <Text fontWeight="medium" color={primaryTextColor}>{item.stockItem.name}</Text>
+                                                                <Text fontSize="sm" color={secondaryTextColor}>
                                                                     {item.orderedQuantity} {item.stockItem.unitOfMeasure}
                                                                 </Text>
                                                             </VStack>
                                                         </Td>
-                                                        <Td>
+                                                        <Td borderColor={borderColor}>
                                                             <Select
                                                                 value={currentSupplier || ''}
                                                                 onChange={(e) => handleSupplierChange(item._key, e.target.value, item.stockItem._id)}
                                                                 size="sm"
                                                                 placeholder="Select supplier"
+                                                                borderColor={borderColor}
+                                                                _focus={{ borderColor: accentColor, boxShadow: `0 0 0 1px ${accentColor}` }}
                                                             >
                                                                 {suppliers.map(supplier => (
                                                                     <option key={supplier._id} value={supplier._id}>
@@ -720,10 +735,10 @@ export default function ProcurementPage() {
                                                                 ))}
                                                             </Select>
                                                             {rowError === 'No supplier selected' && (
-                                                                <Text fontSize="xs" color="red.500">Select supplier</Text>
+                                                                <Text fontSize="xs" color={errorTextColor}>Select supplier</Text>
                                                             )}
                                                         </Td>
-                                                        <Td>
+                                                        <Td borderColor={borderColor}>
                                                             <Tooltip
                                                                 label={
                                                                     currentSupplier
@@ -736,13 +751,13 @@ export default function ProcurementPage() {
                                                                         isChecked={isDefault}
                                                                         onChange={(e) => handleDefaultSupplierToggle(item._key, item.stockItem._id, e.target.checked)}
                                                                         isDisabled={!currentSupplier}
-                                                                        colorScheme="blue"
+                                                                        colorScheme="brand"
                                                                     />
-                                                                    <Icon as={FiInfo} color="gray.500" boxSize={4} />
+                                                                    <Icon as={FiInfo} color={secondaryTextColor} boxSize={4} />
                                                                 </HStack>
                                                             </Tooltip>
                                                         </Td>
-                                                        <Td>
+                                                        <Td borderColor={borderColor}>
                                                             <NumberInput
                                                                 value={totalPriceValue !== undefined ? totalPriceValue.toFixed(2) : ''}
                                                                 onChange={(value) => handlePriceChange(item._key, value)}
@@ -751,15 +766,15 @@ export default function ProcurementPage() {
                                                                 size="sm"
                                                                 min={0}
                                                             >
-                                                                <NumberInputField />
+                                                                <NumberInputField borderColor={borderColor} _focus={{ borderColor: accentColor }} />
                                                             </NumberInput>
                                                             {rowError && rowError !== 'No supplier selected' && (
-                                                                <Text fontSize="xs" color="red.500">{rowError}</Text>
+                                                                <Text fontSize="xs" color={errorTextColor}>{rowError}</Text>
                                                             )}
                                                         </Td>
-                                                        <Td>
+                                                        <Td borderColor={borderColor}>
                                                             {totalPriceValue !== undefined && (
-                                                                <Text fontSize="xs" color="gray.500">
+                                                                <Text fontSize="xs" color={secondaryTextColor}>
                                                                     = E{(totalPriceValue / item.orderedQuantity).toFixed(2)} per {item.stockItem.unitOfMeasure}
                                                                 </Text>
                                                             )}
@@ -772,10 +787,10 @@ export default function ProcurementPage() {
                                 </TableContainer>
 
                                 {!canSaveChanges() && (
-                                    <Alert status="warning" borderRadius="md">
+                                    <Alert status="warning" borderRadius="md" bg={useColorModeValue('yellow.50', 'yellow.900')}>
                                         <AlertIcon />
-                                        <AlertTitle>Missing data</AlertTitle>
-                                        <AlertDescription>
+                                        <AlertTitle color={useColorModeValue('yellow.800', 'yellow.100')}>Missing data</AlertTitle>
+                                        <AlertDescription color={useColorModeValue('yellow.700', 'yellow.200')}>
                                             Some rows are missing supplier or total price. Fix those before saving.
                                         </AlertDescription>
                                     </Alert>
@@ -789,14 +804,16 @@ export default function ProcurementPage() {
                                 Cancel
                             </Button>
                             <Button
-                                colorScheme="blue"
-                                onClick={handleSaveChanges} // replace with your save handler
+                                colorScheme="brand"
+                                variant="outline"
+                                onClick={handleSaveChanges}
+                                isLoading={saving}
                                 isDisabled={!canSaveChanges()}
                             >
                                 Save All Changes
                             </Button>
                             <Button
-                                colorScheme="green"
+                                colorScheme="brand"
                                 onClick={handleProcessPO}
                                 isLoading={processing}
                                 isDisabled={!canSaveChanges()}

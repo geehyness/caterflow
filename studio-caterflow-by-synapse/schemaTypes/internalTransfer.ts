@@ -42,7 +42,7 @@ export default defineType({
                     }
                     return true;
                 }),
-            readOnly: ({ document }) => !!document.transferNumber,
+            readOnly: ({ document }) => !!document?.transferNumber,
             description: 'Unique Internal Transfer identifier.',
             initialValue: async () => {
                 const today = new Date().toISOString().slice(0, 10);
@@ -116,13 +116,30 @@ export default defineType({
             type: 'string',
             options: {
                 list: [
-                    { title: 'Pending', value: 'pending' },
+                    { title: 'Draft', value: 'draft' },
+                    { title: 'Pending Approval', value: 'pending-approval' },
+                    { title: 'Approved', value: 'approved' },
                     { title: 'Completed', value: 'completed' },
                     { title: 'Cancelled', value: 'cancelled' },
                 ],
             },
-            initialValue: 'completed',
+            initialValue: 'draft',
             validation: (Rule) => Rule.required(),
+        }),
+        defineField({
+            name: 'approvedBy',
+            title: 'Approved By',
+            type: 'reference',
+            to: [{ type: 'AppUser' }],
+            readOnly: true,
+            hidden: ({ document }) => document?.status !== 'approved' && document?.status !== 'completed',
+        }),
+        defineField({
+            name: 'approvedAt',
+            title: 'Approved At',
+            type: 'datetime',
+            readOnly: true,
+            hidden: ({ document }) => document?.status !== 'approved' && document?.status !== 'completed',
         }),
     ],
     preview: {

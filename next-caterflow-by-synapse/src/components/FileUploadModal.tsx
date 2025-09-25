@@ -30,6 +30,7 @@ import {
     Flex,
     Alert,
     AlertIcon,
+    useColorModeValue // Import useColorModeValue for theme-based colors
 } from '@chakra-ui/react';
 import { FiUpload, FiXCircle, FiCamera, FiFolder, FiTrash2 } from 'react-icons/fi';
 
@@ -64,6 +65,11 @@ export default function FileUploadModal({
     const toast = useToast();
     const fileInputRef = useRef<HTMLInputElement>(null);
     const cameraInputRef = useRef<HTMLInputElement>(null);
+
+    // Get colors from theme for consistency
+    const cardBg = useColorModeValue('neutral.light.bg-card', 'neutral.dark.bg-card');
+    const borderColor = useColorModeValue('neutral.light.border-color', 'neutral.dark.border-color');
+    const textSecondaryColor = useColorModeValue('neutral.light.text-secondary', 'neutral.dark.text-secondary');
 
     // Check if device supports camera and multiple file selection
     const isMobile = typeof window !== 'undefined' &&
@@ -221,7 +227,13 @@ export default function FileUploadModal({
     };
 
     return (
-        <Modal isOpen={isOpen} onClose={handleClose} size="2xl">
+        // Set modal size responsively, e.g., full on mobile and xl on larger screens
+        <Modal
+            isOpen={isOpen}
+            onClose={handleClose}
+            size={{ base: 'full', md: 'xl' }}
+            scrollBehavior="inside"
+        >
             <ModalOverlay />
             <ModalContent>
                 <ModalHeader>{title}</ModalHeader>
@@ -248,11 +260,12 @@ export default function FileUploadModal({
                         />
 
                         {/* Action Buttons */}
-                        <SimpleGrid columns={2} spacing={3} w="100%">
+                        {/* Use responsive grid for two-column layout */}
+                        <SimpleGrid columns={{ base: 1, sm: 2 }} spacing={3} w="100%">
                             <Button
                                 leftIcon={<Icon as={FiCamera} />}
                                 onClick={startCameraCapture}
-                                colorScheme="blue"
+                                colorScheme="brand"
                                 variant="outline"
                                 isDisabled={isUploading}
                             >
@@ -261,7 +274,7 @@ export default function FileUploadModal({
                             <Button
                                 leftIcon={<Icon as={FiFolder} />}
                                 onClick={startFileBrowse}
-                                colorScheme="green"
+                                colorScheme="brand"
                                 variant="outline"
                                 isDisabled={isUploading}
                             >
@@ -295,7 +308,7 @@ export default function FileUploadModal({
                                     </Button>
                                 </Flex>
 
-                                <SimpleGrid columns={2} spacing={3} maxH="200px" overflowY="auto">
+                                <SimpleGrid columns={{ base: 2, sm: 3, md: 4 }} spacing={3} maxH="200px" overflowY="auto">
                                     {selectedFiles.map((file, index) => (
                                         <Box
                                             key={`${file.name}-${index}`}
@@ -303,6 +316,8 @@ export default function FileUploadModal({
                                             borderWidth="1px"
                                             borderRadius="md"
                                             p={2}
+                                            borderColor={borderColor} // Use theme border color
+                                            bg={cardBg} // Use theme card background
                                         >
                                             {file.preview ? (
                                                 <VStack spacing={1}>
@@ -321,13 +336,13 @@ export default function FileUploadModal({
                                                 <VStack spacing={1}>
                                                     <Box
                                                         boxSize="60px"
-                                                        bg="gray.100"
+                                                        bg={useColorModeValue('neutral.light.bg-primary', 'neutral.dark.bg-primary')} // Use primary background color
                                                         display="flex"
                                                         alignItems="center"
                                                         justifyContent="center"
                                                         borderRadius="sm"
                                                     >
-                                                        <Icon as={FiFolder} boxSize={6} color="gray.500" />
+                                                        <Icon as={FiFolder} boxSize={6} color={textSecondaryColor} /> {/* Use secondary text color for icon */}
                                                     </Box>
                                                     <Text fontSize="xs" noOfLines={1} title={file.name}>
                                                         {file.name}
@@ -385,7 +400,7 @@ export default function FileUploadModal({
                         {isUploading && (
                             <Box width="100%">
                                 <Progress value={uploadProgress} size="sm" colorScheme="blue" />
-                                <Text fontSize="sm" textAlign="center" mt={2}>
+                                <Text fontSize="sm" textAlign="center" mt={2} color={textSecondaryColor}> {/* Use theme color for text */}
                                     Uploading... {Math.round(uploadProgress)}%
                                 </Text>
                             </Box>
@@ -397,7 +412,7 @@ export default function FileUploadModal({
                         Cancel
                     </Button>
                     <Button
-                        colorScheme="blue"
+                        colorScheme="brand"
                         onClick={handleSubmit}
                         isLoading={isUploading}
                         isDisabled={selectedFiles.length === 0 || isUploading}

@@ -1,4 +1,3 @@
-// src/app/page.tsx
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
@@ -24,7 +23,7 @@ import {
   StatLabel,
   StatNumber,
   Skeleton,
-  useBreakpointValue,
+  Tooltip,
 } from '@chakra-ui/react';
 import { FiArrowLeft, FiArrowRight } from 'react-icons/fi';
 import { useSession } from 'next-auth/react';
@@ -68,6 +67,7 @@ interface DashboardStats {
   outOfStockItemsCount: number;
   weeklyActivityCount: number;
   todayActivityCount: number;
+  totalStockCount: number;
 }
 
 const StatCard = ({
@@ -75,7 +75,7 @@ const StatCard = ({
   value,
   subValue,
   icon,
-  colorScheme = 'blue',
+  colorScheme = 'brand',
   isLoading = false,
   viewAllLink
 }: {
@@ -87,86 +87,94 @@ const StatCard = ({
   isLoading?: boolean;
   viewAllLink?: string;
 }) => {
-  const cardBg = useColorModeValue('white', 'gray.700');
-  const subValueColor = useColorModeValue(`${colorScheme}.600`, `${colorScheme}.300`);
   const iconBg = useColorModeValue(`${colorScheme}.50`, `${colorScheme}.900`);
   const iconColor = useColorModeValue(`${colorScheme}.500`, `${colorScheme}.300`);
-  const borderTopColor = useColorModeValue('gray.100', 'gray.600');
-  const isMobile = useBreakpointValue({ base: true, md: false });
+  const subValueColor = useColorModeValue(`${colorScheme}.600`, `${colorScheme}.300`);
+  const cardBg = useColorModeValue('neutral.light.bg-card', 'neutral.dark.bg-card');
+  const borderColor = useColorModeValue('neutral.light.border-color', 'neutral.dark.border-color');
+  const primaryTextColor = useColorModeValue('neutral.light.text-primary', 'neutral.dark.text-primary');
+  const secondaryTextColor = useColorModeValue('neutral.light.text-secondary', 'neutral.dark.text-secondary');
 
   return (
     <Card
-      bg={cardBg}
-      boxShadow="sm"
+      boxShadow="md"
       p={3}
-      borderRadius="md"
-      textAlign="left"
       height="100%"
       minH="120px"
+      bg={cardBg}
+      border="1px"
+      borderColor={borderColor}
+      sx={{
+        _dark: {
+          boxShadow: 'dark-md',
+        },
+      }}
     >
-      <HStack spacing={3} align="stretch" mb={viewAllLink ? 2 : 0}>
-        <Flex
-          align="center"
-          justify="center"
-          w={10}
-          h={10}
-          bg={iconBg}
-          borderRadius="full"
-          flexShrink={0}
-        >
-          <Icon as={icon} w={5} h={5} color={iconColor} />
-        </Flex>
+      <VStack spacing={3} align="stretch" h="full">
+        <HStack spacing={3} align="flex-start" flex="1">
+          <Flex
+            align="center"
+            justify="center"
+            w={10}
+            h={10}
+            bg={iconBg}
+            borderRadius="full"
+            flexShrink={0}
+          >
+            <Icon as={icon} w={5} h={5} color={iconColor} />
+          </Flex>
 
-        <VStack align="flex-start" spacing={0} flex="1" overflow="hidden">
-          <Stat>
-            <StatLabel
-              fontWeight="medium"
-              fontSize={{ base: 'xs', sm: 'sm' }}
-              isTruncated
-              color="gray.500"
-            >
-              {title}
-            </StatLabel>
-            <StatNumber fontSize={{ base: 'lg', sm: 'xl' }} fontWeight="bold">
-              {isLoading ? <Skeleton height="20px" width="50px" /> : value}
-            </StatNumber>
-            {subValue && (
-              <Text
-                fontSize={{ base: 'xs', sm: 'sm' }}
-                color={subValueColor}
+          <VStack align="flex-start" spacing={0} flex="1" overflow="hidden">
+            <Stat>
+              <StatLabel
                 fontWeight="medium"
-                noOfLines={1}
+                fontSize={{ base: 'xs', sm: 'sm' }}
+                isTruncated
+                color={secondaryTextColor}
               >
-                {subValue}
-              </Text>
-            )}
-          </Stat>
-        </VStack>
-      </HStack>
+                {title}
+              </StatLabel>
+              <StatNumber fontSize={{ base: 'lg', sm: 'xl' }} fontWeight="bold" color={primaryTextColor}>
+                {isLoading ? <Skeleton height="20px" width="50px" /> : value}
+              </StatNumber>
+              {subValue && (
+                <Text
+                  fontSize={{ base: 'xs', sm: 'sm' }}
+                  color={subValueColor}
+                  fontWeight="medium"
+                  noOfLines={1}
+                >
+                  {subValue}
+                </Text>
+              )}
+            </Stat>
+          </VStack>
+        </HStack>
 
-      {viewAllLink && (
-        <Box borderTopWidth="1px" borderTopColor={borderTopColor} pt={2}>
-          <Link href={viewAllLink} passHref>
-            <Button
-              size="xs"
-              variant="ghost"
-              width="full"
-              colorScheme={colorScheme}
-              justifyContent="space-between"
-              rightIcon={<Icon as={FiArrowRight} />}
-              py={1}
-            >
-              View All
-            </Button>
-          </Link>
-        </Box>
-      )}
+        {viewAllLink && (
+          <Box borderTopWidth="1px" borderColor={borderColor} pt={2} mt="auto">
+            <Link href={viewAllLink} passHref>
+              <Button
+                size="xs"
+                variant="ghost"
+                width="full"
+                colorScheme={colorScheme}
+                justifyContent="space-between"
+                rightIcon={<Icon as={FiArrowRight} />}
+                py={1}
+              >
+                View All
+              </Button>
+            </Link>
+          </Box>
+        )}
+      </VStack>
     </Card>
   );
 };
 
 export default function Home() {
-  const { data: session, status } = useSession(); // Use NextAuth's useSession
+  const { data: session, status } = useSession();
   const [sites, setSites] = useState<Site[]>([]);
   const [selectedSiteId, setSelectedSiteId] = useState<string | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -174,20 +182,20 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSitesLoading, setIsSitesLoading] = useState(true);
 
-
-
   const toast = useToast();
-  const cardBg = useColorModeValue('gray.50', 'gray.700');
-  const isMobile = useBreakpointValue({ base: true, md: false });
   const sitesContainerRef = useRef<HTMLDivElement>(null);
 
-  // Extract user data from session with proper typing
   const user = session?.user as SessionUser | undefined;
   const userRole = user?.role;
   const associatedSite = user?.associatedSite;
   const isAuthReady = status !== 'loading';
 
-  // Fetch sites based on user role
+  const pageBg = useColorModeValue('neutral.light.bg-primary', 'neutral.dark.bg-primary');
+  const headingColor = useColorModeValue('neutral.light.text-primary', 'neutral.dark.text-primary');
+  const secondaryTextColor = useColorModeValue('neutral.light.text-secondary', 'neutral.dark.text-secondary');
+  const dividerColor = useColorModeValue('neutral.light.border-color', 'neutral.dark.border-color');
+  const transactionCardBg = useColorModeValue('neutral.light.bg-card', 'neutral.dark.bg-card');
+
   useEffect(() => {
     if (status === 'loading') return;
 
@@ -231,6 +239,8 @@ export default function Home() {
 
         if (userRole === 'siteManager' && fetchedSites.length > 0) {
           setSelectedSiteId(fetchedSites[0]._id);
+        } else if (userRole !== 'siteManager' && fetchedSites.length > 0) {
+          setSelectedSiteId(fetchedSites[0]._id);
         }
       } catch (error) {
         console.error("Failed to fetch sites:", error);
@@ -249,20 +259,15 @@ export default function Home() {
     fetchSites();
   }, [status, userRole, associatedSite, toast]);
 
-  // Fetch dashboard data from API route
   useEffect(() => {
     if (!isAuthReady || isSitesLoading) return;
 
     const fetchDashboardData = async () => {
       setIsLoading(true);
 
-      let siteIdsToQuery = selectedSiteId ? [selectedSiteId] : sites.map(s => s._id);
+      const siteIdsToQuery = selectedSiteId ? [selectedSiteId] : (userRole === 'admin' || userRole === 'auditor' ? sites.map(s => s._id) : []);
 
-      // If no site is selected and we have sites, default to the first one
-      if (!selectedSiteId && sites.length > 0 && (user?.role === 'admin' || user?.role === 'auditor')) {
-        setSelectedSiteId(sites[0]._id);
-        siteIdsToQuery = [sites[0]._id];
-      } else if (siteIdsToQuery.length === 0) {
+      if (siteIdsToQuery.length === 0) {
         setTransactions([]);
         setDashboardStats(null);
         setIsLoading(false);
@@ -296,7 +301,8 @@ export default function Home() {
           lowStockItemsCount: 0,
           outOfStockItemsCount: 0,
           weeklyActivityCount: 0,
-          todayActivityCount: 0
+          todayActivityCount: 0,
+          totalStockCount: 0
         });
 
       } catch (error) {
@@ -314,20 +320,20 @@ export default function Home() {
     };
 
     fetchDashboardData();
-  }, [isAuthReady, isSitesLoading, selectedSiteId, sites, toast, user]);
+  }, [isAuthReady, isSitesLoading, selectedSiteId, sites, toast, userRole]);
 
   const TransactionIcon = ({ type }: { type: string }) => {
     switch (type) {
       case 'GoodsReceipt':
         return <Icon as={BsBuildingAdd} color="green.500" boxSize={4} />;
       case 'DispatchLog':
-        return <Icon as={BsTruck} color="red.500" boxSize={4} />;
+        return <Icon as={BsTruck} color="orange.500" boxSize={4} />;
       case 'InternalTransfer':
-        return <Icon as={BsArrowRight} color="yellow.500" boxSize={4} />;
+        return <Icon as={BsArrowRight} color="blue.500" boxSize={4} />;
       case 'StockAdjustment':
         return <Icon as={BsBoxSeam} color="purple.500" boxSize={4} />;
       case 'InventoryCount':
-        return <Icon as={BsBoxSeam} color="blue.500" boxSize={4} />;
+        return <Icon as={BsClipboardData} color="teal.500" boxSize={4} />;
       default:
         return null;
     }
@@ -339,34 +345,34 @@ export default function Home() {
 
   const handleScroll = (direction: 'left' | 'right') => {
     if (sitesContainerRef.current) {
-      const scrollAmount = 200;
+      const scrollAmount = sitesContainerRef.current.clientWidth / 2;
       if (direction === 'left') {
-        sitesContainerRef.current.scrollLeft -= scrollAmount;
+        sitesContainerRef.current.scrollBy({ left: -scrollAmount, behavior: 'smooth' });
       } else {
-        sitesContainerRef.current.scrollLeft += scrollAmount;
+        sitesContainerRef.current.scrollBy({ left: scrollAmount, behavior: 'smooth' });
       }
     }
   };
 
   if (!isAuthReady || isSitesLoading) {
     return (
-      <Flex justifyContent="center" alignItems="center" height="100vh">
-        <Spinner size="xl" />
+      <Flex justifyContent="center" alignItems="center" minHeight="calc(100vh - 60px - 80px)" bg={pageBg}>
+        <Spinner size="xl" color={useColorModeValue('brand.500', 'brand.300')} />
       </Flex>
     );
   }
 
   return (
-    <Box p={{ base: 3, md: 4 }} overflowX="hidden">
-      <Heading as="h1" size={{ base: 'md', md: 'lg' }} mb={4}>
+    <Box p={{ base: 3, md: 8 }} bg={pageBg} minHeight="100vh">
+      <Heading as="h1" size={{ base: 'md', md: 'xl' }} mb={4} color={headingColor}>
         Dashboard
       </Heading>
 
       {/* Sites Section */}
-      {(user?.role === 'admin' || user?.role === 'auditor') && (
-        <>
-          <Flex justify="space-between" align="center" mb={3}>
-            <Heading as="h2" size={{ base: 'sm', md: 'md' }}>Sites</Heading>
+      {(user?.role === 'admin' || user?.role === 'auditor') && sites.length > 0 && (
+        <VStack align="stretch" spacing={3} mb={6}>
+          <Flex justify="space-between" align="center">
+            <Heading as="h2" size={{ base: 'sm', md: 'md' }} color={headingColor}>Sites</Heading>
             {sites.length > 3 && (
               <HStack>
                 <IconButton
@@ -374,63 +380,64 @@ export default function Home() {
                   icon={<FiArrowLeft />}
                   onClick={() => handleScroll('left')}
                   size="xs"
+                  variant="outline"
+                  colorScheme="brand"
                 />
                 <IconButton
                   aria-label="Scroll right"
                   icon={<FiArrowRight />}
                   onClick={() => handleScroll('right')}
                   size="xs"
+                  variant="outline"
+                  colorScheme="brand"
                 />
               </HStack>
             )}
           </Flex>
 
-          {sites.length > 0 ? (
-            <Flex
-              ref={sitesContainerRef}
-              overflowX="auto"
-              whiteSpace="nowrap"
-              pb={3}
-              sx={{
-                '::-webkit-scrollbar': { display: 'none' },
-                msOverflowStyle: 'none',
-                scrollbarWidth: 'none',
-              }}
-            >
-              {sites.map(site => (
-                <Button
-                  key={site._id}
-                  onClick={() => handleSiteClick(site._id)}
-                  mx={1}
-                  size="sm"
-                  variant={selectedSiteId === site._id ? 'solid' : 'outline'}
-                  colorScheme={selectedSiteId === site._id ? 'blue' : 'gray'}
-                  minW="100px"
-                  fontSize={{ base: 'xs', sm: 'sm' }}
-                  flexShrink={0}
-                >
-                  {site.name}
-                </Button>
-              ))}
-            </Flex>
-          ) : (
-            <Text color="gray.500" mb={4} fontSize="sm">No sites found for your account.</Text>
-          )}
-        </>
+          <Flex
+            ref={sitesContainerRef}
+            overflowX="auto"
+            whiteSpace="nowrap"
+            pb={3}
+            sx={{
+              '::-webkit-scrollbar': { display: 'none' },
+              msOverflowStyle: 'none',
+              scrollbarWidth: 'none',
+            }}
+          >
+            {sites.map(site => (
+              <Button
+                key={site._id}
+                onClick={() => handleSiteClick(site._id)}
+                mr={2}
+                size="sm"
+                variant={selectedSiteId === site._id ? 'solid' : 'outline'}
+                colorScheme={selectedSiteId === site._id ? 'brand' : 'gray'}
+                minW="120px"
+                fontSize={{ base: 'xs', sm: 'sm' }}
+                flexShrink={0}
+                borderRadius="lg"
+              >
+                {site.name}
+              </Button>
+            ))}
+          </Flex>
+        </VStack>
       )}
 
       {/* Stats Section */}
-      <Heading as="h2" size={{ base: 'sm', md: 'md' }} mt={6} mb={3}>
+      <Heading as="h2" size={{ base: 'sm', md: 'md' }} mt={user?.role === 'siteManager' || sites.length === 0 ? 0 : 6} mb={3} color={headingColor}>
         Site Statistics
         {selectedSiteId && (
-          <Badge ml={2} colorScheme="blue" fontSize={{ base: 'xs', md: 'sm' }}>
+          <Badge ml={2} colorScheme="brand" fontSize={{ base: 'xs', md: 'sm' }}>
             {sites.find(s => s._id === selectedSiteId)?.name}
           </Badge>
         )}
       </Heading>
 
       {isLoading ? (
-        <SimpleGrid columns={{ base: 1, sm: 2, md: 3, lg: 4, xl: 5 }} spacing={3} mb={6}>
+        <SimpleGrid columns={{ base: 1, sm: 2, md: 3, lg: 4, xl: 5 }} spacing={4} mb={6}>
           {[1, 2, 3, 4, 5].map(i => (
             <StatCard
               key={i}
@@ -442,7 +449,7 @@ export default function Home() {
           ))}
         </SimpleGrid>
       ) : (
-        <SimpleGrid columns={{ base: 1, sm: 2, md: 3, lg: 4, xl: 5 }} spacing={3} mb={6}>
+        <SimpleGrid columns={{ base: 1, sm: 2, md: 3, lg: 4, xl: 5 }} spacing={4} mb={6}>
           {/* Card 1: Receipts This Month */}
           <StatCard
             title="Receipts This Month"
@@ -453,11 +460,11 @@ export default function Home() {
             viewAllLink="/operations/receipts"
           />
 
-          {/* Card 2: Dispatches This Month */}
+          {/* Card 2: Issues This Month */}
           <StatCard
             title="Issues This Month"
             value={dashboardStats?.monthlyDispatchesCount || 0}
-            subValue={`${dashboardStats?.todaysDispatchesCount || 0} pending today`}
+            subValue={`${dashboardStats?.todaysDispatchesCount || 0} today`}
             icon={BsTruck}
             colorScheme="orange"
             viewAllLink="/operations/dispatches"
@@ -483,25 +490,25 @@ export default function Home() {
             viewAllLink="/low-stock"
           />
 
-          {/* Card 5: Recent Activity */}
+          {/* Card 5: Total Stock */}
           <StatCard
-            title="Current Stock"
-            value={dashboardStats?.weeklyActivityCount || 0}
-            subValue={`${dashboardStats?.todayActivityCount || 0} today`}
+            title="Total Stock"
+            value={dashboardStats?.totalStockCount || 0}
+            subValue={`${dashboardStats?.todayActivityCount || 0} items moved today`}
             icon={BsClipboardData}
-            colorScheme="blue"
-            viewAllLink="/current"
+            colorScheme="brand"
+            viewAllLink="/inventory"
           />
         </SimpleGrid>
       )}
 
-      <Divider mb={6} />
+      <Divider mb={6} borderColor={dividerColor} />
 
       {/* Transaction History Section */}
-      <Heading as="h2" size={{ base: 'sm', md: 'md' }} mb={3}>
+      <Heading as="h2" size={{ base: 'sm', md: 'md' }} mb={3} color={headingColor}>
         Recent Transactions
         {selectedSiteId && (
-          <Badge ml={2} colorScheme="blue" fontSize={{ base: 'xs', md: 'sm' }}>
+          <Badge ml={2} colorScheme="brand" fontSize={{ base: 'xs', md: 'sm' }}>
             {sites.find(s => s._id === selectedSiteId)?.name}
           </Badge>
         )}
@@ -512,24 +519,24 @@ export default function Home() {
 
       {isLoading ? (
         <Flex justifyContent="center" alignItems="center" minHeight="150px">
-          <Spinner size="lg" />
+          <Spinner size="lg" color={useColorModeValue('brand.500', 'brand.300')} />
         </Flex>
       ) : transactions.length > 0 ? (
         <VStack spacing={3} align="stretch">
-          {transactions.slice(0, isMobile ? 3 : 5).map(transaction => (
-            <Card key={transaction._id} bg={cardBg} boxShadow="sm" size="sm">
+          {transactions.slice(0, 5).map(transaction => (
+            <Card key={transaction._id} boxShadow="sm" size="sm" bg={transactionCardBg}>
               <CardBody py={3} px={4}>
                 <Flex direction={{ base: 'column', sm: 'row' }} alignItems={{ base: 'flex-start', sm: 'center' }}>
                   <Box flexShrink={0} mb={{ base: 2, sm: 0 }}>
                     <TransactionIcon type={transaction._type} />
                   </Box>
                   <Box flex="1" ml={{ base: 0, sm: 3 }}>
-                    <Text fontWeight="medium" fontSize="sm" noOfLines={1}>
+                    <Text fontWeight="medium" fontSize="sm" noOfLines={1} color={headingColor}>
                       {transaction.description}
                     </Text>
-                    <Flex direction={{ base: 'column', xs: 'row' }} fontSize="xs" color="gray.500" mt={1}>
+                    <Flex direction={{ base: 'column', sm: 'row' }} fontSize="xs" color={secondaryTextColor} mt={1}>
                       <Text>{new Date(transaction.createdAt).toLocaleDateString()}</Text>
-                      <Text display={{ base: 'none', xs: 'block' }} mx={2}>•</Text>
+                      <Text display={{ base: 'none', sm: 'block' }} mx={2}>•</Text>
                       <Text noOfLines={1}>{transaction.siteName}</Text>
                     </Flex>
                   </Box>
@@ -540,7 +547,7 @@ export default function Home() {
         </VStack>
       ) : (
         <Box textAlign="center" py={6}>
-          <Text fontSize="sm" color="gray.500">
+          <Text fontSize="sm" color={secondaryTextColor}>
             No transaction history found for {selectedSiteId ? "this site." : "your account."}
           </Text>
         </Box>
@@ -549,7 +556,7 @@ export default function Home() {
       {transactions.length > 0 && (
         <Box textAlign="center" mt={4}>
           <Link href="/transactions" passHref>
-            <Button size="sm" variant="ghost" colorScheme="blue">
+            <Button size="sm" variant="ghost" colorScheme="brand">
               View All Transactions
             </Button>
           </Link>

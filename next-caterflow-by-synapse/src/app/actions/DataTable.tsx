@@ -19,10 +19,12 @@ import {
     Spinner,
     Badge,
     Checkbox,
+    useColorModeValue,
 } from '@chakra-ui/react';
 import { ChevronLeftIcon, ChevronRightIcon, ChevronUpIcon, ChevronDownIcon } from '@chakra-ui/icons';
 import { FiPackage } from 'react-icons/fi';
 import { PendingAction } from './types';
+import { table } from 'console';
 
 // Define a flexible column type for better control over rendering
 export interface Column {
@@ -57,6 +59,16 @@ export default function DataTable({
     const [sortColumn, setSortColumn] = useState<keyof PendingAction | null>(null); // Use keyof PendingAction
     const [sortDirection, setSortDirection] = useState<'asc' | 'desc' | null>(null);
     const [selectedRows, setSelectedRows] = useState<any[]>([]);
+
+    // Theme colors
+    const tableBg = useColorModeValue('neutral.light.bg-card', 'neutral.dark.bg-card');
+    const headerBg = useColorModeValue('neutral.light.bg-card-hover', 'neutral.dark.bg-card-hover');
+    const borderColor = useColorModeValue('neutral.light.border-color', 'neutral.dark.border-color');
+    const inputBg = useColorModeValue('neutral.light.bg-input', 'neutral.dark.bg-input');
+    const primaryTextColor = useColorModeValue('neutral.light.text-primary', 'neutral.dark.text-primary');
+    const secondaryTextColor = useColorModeValue('neutral.light.text-secondary', 'neutral.dark.text-secondary');
+    const hoverBg = useColorModeValue('neutral.light.bg-card-hover', 'neutral.dark.bg-card-hover');
+    const actionButtonColor = useColorModeValue('brand.light', 'brand.dark');
 
     // Only show selection for GoodsReceipt action type
     const showSelection = actionType === 'GoodsReceipt' && onSelectionChange;
@@ -113,7 +125,7 @@ export default function DataTable({
             return (
                 <Button
                     size="sm"
-                    colorScheme="blue"
+                    colorScheme="brand"
                     onClick={() => onActionClick(row)}
                 >
                     Resolve
@@ -127,8 +139,8 @@ export default function DataTable({
         if (row.actionType === 'PurchaseOrder' && row.orderedItems && row.orderedItems.length > 0) {
             return (
                 <Box>
-                    <Text>{row.description}</Text>
-                    <Text fontSize="sm" color="gray.600" mt={1}>
+                    <Text color={primaryTextColor}>{row.description}</Text>
+                    <Text fontSize="sm" color={secondaryTextColor} mt={1}>
                         Items: {row.orderedItems.map((item: any) =>
                             `${item.stockItem.name} (${item.orderedQuantity})`
                         ).join(', ')}
@@ -136,7 +148,7 @@ export default function DataTable({
                 </Box>
             );
         }
-        return <Text>{row.description}</Text>;
+        return <Text color={primaryTextColor}>{row.description}</Text>;
     };
 
     // Function to search across all available data including nested objects
@@ -276,7 +288,14 @@ export default function DataTable({
     const allColumns = columns;
 
     return (
-        <Box p={4} borderRadius="md" borderWidth="1px" overflowX="auto" className="shadow-sm">
+        <Box
+            p={{ base: 2, md: 4 }}
+            borderRadius="md"
+            borderWidth="1px"
+            bg={tableBg}
+            boxShadow="sm"
+            sx={{ _dark: { boxShadow: 'dark-sm' } }}
+        >
             <Flex
                 direction={{ base: 'column', md: 'row' }}
                 gap={{ base: 4, md: 8 }}
@@ -286,6 +305,7 @@ export default function DataTable({
                 p={4}
                 borderWidth="1px"
                 borderRadius="md"
+                borderColor={borderColor}
             >
                 <Input
                     placeholder="Search across all data..."
@@ -295,6 +315,10 @@ export default function DataTable({
                         setCurrentPage(1); // Reset to first page on search
                     }}
                     flex={{ base: '1', md: '0.6' }}
+                    bg={tableBg}
+                    color={primaryTextColor}
+                    _placeholder={{ color: secondaryTextColor }}
+                    borderColor={borderColor}
                 />
                 <HStack
                     spacing={4}
@@ -302,7 +326,7 @@ export default function DataTable({
                     mt={{ base: 4, md: 0 }}
                     flex={{ base: '1', md: '0.4' }}
                 >
-                    <Text flexShrink={0} fontSize="sm" color="gray.600">
+                    <Text flexShrink={0} fontSize="sm" color={secondaryTextColor}>
                         Items per page:
                     </Text>
                     <Select
@@ -313,6 +337,8 @@ export default function DataTable({
                         }}
                         maxW="100px"
                         size="sm"
+                        bg={tableBg}
+                        borderColor={borderColor}
                     >
                         {[5, 10, 25, 50].map((size) => (
                             <option key={size} value={size}>
@@ -329,83 +355,89 @@ export default function DataTable({
                         <Spinner size="xl" />
                     </Flex>
                 ) : (
-                    <Table variant="simple" size="sm" className="min-w-full divide-y divide-gray-200">
-                        <Thead>
-                            <Tr className="bg-gray-50">
-                                {/* Selection column - only show for GoodsReceipt action type */}
-                                {showSelection && (
-                                    <Th width="50px">
-                                        <Checkbox
-                                            onChange={handleSelectAll}
-                                            isChecked={selectedRows.length === paginatedData.length && paginatedData.length > 0}
-                                            isIndeterminate={selectedRows.length > 0 && selectedRows.length < paginatedData.length}
-                                        />
-                                    </Th>
-                                )}
-                                {allColumns.map((column) => (
-                                    <Th
-                                        key={column.accessorKey}
-                                        onClick={() => handleSort(column.accessorKey, column.isSortable)}
-                                        cursor={column.isSortable ? 'pointer' : 'default'}
-                                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                                        _hover={{ bg: column.isSortable ? 'gray.100' : 'gray.50' }}
-                                    >
-                                        <Flex alignItems="center">
-                                            {column.header}
-                                            {renderSortIcon(column.accessorKey)}
-                                        </Flex>
-                                    </Th>
-                                ))}
-                            </Tr>
-                        </Thead>
-                        <Tbody>
-                            {paginatedData.length > 0 ? (
-                                paginatedData.map((row, rowIndex) => (
-                                    <Tr key={row._id || rowIndex}>
-                                        {/* Selection checkbox - only show for GoodsReceipt action type */}
-                                        {showSelection && (
-                                            <Td>
-                                                <Checkbox
-                                                    onChange={() => handleSelectRow(row)}
-                                                    isChecked={selectedRows.includes(row)}
-                                                />
-                                            </Td>
-                                        )}
-                                        {allColumns.map((column) => (
-                                            <Td
-                                                key={column.accessorKey}
-                                                className="px-6 py-4 whitespace-nowrap text-sm text-gray-900"
-                                            >
-                                                {column.cell ? (
-                                                    column.cell(row, rowIndex)
-                                                ) : column.accessorKey === 'description' ? (
-                                                    renderDescriptionWithItems(row)
-                                                ) : (
-                                                    <Text>{getPropertyValue(row, column.accessorKey)}</Text>
-                                                )}
-                                            </Td>
-                                        ))}
-                                    </Tr>
-                                ))
-                            ) : (
-                                <Tr>
-                                    <Td
-                                        colSpan={allColumns.length + (showSelection ? 1 : 0)}
-                                        textAlign="center"
-                                        py={10}
-                                    >
-                                        No results found.
-                                    </Td>
+                    <Box overflowX="auto">
+                        <Table variant="simple" size="sm" >
+                            <Thead>
+                                <Tr bg={headerBg}>
+                                    {/* Selection column - only show for GoodsReceipt action type */}
+                                    {showSelection && (
+                                        <Th width="50px" borderColor={borderColor}>
+                                            <Checkbox
+                                                onChange={handleSelectAll}
+                                                isChecked={selectedRows.length === paginatedData.length && paginatedData.length > 0}
+                                                isIndeterminate={selectedRows.length > 0 && selectedRows.length < paginatedData.length}
+                                            />
+                                        </Th>
+                                    )}
+                                    {allColumns.map((column) => (
+                                        <Th
+                                            key={column.accessorKey}
+                                            onClick={() => handleSort(column.accessorKey, column.isSortable)}
+                                            cursor={column.isSortable ? 'pointer' : 'default'}
+                                            _hover={{ bg: column.isSortable ? hoverBg : headerBg }}
+                                            borderColor={borderColor}
+                                            color={primaryTextColor}
+                                        >
+                                            <Flex alignItems="center">
+                                                {column.header}
+                                                {renderSortIcon(column.accessorKey)}
+                                            </Flex>
+                                        </Th>
+                                    ))}
                                 </Tr>
-                            )}
-                        </Tbody>
-                    </Table>
+                            </Thead>
+                            <Tbody>
+                                {paginatedData.length > 0 ? (
+                                    paginatedData.map((row, rowIndex) => (
+                                        <Tr key={row._id || rowIndex} _hover={{ bg: hoverBg }} borderBottomWidth="1px" borderColor={borderColor}>
+                                            {/* Selection checkbox - only show for GoodsReceipt action type */}
+                                            {showSelection && (
+                                                <Td borderColor={borderColor}>
+                                                    <Checkbox
+                                                        onChange={() => handleSelectRow(row)}
+                                                        isChecked={selectedRows.includes(row)}
+                                                    />
+                                                </Td>
+                                            )}
+                                            {allColumns.map((column) => (
+                                                <Td
+                                                    key={column.accessorKey}
+                                                    color={primaryTextColor}
+                                                    borderColor={borderColor}
+                                                >
+                                                    {column.cell ? (
+                                                        column.cell(row, rowIndex)
+                                                    ) : column.accessorKey === 'description' ? (
+                                                        renderDescriptionWithItems(row)
+                                                    ) : (
+                                                        <Text>{getPropertyValue(row, column.accessorKey)}</Text>
+                                                    )}
+                                                </Td>
+                                            ))}
+                                        </Tr>
+                                    ))
+                                ) : (
+                                    <Tr>
+                                        <Td
+                                            colSpan={allColumns.length + (showSelection ? 1 : 0)}
+                                            textAlign="center"
+                                            py={10}
+                                            color={secondaryTextColor}
+                                            borderColor={borderColor}
+                                        >
+                                            No results found.
+                                        </Td>
+                                    </Tr>
+                                )}
+                            </Tbody>
+                        </Table>
+                    </Box>
                 )
             }
 
             {/* Pagination Controls */}
-            <Flex justifyContent="space-between" alignItems="center" mt={4} px={2}>
-                <Text fontSize="sm" className="font-medium text-gray-600">
+            <Flex justifyContent="space-between" alignItems="center" mt={4} px={2} direction={{ base: 'column', md: 'row' }}>
+                <Text fontSize="sm" color={secondaryTextColor} mb={{ base: 2, md: 0 }}>
                     Showing {paginatedData.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0} to {Math.min(currentPage * itemsPerPage, processedData.length)} of {processedData.length} entries
                 </Text>
                 <HStack spacing={2}>
@@ -416,12 +448,12 @@ export default function DataTable({
                         isDisabled={currentPage === 1}
                         size="sm"
                         variant="outline"
-                        borderColor="gray.300"
-                        color="gray.600"
-                        _hover={{ bg: 'gray.100' }}
+                        borderColor={borderColor}
+                        color={secondaryTextColor}
+                        _hover={{ bg: hoverBg }}
                         rounded="md"
                     />
-                    <Text fontSize="sm" className="font-medium text-gray-600">
+                    <Text fontSize="sm" color={secondaryTextColor}>
                         Page {totalPages === 0 ? 0 : currentPage} of {totalPages === 0 ? 0 : totalPages}
                     </Text>
                     <IconButton
@@ -431,9 +463,9 @@ export default function DataTable({
                         isDisabled={currentPage === totalPages || totalPages === 0}
                         size="sm"
                         variant="outline"
-                        borderColor="gray.300"
-                        color="gray.600"
-                        _hover={{ bg: 'gray.100' }}
+                        borderColor={borderColor}
+                        color={secondaryTextColor}
+                        _hover={{ bg: hoverBg }}
                         rounded="md"
                     />
                 </HStack>
