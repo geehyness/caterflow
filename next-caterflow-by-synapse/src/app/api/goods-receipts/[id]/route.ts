@@ -8,10 +8,10 @@ import { NextResponse } from 'next/server';
 
 export async function GET(
     request: Request,
-    { params }: { params: Promise<{ id: string }> } // Change params to Promise
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const { id } = await params; // Await the params
+        const { id } = await params;
 
         if (!id) {
             return NextResponse.json(
@@ -20,58 +20,69 @@ export async function GET(
             );
         }
 
+        // In /api/goods-receipts/[id]/route.ts - Fix the GROQ query
         const query = groq`*[_type == "GoodsReceipt" && _id == $id][0] {
+    _id,
+    _type,
+    receiptNumber,
+    receiptDate,
+    status,
+    notes,
+    purchaseOrder->{
         _id,
-        _type,
-        receiptNumber,
-        receiptDate,
-        purchaseOrder->{
+        poNumber,
+        status,
+        orderDate,
+        supplier->{
             _id,
-            poNumber,
-            supplier->{name},
-            site->{name},
-            orderedItems[] {
-                _key,
-                orderedQuantity,
-                unitPrice,
-                stockItem->{
-                    _id,
-                    name,
-                    sku,
-                    unitOfMeasure
-                }
-            }
+            name
         },
-        receivingBin->{
+        site->{
             _id,
-            name,
-            binType,
-            site->{name}
+            name
         },
-        receivedBy->{name},
-        receivedItems[] {
+        orderedItems[] {
             _key,
+            orderedQuantity,
+            unitPrice,
             stockItem->{
                 _id,
                 name,
                 sku,
                 unitOfMeasure
-            },
-            orderedQuantity,
-            receivedQuantity,
-            batchNumber,
-            expiryDate,
-            condition
-        },
-        status,
-        notes,
-        evidenceStatus,
-        attachments[]->{
+            }
+        }
+    },
+    receivingBin->{
+        _id,
+        name,
+        binType,
+        site->{
+            _id,
+            name
+        }
+    },
+    receivedItems[] {
+        _key,
+        stockItem->{
             _id,
             name,
-            url
-        }
-    }`;
+            sku,
+            unitOfMeasure
+        },
+        orderedQuantity,
+        receivedQuantity,
+        batchNumber,
+        expiryDate,
+        condition
+    },
+    evidenceStatus,
+    attachments[]->{
+        _id,
+        name,
+        url
+    }
+}`;
 
         const goodsReceipt = await client.fetch(query, { id });
 
@@ -92,9 +103,10 @@ export async function GET(
     }
 }
 
-export async function POST(
+// CHANGE FROM POST TO PUT FOR UPDATES
+export async function PUT(
     request: Request,
-    { params }: { params: Promise<{ id: string }> } // Change params to Promise
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
         const session = await getServerSession(authOptions);
@@ -106,7 +118,7 @@ export async function POST(
             );
         }
 
-        const { id } = await params; // Await the params
+        const { id } = await params;
 
         if (!id) {
             return NextResponse.json(
@@ -117,19 +129,23 @@ export async function POST(
 
         const updateData = await request.json();
 
-        // The Sanity patch `set` method will handle partial updates.
-        // We only need to ensure the `updatedAt` field is set.
+        // Remove _id from update data to avoid conflicts
+        const { _id, ...dataToUpdate } = updateData;
+
         const result = await writeClient
             .patch(id)
-            .set({ ...updateData, updatedAt: new Date().toISOString() })
+            .set({
+                ...dataToUpdate,
+                updatedAt: new Date().toISOString()
+            })
             .commit();
 
         await logSanityInteraction(
             'update',
-            `Updated goods receipt: ${id} with new status and attachments`,
+            `Updated goods receipt: ${id}`,
             'GoodsReceipt',
             id,
-            'system',
+            session.user.email || 'system',
             true
         );
 
@@ -138,6 +154,51 @@ export async function POST(
         console.error('Failed to update goods receipt:', error);
         return NextResponse.json(
             { error: 'Failed to update goods receipt', details: error.message },
+            { status: 500 }
+        );
+    }
+}
+
+// Optional: Add DELETE method if needed
+export async function DELETE(
+    request: Request,
+    { params }: { params: Promise<{ id: string }> }
+) {
+    try {
+        const session = await getServerSession(authOptions);
+
+        if (!session || !session.user) {
+            return NextResponse.json(
+                { error: 'User not authenticated' },
+                { status: 401 }
+            );
+        }
+
+        const { id } = await params;
+
+        if (!id) {
+            return NextResponse.json(
+                { error: 'Goods receipt ID is required' },
+                { status: 400 }
+            );
+        }
+
+        const result = await writeClient.delete(id);
+
+        await logSanityInteraction(
+            'delete',
+            `Deleted goods receipt: ${id}`,
+            'GoodsReceipt',
+            id,
+            session.user.email || 'system',
+            true
+        );
+
+        return NextResponse.json({ success: true, result });
+    } catch (error: any) {
+        console.error('Failed to delete goods receipt:', error);
+        return NextResponse.json(
+            { error: 'Failed to delete goods receipt', details: error.message },
             { status: 500 }
         );
     }

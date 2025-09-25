@@ -241,10 +241,6 @@ export default function BinCountsPage() {
         );
     }
 
-    function handleFinalizeCount(): void {
-        throw new Error('Function not implemented.');
-    }
-
     return (
         <Box p={{ base: 2, md: 4 }}>
             <Flex
@@ -256,7 +252,8 @@ export default function BinCountsPage() {
                 gap={{ base: 4, md: 3 }}
             >
                 <Heading as="h1" size="xl">
-                    Bin Counts                            </Heading>
+                    Bin Counts
+                </Heading>
                 <HStack spacing={3} flexWrap="wrap">
                     <Button
                         leftIcon={<FiEye />}
@@ -300,8 +297,7 @@ export default function BinCountsPage() {
                 isOpen={isOpen}
                 onClose={onClose}
                 binCount={selectedBinCount}
-                onSave={fetchBinCounts} // Just refresh the list after save/finalize
-            //isViewMode={selectedBinCount?.status === 'completed' || selectedBinCount?.status === 'adjusted'}
+                onSave={fetchBinCounts}
             />
         </Box>
     );

@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { client, writeClient } from '@/lib/sanity';
 import { groq } from 'next-sanity';
 import { logSanityInteraction } from '@/lib/sanityLogger';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
 
 // Helper function to generate the next unique transfer number
 const getNextTransferNumber = async (): Promise<string> => {
@@ -29,9 +31,25 @@ const getNextTransferNumber = async (): Promise<string> => {
     }
 };
 
-export async function GET() {
+// Helper to get current user from session
+async function getCurrentUser(request: Request) {
+    // For API routes, we need to manually get the session
+    // This is a workaround since getServerSession doesn't work directly in Next.js 13+ API routes
+    const session = await getServerSession(authOptions);
+    return session?.user;
+}
+
+export async function GET(request: Request) {
     try {
-        const query = groq`*[_type == "InternalTransfer"] | order(transferDate desc) {
+        const { searchParams } = new URL(request.url);
+        const status = searchParams.get('status');
+
+        let statusFilter = '';
+        if (status) {
+            statusFilter = `&& status == "${status}"`;
+        }
+
+        const query = groq`*[_type == "InternalTransfer" ${statusFilter}] | order(transferDate desc) {
             _id,
             transferNumber,
             transferDate,
@@ -47,12 +65,17 @@ export async function GET() {
                 name,
                 "site": site->{name}
             },
+            "transferredBy": transferredBy->{_id, name, email},
+            "approvedBy": approvedBy->{_id, name, email},
+            approvedAt,
             "totalItems": count(transferredItems),
             "items": transferredItems[]{
+                _key,
                 "stockItem": stockItem->{
                     _id,
                     name,
-                    sku
+                    sku,
+                    unitOfMeasure
                 },
                 transferredQuantity
             }
@@ -72,16 +95,22 @@ export async function GET() {
 export async function POST(request: Request) {
     try {
         const body = await request.json();
+        const user = await getCurrentUser(request);
 
-        // Generate a unique transfer number using the new function
+        if (!user) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
+        // Generate a unique transfer number
         const transferNumber = await getNextTransferNumber();
 
         // Create the transferred items array
-        const transferredItems = (body.items || []).map((item: any) => ({
+        const transferredItems = (body.transferredItems || body.items || []).map((item: any) => ({
             _type: 'TransferredItem',
+            _key: item._key || undefined,
             stockItem: {
                 _type: 'reference',
-                _ref: item.stockItem,
+                _ref: item.stockItem?._id || item.stockItem,
             },
             transferredQuantity: item.transferredQuantity,
         }));
@@ -89,15 +118,19 @@ export async function POST(request: Request) {
         const transfer = {
             _type: 'InternalTransfer',
             transferNumber,
-            transferDate: body.transferDate || new Date().toISOString().split('T')[0],
-            status: body.status || 'pending',
+            transferDate: body.transferDate || new Date().toISOString(),
+            status: 'draft', // Always start as draft
             fromBin: {
                 _type: 'reference',
-                _ref: body.fromBin,
+                _ref: body.fromBin?._id || body.fromBin,
             },
             toBin: {
                 _type: 'reference',
-                _ref: body.toBin,
+                _ref: body.toBin?._id || body.toBin,
+            },
+            transferredBy: {
+                _type: 'reference',
+                _ref: user.id,
             },
             transferredItems,
             notes: body.notes || '',
@@ -110,7 +143,7 @@ export async function POST(request: Request) {
             `Created transfer: ${transferNumber}`,
             'InternalTransfer',
             result._id,
-            'system',
+            user.id || 'system',
             true
         );
 
@@ -127,56 +160,107 @@ export async function POST(request: Request) {
 export async function PATCH(request: Request) {
     try {
         const body = await request.json();
-        const { _id, ...updateData } = body;
+        const { _id, fromBin, toBin, transferredItems, items, ...updateData } = body;
+        const user = await getCurrentUser(request);
 
-        // Create the transferred items array if provided
-        let transferredItems;
-        if (updateData.items) {
-            transferredItems = updateData.items.map((item: any) => ({
+        if (!user) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
+        if (!_id) {
+            return NextResponse.json({ error: 'Transfer ID is required' }, { status: 400 });
+        }
+
+        // Get current transfer to check status and enforce workflow rules
+        const currentTransfer = await client.fetch(
+            groq`*[_type == "InternalTransfer" && _id == $_id][0] {
+                status,
+                transferNumber
+            }`,
+            { _id }
+        );
+
+        if (!currentTransfer) {
+            return NextResponse.json({ error: 'Transfer not found' }, { status: 404 });
+        }
+
+        // Enforce workflow rules - only allow editing drafts and pending-approval
+        if (!['draft', 'pending-approval'].includes(currentTransfer.status)) {
+            return NextResponse.json(
+                { error: `Cannot edit a transfer with status: ${currentTransfer.status}` },
+                { status: 403 }
+            );
+        }
+
+        const patchedData: any = { ...updateData };
+
+        // Handle status transitions and validation
+        if (patchedData.status === 'pending-approval') {
+            // When submitting for approval, validate required fields
+            if (!fromBin || !toBin || !(transferredItems || items) || (transferredItems || items).length === 0) {
+                return NextResponse.json(
+                    { error: 'All fields are required when submitting for approval' },
+                    { status: 400 }
+                );
+            }
+        }
+
+        // When approving, set approvedBy and approvedAt
+        if (patchedData.status === 'approved') {
+            patchedData.approvedBy = {
+                _type: 'reference',
+                _ref: user.id,
+            };
+            patchedData.approvedAt = new Date().toISOString();
+        }
+
+        // When completing, validate that it's approved first
+        if (patchedData.status === 'completed') {
+            if (currentTransfer.status !== 'approved') {
+                return NextResponse.json(
+                    { error: 'Only approved transfers can be completed' },
+                    { status: 400 }
+                );
+            }
+        }
+
+        // Handle bin references
+        if (fromBin) {
+            patchedData.fromBin = {
+                _type: 'reference',
+                _ref: fromBin._id || fromBin,
+            };
+        }
+
+        if (toBin) {
+            patchedData.toBin = {
+                _type: 'reference',
+                _ref: toBin._id || toBin,
+            };
+        }
+
+        // Handle items (support both transferredItems and items for backward compatibility)
+        const itemsToUse = transferredItems || items;
+        if (itemsToUse) {
+            patchedData.transferredItems = itemsToUse.map((item: any) => ({
                 _type: 'TransferredItem',
+                _key: item._key || undefined,
                 stockItem: {
                     _type: 'reference',
-                    _ref: item.stockItem,
+                    _ref: item.stockItem?._id || item.stockItem,
                 },
                 transferredQuantity: item.transferredQuantity,
             }));
-            delete updateData.items;
         }
 
-        // Start the patch operation
-        let patch = writeClient.patch(_id).set({
-            ...updateData,
-            ...(transferredItems && { transferredItems }),
-        });
-
-        // If fromBin is being updated, convert to reference
-        if (updateData.fromBin) {
-            patch = patch.set({
-                fromBin: {
-                    _type: 'reference',
-                    _ref: updateData.fromBin,
-                },
-            });
-        }
-
-        // If toBin is being updated, convert to reference
-        if (updateData.toBin) {
-            patch = patch.set({
-                toBin: {
-                    _type: 'reference',
-                    _ref: updateData.toBin,
-                },
-            });
-        }
-
-        const result = await patch.commit();
+        const result = await writeClient.patch(_id).set(patchedData).commit();
 
         await logSanityInteraction(
             'update',
-            `Updated transfer: ${updateData.transferNumber || _id}`,
+            `Updated transfer: ${currentTransfer.transferNumber || _id}`,
             'InternalTransfer',
             _id,
-            'system',
+            user.id || 'system',
             true
         );
 
@@ -194,6 +278,11 @@ export async function DELETE(request: Request) {
     try {
         const { searchParams } = new URL(request.url);
         const id = searchParams.get('id');
+        const user = await getCurrentUser(request);
+
+        if (!user) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
 
         if (!id) {
             return NextResponse.json(
@@ -202,14 +291,31 @@ export async function DELETE(request: Request) {
             );
         }
 
+        // Check if transfer can be deleted (only drafts)
+        const currentTransfer = await client.fetch(
+            groq`*[_type == "InternalTransfer" && _id == $id][0] { status, transferNumber }`,
+            { id }
+        );
+
+        if (!currentTransfer) {
+            return NextResponse.json({ error: 'Transfer not found' }, { status: 404 });
+        }
+
+        if (currentTransfer.status !== 'draft') {
+            return NextResponse.json(
+                { error: 'Only draft transfers can be deleted' },
+                { status: 403 }
+            );
+        }
+
         await writeClient.delete(id);
 
         await logSanityInteraction(
             'delete',
-            `Deleted transfer: ${id}`,
+            `Deleted transfer: ${currentTransfer.transferNumber || id}`,
             'InternalTransfer',
             id,
-            'system',
+            user.id || 'system',
             true
         );
 

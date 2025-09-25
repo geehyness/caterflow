@@ -128,26 +128,18 @@ export default function InventoryPage() {
             isSortable: false,
             cell: (row: StockItem) => (
                 <HStack spacing={2}>
-                    <IconButton
+                    <Button
                         aria-label="Edit item"
-                        icon={<EditIcon />}
+                        leftIcon={<EditIcon />}
                         size="sm"
                         colorScheme="blue"
                         onClick={(e) => {
                             e.stopPropagation();
                             handleEdit(row);
                         }}
-                    />
-                    <IconButton
-                        aria-label="Delete item"
-                        icon={<DeleteIcon />}
-                        size="sm"
-                        colorScheme="red"
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            handleDelete(row);
-                        }}
-                    />
+                    >
+                        Edit
+                    </Button>
                 </HStack>
             ),
         },
@@ -160,19 +152,6 @@ export default function InventoryPage() {
             accessorKey: 'sku',
             header: 'SKU',
             isSortable: true,
-        },
-        {
-            accessorKey: 'quantityInStock',
-            header: 'Qty in Stock',
-            isSortable: true,
-            cell: (row: StockItem) => (
-                <Text
-                    color={row.quantityInStock <= row.minimumStockLevel ? 'red.500' : 'inherit'}
-                    fontWeight={row.quantityInStock <= row.minimumStockLevel ? 'bold' : 'normal'}
-                >
-                    {row.quantityInStock} {row.unitOfMeasure}
-                </Text>
-            ),
         },
         {
             accessorKey: 'minimumStockLevel',

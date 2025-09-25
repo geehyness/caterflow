@@ -210,26 +210,18 @@ export default function LocationsPage() {
             isSortable: false,
             cell: (row: Site) => (
                 <HStack spacing={2}>
-                    <IconButton
+                    <Button
                         aria-label="Edit site"
-                        icon={<EditIcon />}
+                        leftIcon={<EditIcon />}
                         size="sm"
                         colorScheme="brand" // Using the custom brand color
                         onClick={(e) => {
                             e.stopPropagation();
                             handleEditSite(row);
                         }}
-                    />
-                    <IconButton
-                        aria-label="Delete site"
-                        icon={<DeleteIcon />}
-                        size="sm"
-                        colorScheme="red"
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteSite(row);
-                        }}
-                    />
+                    >
+                        Edit
+                    </Button>
                 </HStack>
             ),
         },
@@ -246,26 +238,18 @@ export default function LocationsPage() {
             isSortable: false,
             cell: (row: Bin) => (
                 <HStack spacing={2}>
-                    <IconButton
+                    <Button
                         aria-label="Edit bin"
-                        icon={<EditIcon />}
+                        leftIcon={<EditIcon />}
                         size="sm"
                         colorScheme="brand" // Using the custom brand color
                         onClick={(e) => {
                             e.stopPropagation();
                             handleEditBin(row);
                         }}
-                    />
-                    <IconButton
-                        aria-label="Delete bin"
-                        icon={<DeleteIcon />}
-                        size="sm"
-                        colorScheme="red"
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteBin(row);
-                        }}
-                    />
+                    >
+                        Edit
+                    </Button>
                 </HStack>
             ),
         },

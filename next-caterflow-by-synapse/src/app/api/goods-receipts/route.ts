@@ -7,11 +7,45 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 
 const getNextReceiptNumber = async (): Promise<string> => {
-    const query = groq`*[_type == "GoodsReceipt"] | order(receiptDate desc)[0].receiptNumber`;
-    const lastReceiptNumber = await client.fetch(query);
-    const lastNumber = lastReceiptNumber ? parseInt(lastReceiptNumber.split('-')[1]) : 0;
-    const nextNumber = lastNumber + 1;
-    return `GR-${String(nextNumber).padStart(5, '0')}`;
+    try {
+        // Get all receipt numbers and find the maximum
+        const query = groq`*[_type == "GoodsReceipt"].receiptNumber`;
+        const allReceiptNumbers = await client.fetch(query);
+
+        let maxNumber = 0;
+
+        if (allReceiptNumbers && allReceiptNumbers.length > 0) {
+            allReceiptNumbers.forEach((receiptNumber: string) => {
+                if (receiptNumber && receiptNumber.startsWith('GR-')) {
+                    const numberPart = receiptNumber.split('-')[1];
+                    const currentNumber = parseInt(numberPart);
+                    if (!isNaN(currentNumber) && currentNumber > maxNumber) {
+                        maxNumber = currentNumber;
+                    }
+                }
+            });
+        }
+
+        // Generate the next number
+        const nextNumber = maxNumber + 1;
+        const newReceiptNumber = `GR-${String(nextNumber).padStart(5, '0')}`;
+
+        // Double-check this number doesn't already exist (concurrency safety)
+        const checkQuery = groq`count(*[_type == "GoodsReceipt" && receiptNumber == $newNumber])`;
+        const existingCount = await client.fetch(checkQuery, { newNumber: newReceiptNumber });
+
+        if (existingCount > 0) {
+            // If it exists, try the next number
+            return `GR-${String(nextNumber + 1).padStart(5, '0')}`;
+        }
+
+        return newReceiptNumber;
+    } catch (error) {
+        console.error('Error generating receipt number:', error);
+        // Fallback with timestamp to ensure uniqueness
+        const timestamp = new Date().getTime();
+        return `GR-${String(timestamp).slice(-5)}`;
+    }
 };
 
 export async function GET() {

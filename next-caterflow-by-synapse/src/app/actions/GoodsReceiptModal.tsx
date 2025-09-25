@@ -1,7 +1,7 @@
 // Please replace the entire file content with this code block
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
     Modal,
     ModalOverlay,
@@ -38,10 +38,9 @@ import {
 } from '@chakra-ui/react';
 import { FiCheck, FiSave, FiX, FiCheckCircle } from 'react-icons/fi';
 import FileUploadModal from '@/components/FileUploadModal';
-
 import BinSelectorModal from '@/components/BinSelectorModal';
 
-// Interfaces for the data received from the API endpoint
+// Interfaces for the data
 interface ReceivedItemData {
     _key: string;
     stockItem: {
@@ -57,7 +56,6 @@ interface ReceivedItemData {
     condition: string;
 }
 
-// Interface for the goods receipt data object
 interface GoodsReceiptData {
     _id: string;
     receiptNumber: string;
@@ -81,16 +79,11 @@ interface GoodsReceiptData {
     receivingBin?: {
         _id: string;
         name: string;
-        site?: {
-            _id: string;
-            name: string;
-        };
     };
     receivedItems: ReceivedItemData[];
     attachments?: any[];
 }
 
-// Define the component's props with the new interface
 interface GoodsReceiptModalProps {
     isOpen: boolean;
     onClose: () => void;
@@ -100,7 +93,6 @@ interface GoodsReceiptModalProps {
     preSelectedPO?: string | null;
 }
 
-// Interface for a bin location
 interface Bin {
     _id: string;
     name: string;
@@ -111,199 +103,165 @@ interface Bin {
     };
 }
 
+// Initial state for a new receipt
+const initialFormData = {
+    receiptNumber: '',
+    receiptDate: new Date().toISOString().split('T')[0],
+    status: 'draft',
+    notes: '',
+    purchaseOrder: undefined,
+    receivingBin: undefined,
+    receivedItems: [],
+};
+
 export default function GoodsReceiptModal({
     isOpen,
     onClose,
     receipt,
     onSave,
     approvedPurchaseOrders = [],
-    preSelectedPO = null
+    preSelectedPO = null,
 }: GoodsReceiptModalProps) {
     const toast = useToast();
     const [isSaving, setIsSaving] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
     const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+    const [isBinSelectorOpen, setIsBinSelectorOpen] = useState(false);
+
+    const [formData, setFormData] = useState<Partial<GoodsReceiptData>>(initialFormData);
+    const [availableBins, setAvailableBins] = useState<Bin[]>([]);
+    const [savedReceiptId, setSavedReceiptId] = useState<string>('');
 
     const isNewReceipt = !receipt || receipt._id.startsWith('temp-');
 
-    const [isBinSelectorOpen, setIsBinSelectorOpen] = useState(false);
-
-    const [receivedItems, setReceivedItems] = useState<ReceivedItemData[]>([]);
-    const [selectedPOId, setSelectedPOId] = useState<string | null>(preSelectedPO);
-    const [isLoadingItems, setIsLoadingItems] = useState(false);
-    const [receiptNumber, setReceiptNumber] = useState('');
-    const [receiptDate, setReceiptDate] = useState('');
-    const [selectedBin, setSelectedBin] = useState<string>('');
-    const [notes, setNotes] = useState('');
-    const [availableBins, setAvailableBins] = useState<Bin[]>([]);
-    const [selectedItemsKeys, setSelectedItemsKeys] = useState<string[]>([]);
-    const [savedReceiptId, setSavedReceiptId] = useState<string>('');
-
-    useEffect(() => {
-        if (receipt && !isNewReceipt) {
-            setReceivedItems(receipt.receivedItems || []);
-            setSelectedPOId(receipt.purchaseOrder?._id || null);
-            setReceiptNumber(receipt.receiptNumber || '');
-            setReceiptDate(receipt.receiptDate || '');
-            setSelectedBin(receipt.receivingBin?._id || '');
-            setNotes(receipt.notes || '');
-            setSavedReceiptId(receipt._id); // Set saved receipt ID for existing receipts
-        } else if (isNewReceipt && preSelectedPO) {
-            setSelectedPOId(preSelectedPO);
-            setReceiptDate(new Date().toISOString().split('T')[0]);
-            setSavedReceiptId(''); // Reset saved receipt ID for new receipts
+    const fetchBinsForSite = useCallback(async (siteId: string) => {
+        if (!siteId) {
+            setAvailableBins([]);
+            return;
         }
-    }, [receipt, isNewReceipt, preSelectedPO]);
-
-    useEffect(() => {
-        if (!receiptNumber && !receipt) {
-            const timestamp = new Date().getTime();
-            setReceiptNumber(`GR-${timestamp}`);
+        try {
+            const binsResponse = await fetch(`/api/bins?siteId=${siteId}`);
+            if (binsResponse.ok) {
+                const bins: Bin[] = await binsResponse.json();
+                setAvailableBins(bins);
+            }
+        } catch (error) {
+            toast({
+                title: 'Error',
+                description: 'Failed to load receiving bins for the site.',
+                status: 'error',
+                duration: 5000,
+                isClosable: true,
+            });
         }
-    }, [receiptNumber, receipt]);
+    }, [toast]);
 
     useEffect(() => {
-        // Reset savedReceiptId when modal closes
-        if (!isOpen) {
-            setSavedReceiptId('');
-        }
-    }, [isOpen]);
+        const loadInitialData = async () => {
+            if (!isOpen) {
+                setFormData(initialFormData);
+                setAvailableBins([]);
+                setSavedReceiptId('');
+                return;
+            }
 
-    useEffect(() => {
-        const loadItemsFromPO = async () => {
-            if (isNewReceipt && selectedPOId) {
-                setIsLoadingItems(true);
+            setIsLoading(true);
+
+            // Editing an existing receipt
+            if (receipt && !isNewReceipt) {
                 try {
-                    const response = await fetch(`/api/purchase-orders?id=${selectedPOId}`);
-                    if (response.ok) {
-                        const poData = await response.json();
-
-                        if (poData.orderedItems) {
-                            const initialItems: ReceivedItemData[] = poData.orderedItems.map((item: any) => ({
-                                _key: item._key || Math.random().toString(36).substr(2, 9),
-                                stockItem: {
-                                    _id: item.stockItem?._id || item.stockItem?._ref || '',
-                                    name: item.stockItem?.name || 'Unknown Item',
-                                    sku: item.stockItem?.sku,
-                                    unitOfMeasure: item.stockItem?.unitOfMeasure
-                                },
-                                orderedQuantity: item.orderedQuantity || 0,
-                                receivedQuantity: 0,
-                                condition: 'good',
-                                batchNumber: '',
-                                expiryDate: ''
-                            }));
-                            setReceivedItems(initialItems);
-                        }
-
-                        if (poData.site?._id) {
-                            const binsResponse = await fetch(`/api/bins?siteId=${poData.site._id}`);
-                            if (binsResponse.ok) {
-                                const bins: Bin[] = await binsResponse.json();
-                                setAvailableBins(bins);
-                            }
-                        }
-                    } else {
-                        throw new Error('Failed to fetch purchase order details');
+                    const response = await fetch(`/api/goods-receipts/${receipt._id}`);
+                    if (!response.ok) throw new Error('Failed to fetch receipt details');
+                    const fullReceiptData: GoodsReceiptData = await response.json();
+                    setFormData(fullReceiptData);
+                    setSavedReceiptId(fullReceiptData._id);
+                    if (fullReceiptData.purchaseOrder?.site?._id) {
+                        await fetchBinsForSite(fullReceiptData.purchaseOrder.site._id);
                     }
                 } catch (error) {
                     toast({
                         title: 'Error',
-                        description: 'Failed to load purchase order items',
+                        description: `Could not load receipt details. ${error instanceof Error ? error.message : ''}`,
                         status: 'error',
                         duration: 5000,
                         isClosable: true,
                     });
-                    setReceivedItems([]);
-                } finally {
-                    setIsLoadingItems(false);
+                    onClose();
                 }
-            } else if (isNewReceipt && !selectedPOId) {
-                setReceivedItems([]);
-                setAvailableBins([]);
-                setSelectedBin('');
             }
+            // Creating a new receipt with a pre-selected PO
+            else if (preSelectedPO) {
+                try {
+                    const poResponse = await fetch(`/api/purchase-orders?id=${preSelectedPO}`);
+                    if (!poResponse.ok) throw new Error('Failed to fetch PO details');
+                    const poData = await poResponse.json();
+
+                    const initialItems: ReceivedItemData[] = (poData.orderedItems || []).map((item: any) => ({
+                        _key: item._key || Math.random().toString(36).substr(2, 9),
+                        stockItem: {
+                            _id: item.stockItem?._id || '',
+                            name: item.stockItem?.name || 'Unknown Item',
+                            sku: item.stockItem?.sku,
+                            unitOfMeasure: item.stockItem?.unitOfMeasure
+                        },
+                        orderedQuantity: item.orderedQuantity || 0,
+                        receivedQuantity: 0,
+                        condition: 'good',
+                        batchNumber: '',
+                        expiryDate: ''
+                    }));
+
+                    setFormData({
+                        ...initialFormData,
+                        purchaseOrder: poData,
+                        receivedItems: initialItems,
+                    });
+
+                    if (poData.site?._id) {
+                        await fetchBinsForSite(poData.site._id);
+                    }
+                } catch (error) {
+                    toast({
+                        title: 'Error',
+                        description: `Could not load PO details. ${error instanceof Error ? error.message : ''}`,
+                        status: 'error',
+                        duration: 5000,
+                        isClosable: true,
+                    });
+                }
+            }
+            // Creating a new receipt without a pre-selected PO
+            else {
+                setFormData(initialFormData);
+            }
+
+            setIsLoading(false);
         };
 
-        loadItemsFromPO();
-    }, [selectedPOId, isNewReceipt, toast]);
+        loadInitialData();
+    }, [isOpen, receipt, preSelectedPO, toast, onClose, fetchBinsForSite, isNewReceipt]); // ADD isNewReceipt to dependencies
 
+    const handleFieldChange = (field: keyof GoodsReceiptData, value: any) => {
+        setFormData(prev => ({ ...prev, [field]: value }));
+    };
+
+    const handleItemChange = (key: string, field: keyof ReceivedItemData, value: any) => {
+        setFormData(prev => ({
+            ...prev,
+            receivedItems: (prev.receivedItems || []).map(item =>
+                item._key === key ? { ...item, [field]: value } : item
+            ),
+        }));
+    };
 
     const handleBinSelect = (bin: Bin) => {
-        setSelectedBin(bin._id);
-    };
-
-
-    const handleQuantityChange = (key: string, valueAsString: string, valueAsNumber: number) => {
-        setReceivedItems(items => items.map(item =>
-            item._key === key ? { ...item, receivedQuantity: valueAsNumber } : item
-        ));
-    };
-
-    const handleConditionChange = (key: string, newCondition: string) => {
-        setReceivedItems(items => items.map(item =>
-            item._key === key ? { ...item, condition: newCondition } : item
-        ));
-    };
-
-    const handleUpdateBatchNumber = (key: string, value: string) => {
-        setReceivedItems(items => items.map(item =>
-            item._key === key ? { ...item, batchNumber: value } : item
-        ));
-    };
-
-    const handleUpdateExpiryDate = (key: string, value: string) => {
-        setReceivedItems(items => items.map(item =>
-            item._key === key ? { ...item, expiryDate: value } : item
-        ));
-    };
-
-    const markSelectedAsReceived = () => {
-        const newItems = receivedItems.map(item => {
-            if (selectedItemsKeys.includes(item._key)) {
-                return {
-                    ...item,
-                    receivedQuantity: item.orderedQuantity || 0,
-                    condition: 'good'
-                };
-            }
-            return item;
-        });
-        setReceivedItems(newItems);
-        setSelectedItemsKeys([]);
-    };
-
-    const markSelectedAsNotReceived = () => {
-        const newItems = receivedItems.map(item => {
-            if (selectedItemsKeys.includes(item._key)) {
-                return {
-                    ...item,
-                    receivedQuantity: 0,
-                    condition: 'good'
-                };
-            }
-            return item;
-        });
-        setReceivedItems(newItems);
-        setSelectedItemsKeys([]);
-    };
-
-
-    const determineStatus = () => {
-        if (receivedItems.length === 0) return 'draft';
-
-        const allReceived = receivedItems.every(item =>
-            item.receivedQuantity === (item.orderedQuantity || 0) && item.condition === 'good'
-        );
-        const someReceived = receivedItems.some(item => item.receivedQuantity > 0);
-
-        if (allReceived) return 'completed';
-        if (someReceived) return 'partially-received';
-        return 'draft';
+        // Set the receivingBin as a reference object
+        handleFieldChange('receivingBin', { _id: bin._id, name: bin.name });
     };
 
     const saveReceipt = async (status: string = 'draft'): Promise<any> => {
         setIsSaving(true);
-        if (!selectedPOId || !selectedBin) {
+        if (!formData.purchaseOrder?._id || !formData.receivingBin?._id) {
             toast({
                 title: 'Missing Information',
                 description: 'Please select a purchase order and a receiving bin.',
@@ -316,12 +274,9 @@ export default function GoodsReceiptModal({
         }
 
         try {
-            const itemsToSave = receivedItems.map(item => ({
+            const itemsToSave = (formData.receivedItems || []).map(item => ({
                 _key: item._key,
-                stockItem: {
-                    _type: 'reference',
-                    _ref: item.stockItem._id,
-                },
+                stockItem: { _type: 'reference', _ref: item.stockItem._id },
                 orderedQuantity: item.orderedQuantity || 0,
                 receivedQuantity: item.receivedQuantity,
                 condition: item.condition,
@@ -329,50 +284,49 @@ export default function GoodsReceiptModal({
                 expiryDate: item.expiryDate || '',
             }));
 
-            let url = '/api/goods-receipts';
-            let method = 'POST';
-            const payload: any = {
-                receiptNumber,
+            const payload = {
+                receiptDate: formData.receiptDate || new Date().toISOString().split('T')[0],
                 status,
-                receiptDate: receiptDate || new Date().toISOString().split('T')[0],
-                notes: notes,
-                purchaseOrder: { _type: 'reference', _ref: selectedPOId },
-                receivingBin: { _type: 'reference', _ref: selectedBin },
+                notes: formData.notes,
+                purchaseOrder: { _type: 'reference', _ref: formData.purchaseOrder._id },
+                receivingBin: { _type: 'reference', _ref: formData.receivingBin._id },
                 receivedItems: itemsToSave,
             };
 
-            if (!isNewReceipt && receipt?._id) {
-                url = `/api/goods-receipts/${receipt._id}`;
-                method = 'PUT';
-                payload._id = receipt._id;
-            }
-
-            const response = await fetch(url, {
-                method,
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(payload),
-            });
-
-            if (response.ok) {
-                const result = await response.json();
-
-                if (status === 'draft') {
-                    toast({
-                        title: 'Draft Saved',
-                        description: 'Goods receipt has been saved as draft.',
-                        status: 'success',
-                        duration: 3000,
-                        isClosable: true,
-                    });
-                }
-
-                return result;
+            let response;
+            if (isNewReceipt) {
+                response = await fetch('/api/goods-receipts', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
             } else {
-                const errorData = await response.json();
-                throw new Error(errorData.error || 'Failed to save goods receipt');
+                response = await fetch(`/api/goods-receipts/${formData._id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
             }
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || `HTTP ${response.status}: Failed to save goods receipt`);
+            }
+
+            const result = await response.json();
+
+            if (status === 'draft') {
+                toast({
+                    title: 'Draft Saved',
+                    description: 'Goods receipt has been saved as draft.',
+                    status: 'success',
+                    duration: 3000,
+                    isClosable: true,
+                });
+            }
+
+            return result;
+
         } catch (error) {
             console.error('Save error:', error);
             toast({
@@ -391,10 +345,13 @@ export default function GoodsReceiptModal({
     const handleSaveDraft = () => {
         saveReceipt('draft').then(() => {
             onSave();
+            onClose();
         }).catch(() => {
             // Error handling is already done in saveReceipt
         });
     };
+
+    const isFullyReceived = (formData.receivedItems || []).every(item => item.receivedQuantity >= (item.orderedQuantity || 0));
 
     const handleCompleteReceipt = async () => {
         if (!isFullyReceived) {
@@ -410,31 +367,23 @@ export default function GoodsReceiptModal({
 
         try {
             setIsSaving(true);
+            let finalReceiptId = formData._id;
 
-            // For new receipts, save first to get a real ID
-            let finalReceiptId = receipt?._id;
             if (isNewReceipt) {
                 const savedReceipt = await saveReceipt('draft');
                 finalReceiptId = savedReceipt._id;
-                if (finalReceiptId && typeof finalReceiptId === 'string') {
-                    setSavedReceiptId(finalReceiptId); // Store the real ID
+                // Ensure finalReceiptId is a string before setting state
+                if (finalReceiptId) {
+                    setSavedReceiptId(finalReceiptId);
                 }
-
-                // Update the local receipt state with the saved receipt
-                setReceiptNumber(savedReceipt.receiptNumber);
-            } else {
-                if (finalReceiptId && typeof finalReceiptId === 'string') {
-                    setSavedReceiptId(finalReceiptId); // Store the existing ID
-                }
+                setFormData(prev => ({ ...prev, _id: savedReceipt._id, receiptNumber: savedReceipt.receiptNumber }));
+            } else if (finalReceiptId) {
+                setSavedReceiptId(finalReceiptId);
             }
 
-            if (!finalReceiptId) {
-                throw new Error('Could not determine receipt ID');
-            }
+            if (!finalReceiptId) throw new Error('Could not determine receipt ID');
 
-            // Now open the upload modal
             setIsUploadModalOpen(true);
-
         } catch (error) {
             console.error('Failed to prepare receipt for completion:', error);
             toast({
@@ -449,29 +398,23 @@ export default function GoodsReceiptModal({
         }
     };
 
-    const handleFinalizeReceipt = async (attachmentId: string) => {
-        setIsUploadModalOpen(false);
+    // Replace the current handleFinalizeReceipt function with this:
 
+    const handleFinalizeReceipt = async (attachmentIds: string[]) => {
+        setIsUploadModalOpen(false);
         try {
             setIsSaving(true);
+            const receiptIdToUse = savedReceiptId || formData._id;
 
-            // Use the saved receipt ID (either from props or from the save operation)
-            const receiptIdToUse = savedReceiptId || receipt?._id;
+            if (!receiptIdToUse) throw new Error('No receipt ID available for completion');
 
-            if (!receiptIdToUse) {
-                throw new Error('No receipt ID available for completion');
-            }
-
-            // Use the transaction API to complete both receipt and PO
             const completeResponse = await fetch('/api/complete-goods-receipt', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     receiptId: receiptIdToUse,
-                    poId: selectedPOId,
-                    attachmentId
+                    poId: formData.purchaseOrder?._id,
+                    attachmentIds // Changed from attachmentId to attachmentIds (array)
                 }),
             });
 
@@ -482,7 +425,7 @@ export default function GoodsReceiptModal({
 
             toast({
                 title: 'Receipt Completed',
-                description: 'Goods receipt has been completed successfully with evidence.',
+                description: `Goods receipt has been completed successfully with ${attachmentIds.length} evidence file(s).`,
                 status: 'success',
                 duration: 5000,
                 isClosable: true,
@@ -512,287 +455,202 @@ export default function GoodsReceiptModal({
         }
     };
 
-    const getItemListForPO = (po: any) => {
-        const itemNames = po.orderedItems?.map((item: any) => item.stockItem?.name);
-        const maxItemsToShow = 2;
-        if (itemNames && itemNames.length > 0) {
-            if (itemNames.length <= maxItemsToShow) {
-                return itemNames.join(', ');
-            } else {
-                return `${itemNames.slice(0, maxItemsToShow).join(', ')} +${itemNames.length - maxItemsToShow} more`;
-            }
-        }
-        return '';
-    };
-
-    const selectedOrder = approvedPurchaseOrders.find(po => po._id === selectedPOId) || receipt?.purchaseOrder || null;
-    const currentStatus = determineStatus();
-    const isFullyReceived = receivedItems.every(item => item.receivedQuantity >= (item.orderedQuantity || 0));
-    const modalTitle = receipt && !isNewReceipt ? `Goods Receipt: ${receipt.receiptNumber}` : 'New Goods Receipt';
-    const isEditable = !receipt || receipt.status !== 'completed';
+    const modalTitle = !isNewReceipt ? `Goods Receipt: ${formData.receiptNumber}` : 'New Goods Receipt';
+    const isEditable = formData.status !== 'completed';
 
     return (
         <>
             <Modal isOpen={isOpen} onClose={onClose} size="6xl" scrollBehavior="inside">
                 <ModalOverlay />
                 <ModalContent maxW="1200px" mx="auto" my={8} borderRadius="xl" boxShadow="xl" height="90vh">
-                    <ModalHeader borderBottomWidth="1px">
-                        {modalTitle}
-                    </ModalHeader>
+                    <ModalHeader borderBottomWidth="1px">{modalTitle}</ModalHeader>
                     <ModalCloseButton position="absolute" right="12px" top="12px" />
-
                     <ModalBody pb={6} overflowY="auto" maxH="calc(90vh - 140px)">
-                        <VStack spacing={4} align="stretch">
-                            <HStack>
-                                <FormControl isRequired>
-                                    <FormLabel>Receipt Number</FormLabel>
-                                    <Input
-                                        value={receiptNumber}
-                                        onChange={(e) => setReceiptNumber(e.target.value)}
-                                        placeholder="e.g., GR-001"
-                                        isReadOnly={!isNewReceipt}
-                                    />
-                                </FormControl>
-                                <FormControl isRequired>
-                                    <FormLabel>Receipt Date</FormLabel>
-                                    <Input
-                                        type="date"
-                                        value={receiptDate}
-                                        onChange={(e) => setReceiptDate(e.target.value)}
-                                        isReadOnly={!isEditable}
-                                    />
-                                </FormControl>
-                                <FormControl>
-                                    <FormLabel>Status</FormLabel>
-                                    <Badge
-                                        colorScheme={getStatusColor(currentStatus)}
-                                        fontSize="md"
-                                        px={3}
-                                        py={1}
-                                        borderRadius="full"
-                                    >
-                                        {currentStatus.toUpperCase()}
-                                    </Badge>
-                                </FormControl>
-                            </HStack>
-
-                            <HStack>
-                                <FormControl isRequired>
-                                    <FormLabel>Purchase Order</FormLabel>
-                                    {isNewReceipt ? (
-                                        <Select
-                                            placeholder="Select a Purchase Order"
-                                            value={selectedPOId || ''}
-                                            onChange={(e) => setSelectedPOId(e.target.value)}
-                                            isDisabled={isLoadingItems || !isEditable}
+                        {isLoading ? (
+                            <Flex justifyContent="center" alignItems="center" height="100%">
+                                <Spinner size="xl" />
+                            </Flex>
+                        ) : (
+                            <VStack spacing={4} align="stretch">
+                                <HStack>
+                                    <FormControl isRequired>
+                                        <FormLabel>Receipt Number</FormLabel>
+                                        <Input value={formData.receiptNumber || ''} isReadOnly />
+                                    </FormControl>
+                                    <FormControl isRequired>
+                                        <FormLabel>Receipt Date</FormLabel>
+                                        <Input
+                                            type="date"
+                                            value={formData.receiptDate || ''}
+                                            onChange={(e) => handleFieldChange('receiptDate', e.target.value)}
+                                            isReadOnly={!isEditable}
+                                        />
+                                    </FormControl>
+                                    <FormControl>
+                                        <FormLabel>Status</FormLabel>
+                                        <Badge
+                                            colorScheme={getStatusColor(formData.status || 'draft')}
+                                            fontSize="md" px={3} py={1} borderRadius="full"
                                         >
-                                            {approvedPurchaseOrders.map((po) => (
-                                                <option key={po._id} value={po._id}>
-                                                    {po.poNumber} - {po.supplier?.name}
-                                                    {po.orderedItems && po.orderedItems.length > 0 && (
-                                                        ` (${getItemListForPO(po)})`
-                                                    )}
-                                                </option>
-                                            ))}
-                                        </Select>
-                                    ) : (
-                                        <Input value={receipt?.purchaseOrder?.poNumber || 'N/A'} isReadOnly />
-                                    )}
-                                </FormControl>
-                                <FormControl isRequired>
-                                    <FormLabel>Receiving Bin</FormLabel>
-                                    <HStack>
-                                        <Select
-                                            value={selectedBin}
-                                            onChange={(e) => setSelectedBin(e.target.value)}
-                                            placeholder="Select Bin"
-                                            isDisabled={isLoadingItems || !isEditable}
-                                        >
-                                            {availableBins.map(bin => (
-                                                <option key={bin._id} value={bin._id}>
-                                                    {bin.name} ({bin.binType})
-                                                </option>
-                                            ))}
-                                        </Select>
-                                        <Button
-                                            onClick={() => setIsBinSelectorOpen(true)}
-                                            isDisabled={isLoadingItems || !isEditable}
-                                            variant="outline"
-                                        >
-                                            Browse Bins
-                                        </Button>
-                                        {isLoadingItems && (
-                                            <Spinner size="sm" />
-                                        )}
-                                    </HStack>
-                                </FormControl>
-                            </HStack>
+                                            {(formData.status || 'draft').toUpperCase()}
+                                        </Badge>
+                                    </FormControl>
+                                </HStack>
 
-                            {selectedOrder && (
-                                <Box p={4} borderWidth={1} borderColor="gray.200" borderRadius="md" mt={2}>
-                                    <VStack align="stretch" spacing={2}>
-                                        <Text fontWeight="bold" fontSize="lg">Purchase Order Details</Text>
-                                        <HStack justifyContent="space-between">
-                                            <Text fontWeight="medium">PO Number:</Text>
-                                            <Text>{selectedOrder.poNumber}</Text>
+                                <HStack>
+                                    <FormControl isRequired>
+                                        <FormLabel>Purchase Order</FormLabel>
+                                        <Input value={formData.purchaseOrder?.poNumber || 'N/A'} isReadOnly />
+                                    </FormControl>
+                                    <FormControl isRequired>
+                                        <FormLabel>Receiving Bin</FormLabel>
+                                        <HStack>
+                                            <Select
+                                                value={formData.receivingBin?._id || ''}
+                                                onChange={(e) => handleBinSelect(availableBins.find(b => b._id === e.target.value)!)}
+                                                placeholder="Select Bin"
+                                                isDisabled={!isEditable || availableBins.length === 0}
+                                            >
+                                                {availableBins.map(bin => (
+                                                    <option key={bin._id} value={bin._id}>
+                                                        {bin.name} ({bin.binType})
+                                                    </option>
+                                                ))}
+                                            </Select>
+                                            <Button
+                                                onClick={() => setIsBinSelectorOpen(true)}
+                                                isDisabled={!isEditable}
+                                                variant="outline"
+                                            >
+                                                Browse Bins
+                                            </Button>
                                         </HStack>
-                                        <HStack justifyContent="space-between">
-                                            <Text fontWeight="medium">Supplier:</Text>
-                                            <Text>{selectedOrder.supplier?.name}</Text>
-                                        </HStack>
-                                        <HStack justifyContent="space-between">
-                                            <Text fontWeight="medium">Site:</Text>
-                                            <Text>{selectedOrder.site?.name}</Text>
-                                        </HStack>
-                                    </VStack>
-                                </Box>
-                            )}
+                                    </FormControl>
+                                </HStack>
 
-                            <FormControl>
-                                <FormLabel>Notes</FormLabel>
-                                <Input
-                                    value={notes}
-                                    onChange={(e) => setNotes(e.target.value)}
-                                    placeholder="Additional notes or comments"
-                                    isDisabled={isLoadingItems || !isEditable}
-                                />
-                            </FormControl>
-
-                            {isLoadingItems ? (
-                                <Flex justifyContent="center" alignItems="center" height="200px">
-                                    <Spinner size="xl" />
-                                </Flex>
-                            ) : selectedOrder && (
-                                <>
-                                    <Box>
-                                        <HStack justify="space-between" mb={4}>
-                                            <Text fontSize="lg" fontWeight="bold">
-                                                Received Items from PO: {selectedOrder.poNumber}
-                                            </Text>
-                                            {isEditable && (
-                                                <HStack>
-                                                    <Button size="sm" leftIcon={<FiCheck />} onClick={markSelectedAsReceived} isDisabled={selectedItemsKeys.length === 0}>
-                                                        Mark Selected
-                                                    </Button>
-                                                    <Button size="sm" leftIcon={<FiX />} onClick={markSelectedAsNotReceived} isDisabled={selectedItemsKeys.length === 0}>
-                                                        Clear Selected
-                                                    </Button>
-                                                </HStack>
-                                            )}
-                                        </HStack>
-
-                                        <TableContainer w="100%">
-                                            <Table variant="simple" size="sm">
-                                                <Thead>
-                                                    <Tr>
-                                                        <Th>Item</Th>
-                                                        <Th isNumeric>Ordered</Th>
-                                                        <Th isNumeric>Received</Th>
-                                                        <Th>Condition</Th>
-                                                        <Th>Batch No.</Th>
-                                                        <Th>Expiry Date</Th>
-                                                    </Tr>
-                                                </Thead>
-                                                <Tbody>
-                                                    {receivedItems.length === 0 ? (
-                                                        <Tr>
-                                                            <Td colSpan={6} textAlign="center">
-                                                                No items found in this purchase order.
-                                                            </Td>
-                                                        </Tr>
-                                                    ) : (
-                                                        receivedItems.map(item => (
-                                                            <Tr key={item._key}>
-                                                                <Td>{item.stockItem?.name || 'Unknown Item'}</Td>
-                                                                <Td isNumeric>{item.orderedQuantity || 0}</Td>
-                                                                <Td>
-                                                                    <NumberInput
-                                                                        value={item.receivedQuantity}
-                                                                        onChange={(valueAsString, valueAsNumber) =>
-                                                                            handleQuantityChange(item._key, valueAsString, valueAsNumber)
-                                                                        }
-                                                                        size="sm"
-                                                                        min={0}
-                                                                        max={item.orderedQuantity}
-                                                                        isDisabled={!isEditable}
-                                                                    >
-                                                                        <NumberInputField />
-                                                                        <NumberInputStepper>
-                                                                            <NumberIncrementStepper />
-                                                                            <NumberDecrementStepper />
-                                                                        </NumberInputStepper>
-                                                                    </NumberInput>
-                                                                </Td>
-                                                                <Td>
-                                                                    <Select
-                                                                        value={item.condition}
-                                                                        onChange={(e) => handleConditionChange(item._key, e.target.value)}
-                                                                        size="sm"
-                                                                        isDisabled={!isEditable}
-                                                                    >
-                                                                        <option value="good">Good</option>
-                                                                        <option value="damaged">Damaged</option>
-                                                                        <option value="short-shipped">Short-Shipped</option>
-                                                                        <option value="over-shipped">Over-Shipped</option>
-                                                                    </Select>
-                                                                </Td>
-                                                                <Td>
-                                                                    <Input
-                                                                        type="text"
-                                                                        value={item.batchNumber || ''}
-                                                                        onChange={(e) => handleUpdateBatchNumber(item._key, e.target.value)}
-                                                                        size="sm"
-                                                                        isDisabled={!isEditable}
-                                                                    />
-                                                                </Td>
-                                                                <Td>
-                                                                    <Input
-                                                                        type="date"
-                                                                        value={item.expiryDate || ''}
-                                                                        onChange={(e) => handleUpdateExpiryDate(item._key, e.target.value)}
-                                                                        size="sm"
-                                                                        isDisabled={!isEditable}
-                                                                    />
-                                                                </Td>
-                                                            </Tr>
-                                                        ))
-                                                    )}
-                                                </Tbody>
-                                            </Table>
-                                        </TableContainer>
+                                {formData.purchaseOrder && (
+                                    <Box p={4} borderWidth={1} borderColor="gray.200" borderRadius="md" mt={2}>
+                                        <VStack align="stretch" spacing={2}>
+                                            <Text fontWeight="bold" fontSize="lg">Purchase Order Details</Text>
+                                            <HStack justifyContent="space-between">
+                                                <Text fontWeight="medium">PO Number:</Text>
+                                                <Text>{formData.purchaseOrder.poNumber}</Text>
+                                            </HStack>
+                                            <HStack justifyContent="space-between">
+                                                <Text fontWeight="medium">Supplier:</Text>
+                                                <Text>{formData.purchaseOrder.supplier?.name}</Text>
+                                            </HStack>
+                                            <HStack justifyContent="space-between">
+                                                <Text fontWeight="medium">Site:</Text>
+                                                <Text>{formData.purchaseOrder.site?.name}</Text>
+                                            </HStack>
+                                        </VStack>
                                     </Box>
-                                </>
-                            )}
-                        </VStack>
-                    </ModalBody>
+                                )}
 
+                                <FormControl>
+                                    <FormLabel>Notes</FormLabel>
+                                    <Input
+                                        value={formData.notes || ''}
+                                        onChange={(e) => handleFieldChange('notes', e.target.value)}
+                                        placeholder="Additional notes or comments"
+                                        isDisabled={!isEditable}
+                                    />
+                                </FormControl>
+
+                                <Box>
+                                    <HStack justify="space-between" mb={4}>
+                                        <Text fontSize="lg" fontWeight="bold">
+                                            Received Items
+                                        </Text>
+                                    </HStack>
+
+                                    <TableContainer w="100%">
+                                        <Table variant="simple" size="sm">
+                                            <Thead>
+                                                <Tr>
+                                                    <Th>Item</Th>
+                                                    <Th isNumeric>Ordered</Th>
+                                                    <Th isNumeric>Received</Th>
+                                                    <Th>Condition</Th>
+                                                    <Th>Batch No.</Th>
+                                                    <Th>Expiry Date</Th>
+                                                </Tr>
+                                            </Thead>
+                                            <Tbody>
+                                                {(formData.receivedItems || []).map(item => (
+                                                    <Tr key={item._key}>
+                                                        <Td>{item.stockItem?.name || 'Unknown Item'}</Td>
+                                                        <Td isNumeric>{item.orderedQuantity || 0}</Td>
+                                                        <Td>
+                                                            <NumberInput
+                                                                value={item.receivedQuantity}
+                                                                onChange={(_, valueAsNumber) =>
+                                                                    handleItemChange(item._key, 'receivedQuantity', valueAsNumber)
+                                                                }
+                                                                size="sm" min={0}
+                                                                max={item.orderedQuantity}
+                                                                isDisabled={!isEditable}
+                                                            >
+                                                                <NumberInputField />
+                                                                <NumberInputStepper>
+                                                                    <NumberIncrementStepper />
+                                                                    <NumberDecrementStepper />
+                                                                </NumberInputStepper>
+                                                            </NumberInput>
+                                                        </Td>
+                                                        <Td>
+                                                            <Select
+                                                                value={item.condition}
+                                                                onChange={(e) => handleItemChange(item._key, 'condition', e.target.value)}
+                                                                size="sm" isDisabled={!isEditable}
+                                                            >
+                                                                <option value="good">Good</option>
+                                                                <option value="damaged">Damaged</option>
+                                                            </Select>
+                                                        </Td>
+                                                        <Td>
+                                                            <Input
+                                                                type="text"
+                                                                value={item.batchNumber || ''}
+                                                                onChange={(e) => handleItemChange(item._key, 'batchNumber', e.target.value)}
+                                                                size="sm" isDisabled={!isEditable}
+                                                            />
+                                                        </Td>
+                                                        <Td>
+                                                            <Input
+                                                                type="date"
+                                                                value={item.expiryDate || ''}
+                                                                onChange={(e) => handleItemChange(item._key, 'expiryDate', e.target.value)}
+                                                                size="sm" isDisabled={!isEditable}
+                                                            />
+                                                        </Td>
+                                                    </Tr>
+                                                ))}
+                                            </Tbody>
+                                        </Table>
+                                    </TableContainer>
+                                </Box>
+                            </VStack>
+                        )}
+                    </ModalBody>
                     <ModalFooter borderTopWidth="1px">
-                        <Button
-                            colorScheme="gray"
-                            mr={3}
-                            onClick={onClose}
-                            isDisabled={isSaving || isLoadingItems}
-                            variant="outline"
-                        >
+                        <Button colorScheme="gray" mr={3} onClick={onClose} isDisabled={isSaving || isLoading} variant="outline">
                             Cancel
                         </Button>
                         {isEditable && (
                             <>
                                 <Button
-                                    colorScheme="blue"
-                                    variant="outline"
-                                    onClick={handleSaveDraft}
-                                    isLoading={isSaving}
-                                    leftIcon={<FiSave />}
-                                    isDisabled={!selectedPOId || receivedItems.length === 0 || !selectedBin}
+                                    colorScheme="blue" variant="outline" onClick={handleSaveDraft}
+                                    isLoading={isSaving} leftIcon={<FiSave />}
+                                    isDisabled={!formData.purchaseOrder || (formData.receivedItems || []).length === 0 || !formData.receivingBin}
                                 >
                                     Save Draft
                                 </Button>
                                 <Button
-                                    colorScheme="green"
-                                    onClick={handleCompleteReceipt}
+                                    colorScheme="green" onClick={handleCompleteReceipt}
                                     isLoading={isSaving}
-                                    isDisabled={!isFullyReceived || !selectedPOId || receivedItems.length === 0 || !selectedBin}
+                                    isDisabled={!isFullyReceived || !formData.purchaseOrder || (formData.receivedItems || []).length === 0 || !formData.receivingBin}
                                     leftIcon={<FiCheckCircle />}
                                 >
                                     {isNewReceipt ? 'Save & Upload Evidence' : 'Upload Evidence & Complete'}
@@ -807,7 +665,7 @@ export default function GoodsReceiptModal({
                 isOpen={isUploadModalOpen}
                 onClose={() => setIsUploadModalOpen(false)}
                 onUploadComplete={handleFinalizeReceipt}
-                relatedToId={savedReceiptId || receipt?._id || ''} // Use the saved ID if available
+                relatedToId={savedReceiptId || formData._id || ''}
                 fileType="receipt"
                 title="Upload Receipt Evidence"
                 description="Please upload photos or documents as evidence before completing the receipt. This will also mark the purchase order as completed."

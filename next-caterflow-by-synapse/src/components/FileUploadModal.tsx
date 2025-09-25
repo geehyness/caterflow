@@ -22,19 +22,29 @@ import {
     Text,
     Progress,
     HStack,
-    Icon
+    Icon,
+    IconButton,
+    SimpleGrid,
+    Image,
+    Badge,
+    Flex,
+    Alert,
+    AlertIcon,
 } from '@chakra-ui/react';
-import { FiUpload, FiXCircle } from 'react-icons/fi';
+import { FiUpload, FiXCircle, FiCamera, FiFolder, FiTrash2 } from 'react-icons/fi';
 
 interface FileUploadModalProps {
     isOpen: boolean;
     onClose: () => void;
-    // Updated prop signature to pass the newly created document's ID
-    onUploadComplete: (attachmentId: string) => void;
+    onUploadComplete: (attachmentIds: string[]) => void;
     relatedToId: string;
     fileType: 'invoice' | 'receipt' | 'photo' | 'contract' | 'delivery-note' | 'quality-check' | 'other';
     title: string;
     description?: string;
+}
+
+interface FileWithPreview extends File {
+    preview?: string;
 }
 
 export default function FileUploadModal({
@@ -46,31 +56,91 @@ export default function FileUploadModal({
     title,
     description
 }: FileUploadModalProps) {
-    const [selectedFile, setSelectedFile] = useState<File | null>(null);
+    const [selectedFiles, setSelectedFiles] = useState<FileWithPreview[]>([]);
     const [fileDescription, setFileDescription] = useState<string>('');
     const [isUploading, setIsUploading] = useState(false);
     const [uploadProgress, setUploadProgress] = useState(0);
+    const [isCapturing, setIsCapturing] = useState(false);
     const toast = useToast();
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const cameraInputRef = useRef<HTMLInputElement>(null);
+
+    // Check if device supports camera and multiple file selection
+    const isMobile = typeof window !== 'undefined' &&
+        (/Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+            (navigator as any).maxTouchPoints > 0);
+
+    const supportsMultipleCapture = isMobile &&
+        typeof window !== 'undefined' &&
+        'mediaDevices' in navigator;
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0] || null;
-        setSelectedFile(file);
+        const files = Array.from(e.target.files || []);
+        const filesWithPreview = files.map(file => {
+            const fileWithPreview: FileWithPreview = file;
+            if (file.type.startsWith('image/')) {
+                fileWithPreview.preview = URL.createObjectURL(file);
+            }
+            return fileWithPreview;
+        });
+        setSelectedFiles(prev => [...prev, ...filesWithPreview]);
     };
 
-    const handleClearFile = () => {
-        setSelectedFile(null);
+    const handleCameraCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = Array.from(e.target.files || []);
+        const filesWithPreview = files.map(file => {
+            const fileWithPreview: FileWithPreview = file;
+            if (file.type.startsWith('image/')) {
+                fileWithPreview.preview = URL.createObjectURL(file);
+            }
+            return fileWithPreview;
+        });
+        setSelectedFiles(prev => [...prev, ...filesWithPreview]);
+
+        // Reset camera input to allow capturing more photos
+        if (cameraInputRef.current) {
+            cameraInputRef.current.value = '';
+        }
+    };
+
+    const handleClearFile = (fileToRemove: FileWithPreview) => {
+        setSelectedFiles(prev => prev.filter(file => file !== fileToRemove));
+        // Clean up preview URL
+        if (fileToRemove.preview) {
+            URL.revokeObjectURL(fileToRemove.preview);
+        }
+    };
+
+    const handleClearAllFiles = () => {
+        // Clean up all preview URLs
+        selectedFiles.forEach(file => {
+            if (file.preview) {
+                URL.revokeObjectURL(file.preview);
+            }
+        });
+        setSelectedFiles([]);
         setFileDescription('');
-        const input = document.querySelector('input[type="file"]') as HTMLInputElement;
-        if (input) {
-            input.value = '';
+        if (fileInputRef.current) fileInputRef.current.value = '';
+        if (cameraInputRef.current) cameraInputRef.current.value = '';
+    };
+
+    const startCameraCapture = () => {
+        if (cameraInputRef.current) {
+            cameraInputRef.current.click();
+        }
+    };
+
+    const startFileBrowse = () => {
+        if (fileInputRef.current) {
+            fileInputRef.current.click();
         }
     };
 
     const handleSubmit = async () => {
-        if (!selectedFile) {
+        if (selectedFiles.length === 0) {
             toast({
-                title: 'No file selected.',
-                description: 'Please select a file to upload.',
+                title: 'No files selected.',
+                description: 'Please select at least one file to upload.',
                 status: 'warning',
                 duration: 3000,
                 isClosable: true,
@@ -81,36 +151,46 @@ export default function FileUploadModal({
         setIsUploading(true);
         setUploadProgress(0);
 
-        const formData = new FormData();
-        formData.append('file', selectedFile);
-        formData.append('relatedTo', relatedToId);
-        formData.append('fileType', fileType);
-        formData.append('description', fileDescription);
+        const uploadedAttachmentIds: string[] = [];
+        let totalProgress = 0;
 
         try {
-            const response = await fetch('/api/upload', {
-                method: 'POST',
-                body: formData,
-            });
+            for (let i = 0; i < selectedFiles.length; i++) {
+                const file = selectedFiles[i];
+                const formData = new FormData();
+                formData.append('file', file);
+                formData.append('relatedTo', relatedToId);
+                formData.append('fileType', fileType);
+                formData.append('description', fileDescription || description || '');
 
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || 'Failed to upload file');
+                const response = await fetch('/api/upload', {
+                    method: 'POST',
+                    body: formData,
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Failed to upload file');
+                }
+
+                const result = await response.json();
+                uploadedAttachmentIds.push(result.attachment._id);
+
+                // Update progress
+                totalProgress = Math.round(((i + 1) / selectedFiles.length) * 100);
+                setUploadProgress(totalProgress);
             }
 
-            const result = await response.json();
-
             toast({
-                title: 'File uploaded successfully.',
+                title: `${selectedFiles.length} files uploaded successfully.`,
                 status: 'success',
                 duration: 5000,
                 isClosable: true,
             });
 
-            // Pass the new attachment's ID to the parent component
-            onUploadComplete(result.attachment._id);
+            onUploadComplete(uploadedAttachmentIds);
+            handleClearAllFiles();
             onClose();
-            handleClearFile();
         } catch (error: any) {
             toast({
                 title: 'Upload error',
@@ -121,80 +201,209 @@ export default function FileUploadModal({
             });
         } finally {
             setIsUploading(false);
-            setUploadProgress(100);
         }
     };
 
+    // Clean up preview URLs when component unmounts or modal closes
+    React.useEffect(() => {
+        return () => {
+            selectedFiles.forEach(file => {
+                if (file.preview) {
+                    URL.revokeObjectURL(file.preview);
+                }
+            });
+        };
+    }, [selectedFiles]);
+
+    const handleClose = () => {
+        handleClearAllFiles();
+        onClose();
+    };
+
     return (
-        <Modal isOpen={isOpen} onClose={onClose}>
+        <Modal isOpen={isOpen} onClose={handleClose} size="2xl">
             <ModalOverlay />
             <ModalContent>
                 <ModalHeader>{title}</ModalHeader>
                 <ModalCloseButton />
                 <ModalBody>
                     <VStack spacing={4}>
-                        <FormControl>
-                            <FormLabel htmlFor="file-upload">Choose File</FormLabel>
-                            <Input
-                                id="file-upload"
-                                type="file"
-                                onChange={handleFileChange}
-                                accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.xls,.xlsx"
-                                p={1}
-                            />
-                        </FormControl>
-                        {selectedFile && (
-                            <HStack
-                                w="100%"
-                                p={2}
-                                borderWidth="1px"
-                                borderRadius="md"
-                                justifyContent="space-between"
+                        {/* Hidden file inputs */}
+                        <Input
+                            ref={fileInputRef}
+                            type="file"
+                            onChange={handleFileChange}
+                            accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.xls,.xlsx"
+                            multiple
+                            display="none"
+                        />
+                        <Input
+                            ref={cameraInputRef}
+                            type="file"
+                            onChange={handleCameraCapture}
+                            accept="image/*"
+                            capture="environment"
+                            multiple={supportsMultipleCapture}
+                            display="none"
+                        />
+
+                        {/* Action Buttons */}
+                        <SimpleGrid columns={2} spacing={3} w="100%">
+                            <Button
+                                leftIcon={<Icon as={FiCamera} />}
+                                onClick={startCameraCapture}
+                                colorScheme="blue"
+                                variant="outline"
+                                isDisabled={isUploading}
                             >
-                                <Text fontSize="sm" isTruncated>
-                                    {selectedFile.name}
+                                Take Photos
+                            </Button>
+                            <Button
+                                leftIcon={<Icon as={FiFolder} />}
+                                onClick={startFileBrowse}
+                                colorScheme="green"
+                                variant="outline"
+                                isDisabled={isUploading}
+                            >
+                                Browse Files
+                            </Button>
+                        </SimpleGrid>
+
+                        {supportsMultipleCapture && (
+                            <Alert status="info" size="sm" borderRadius="md">
+                                <AlertIcon />
+                                <Text fontSize="sm">
+                                    On your mobile device, you can take multiple photos in sequence
                                 </Text>
-                                <Icon as={FiXCircle} color="red.500" cursor="pointer" onClick={handleClearFile} />
-                            </HStack>
+                            </Alert>
                         )}
+
+                        {/* Selected Files Preview */}
+                        {selectedFiles.length > 0 && (
+                            <VStack w="100%" spacing={3} align="stretch">
+                                <Flex justify="space-between" align="center" w="100%">
+                                    <Text fontWeight="medium">Selected files ({selectedFiles.length}):</Text>
+                                    <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        colorScheme="red"
+                                        onClick={handleClearAllFiles}
+                                        leftIcon={<Icon as={FiTrash2} />}
+                                        isDisabled={isUploading}
+                                    >
+                                        Clear all
+                                    </Button>
+                                </Flex>
+
+                                <SimpleGrid columns={2} spacing={3} maxH="200px" overflowY="auto">
+                                    {selectedFiles.map((file, index) => (
+                                        <Box
+                                            key={`${file.name}-${index}`}
+                                            position="relative"
+                                            borderWidth="1px"
+                                            borderRadius="md"
+                                            p={2}
+                                        >
+                                            {file.preview ? (
+                                                <VStack spacing={1}>
+                                                    <Image
+                                                        src={file.preview}
+                                                        alt={file.name}
+                                                        boxSize="60px"
+                                                        objectFit="cover"
+                                                        borderRadius="sm"
+                                                    />
+                                                    <Text fontSize="xs" noOfLines={1} title={file.name}>
+                                                        {file.name}
+                                                    </Text>
+                                                </VStack>
+                                            ) : (
+                                                <VStack spacing={1}>
+                                                    <Box
+                                                        boxSize="60px"
+                                                        bg="gray.100"
+                                                        display="flex"
+                                                        alignItems="center"
+                                                        justifyContent="center"
+                                                        borderRadius="sm"
+                                                    >
+                                                        <Icon as={FiFolder} boxSize={6} color="gray.500" />
+                                                    </Box>
+                                                    <Text fontSize="xs" noOfLines={1} title={file.name}>
+                                                        {file.name}
+                                                    </Text>
+                                                </VStack>
+                                            )}
+                                            <Badge
+                                                position="absolute"
+                                                top={1}
+                                                right={1}
+                                                colorScheme="blue"
+                                                fontSize="2xs"
+                                            >
+                                                {(file.size / 1024 / 1024).toFixed(1)}MB
+                                            </Badge>
+                                            <IconButton
+                                                aria-label={`Remove ${file.name}`}
+                                                icon={<Icon as={FiXCircle} />}
+                                                onClick={() => handleClearFile(file)}
+                                                size="xs"
+                                                colorScheme="red"
+                                                variant="ghost"
+                                                position="absolute"
+                                                top={1}
+                                                left={1}
+                                                isDisabled={isUploading}
+                                            />
+                                        </Box>
+                                    ))}
+                                </SimpleGrid>
+                            </VStack>
+                        )}
+
                         <FormControl isRequired>
                             <FormLabel>File Type</FormLabel>
                             <Select value={fileType} isDisabled>
-                                <option value={fileType}>{fileType.charAt(0).toUpperCase() + fileType.slice(1).replace('-', ' ')}</option>
+                                <option value={fileType}>
+                                    {fileType.charAt(0).toUpperCase() + fileType.slice(1).replace('-', ' ')}
+                                </option>
                             </Select>
                         </FormControl>
+
                         <FormControl>
                             <FormLabel>Description</FormLabel>
                             <Textarea
                                 name="description"
-                                placeholder={description || "Describe what this file is for"}
+                                placeholder={description || "Describe what these files are for"}
                                 rows={3}
                                 value={fileDescription}
                                 onChange={(e) => setFileDescription(e.target.value)}
+                                isDisabled={isUploading}
                             />
                         </FormControl>
+
                         {isUploading && (
                             <Box width="100%">
                                 <Progress value={uploadProgress} size="sm" colorScheme="blue" />
                                 <Text fontSize="sm" textAlign="center" mt={2}>
-                                    Uploading... {uploadProgress}%
+                                    Uploading... {Math.round(uploadProgress)}%
                                 </Text>
                             </Box>
                         )}
                     </VStack>
                 </ModalBody>
                 <ModalFooter>
-                    <Button variant="ghost" mr={3} onClick={onClose} isDisabled={isUploading}>
+                    <Button variant="ghost" mr={3} onClick={handleClose} isDisabled={isUploading}>
                         Cancel
                     </Button>
                     <Button
                         colorScheme="blue"
                         onClick={handleSubmit}
                         isLoading={isUploading}
-                        isDisabled={!selectedFile || isUploading}
+                        isDisabled={selectedFiles.length === 0 || isUploading}
                         leftIcon={<Icon as={FiUpload} />}
                     >
-                        Upload
+                        Upload ({selectedFiles.length})
                     </Button>
                 </ModalFooter>
             </ModalContent>

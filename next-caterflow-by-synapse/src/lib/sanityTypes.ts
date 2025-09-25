@@ -1,22 +1,20 @@
 // schemas/sanityTypes.ts
 
-import type { SanityDocument, ImageAsset, SlugValue, FileValue, Reference } from 'sanity';
+import type { SanityDocument, ImageAsset, SlugValue, FileValue, Reference, ImageValue } from 'sanity';
 
 // Export Reference along with other types
 export type { Reference };
 
 //
-// Updated or new interfaces for document schemas
+// Updated interfaces for document schemas
 //
 
-// New interface for the Category schema
 export interface Category extends SanityDocument {
     _type: 'Category';
     title: string;
     description?: string;
 }
 
-// New interface for the Supplier schema
 export interface Supplier extends SanityDocument {
     _type: 'Supplier';
     name: string;
@@ -27,21 +25,21 @@ export interface Supplier extends SanityDocument {
     terms?: string;
 }
 
-// New interface for the StockItem schema
 export interface StockItem extends SanityDocument {
     _type: 'StockItem';
     name: string;
     sku: string;
+    itemType: 'food' | 'nonFood';
     category: Reference;
-    unitOfMeasure: string;
-    supplier?: Reference;
-    minimumStockLevel?: number;
-    isArchived: boolean;
-    image?: ImageAsset;
-    notes?: string;
+    unitOfMeasure: 'kg' | 'g' | 'l' | 'ml' | 'each' | 'box' | 'case' | 'bag';
+    imageUrl?: string;
+    description?: string;
+    unitPrice: number;
+    suppliers?: Reference[];
+    minimumStockLevel: number;
+    reorderQuantity?: number;
 }
 
-// New interface for the Site schema
 export interface Site extends SanityDocument {
     _type: 'Site';
     name: string;
@@ -53,7 +51,6 @@ export interface Site extends SanityDocument {
     patientCount?: number;
 }
 
-// New interface for the Bin schema
 export interface Bin extends SanityDocument {
     _type: 'Bin';
     name: string;
@@ -63,43 +60,47 @@ export interface Bin extends SanityDocument {
     binType: 'main-storage' | 'overflow-storage' | 'refrigerator' | 'freezer' | 'dispensing-point' | 'receiving-area';
 }
 
-// Updated interface for AppUser to include all fields
 export interface AppUser extends SanityDocument {
     _type: 'AppUser';
     name: string;
     email: string;
+    password?: string; // Hidden field but still exists
     role: 'admin' | 'siteManager' | 'stockController' | 'dispatchStaff' | 'auditor';
-    site?: Reference;
+    associatedSite?: Reference;
     isActive: boolean;
     profileImage?: ImageAsset;
 }
 
-// New interface for the PurchaseOrder schema
 export interface PurchaseOrder extends SanityDocument {
     _type: 'PurchaseOrder';
     poNumber: string;
     orderDate: string;
-    orderedBy: Reference;
+    status: 'draft' | 'pending-approval' | 'approved' | 'processed' | 'partially-received' | 'complete' | 'cancelled';
     orderedItems: OrderedItem[];
-    status: 'draft' | 'ordered' | 'partially-received' | 'received' | 'cancelled';
+    expectedDeliveryDate?: string;
+    totalAmount?: number;
+    orderedBy: Reference;
+    approvedBy?: Reference;
+    approvedAt?: string;
+    site: Reference;
+    attachments?: Reference[];
+    evidenceStatus: 'pending' | 'partial' | 'complete';
     notes?: string;
 }
 
-// New interface for the GoodsReceipt schema
 export interface GoodsReceipt extends SanityDocument {
     _type: 'GoodsReceipt';
     receiptNumber: string;
     receiptDate: string;
     purchaseOrder?: Reference;
-    receivedFrom?: string;
+    receivedBy: Reference;
     receivingBin: Reference;
     receivedItems: ReceivedItem[];
-    receivedBy: Reference;
-    evidenceStatus?: 'pending' | 'partial' | 'complete';
+    attachments?: Reference[];
+    evidenceStatus: 'pending' | 'partial' | 'complete';
     notes?: string;
 }
 
-// New interface for the DispatchType schema
 export interface DispatchType extends SanityDocument {
     _type: 'DispatchType';
     name: string;
@@ -108,57 +109,54 @@ export interface DispatchType extends SanityDocument {
     isActive: boolean;
 }
 
-// New interface for the DispatchLog schema
 export interface DispatchLog extends SanityDocument {
     _type: 'DispatchLog';
     dispatchNumber: string;
-    dispatchDate: string;
     dispatchType: Reference;
+    dispatchDate: string;
     sourceBin: Reference;
-    destinationBin: Reference;
-    dispatchedItems: DispatchedItem[];
     dispatchedBy: Reference;
-    peopleFed: number;
-    evidenceStatus?: 'pending' | 'partial' | 'complete';
-    notes?: string;
+    dispatchedItems: DispatchedItem[];
     attachments?: Reference[];
+    evidenceStatus: 'pending' | 'partial' | 'complete';
+    peopleFed?: number;
+    notes?: string;
 }
 
-// New interface for the InternalTransfer schema
 export interface InternalTransfer extends SanityDocument {
     _type: 'InternalTransfer';
     transferNumber: string;
     transferDate: string;
-    transferredItems: TransferredItem[];
     fromBin: Reference;
     toBin: Reference;
     transferredBy: Reference;
-    evidenceStatus?: 'pending' | 'partial' | 'complete';
+    transferredItems: TransferredItem[];
     notes?: string;
-    status: 'pending' | 'completed' | 'cancelled';
+    status: 'draft' | 'pending-approval' | 'approved' | 'completed' | 'cancelled';
+    approvedBy?: Reference;
+    approvedAt?: string;
 }
 
-// New interface for the StockAdjustment schema
 export interface StockAdjustment extends SanityDocument {
     _type: 'StockAdjustment';
     adjustmentNumber: string;
     adjustmentDate: string;
-    bin: Reference;
-    adjustmentType: 'add' | 'subtract' | 'transfer';
-    adjustedItems: AdjustedItem[];
     adjustedBy: Reference;
-    evidenceStatus?: 'pending' | 'partial' | 'complete';
+    bin: Reference;
+    adjustmentType: 'loss' | 'wastage' | 'expiry' | 'damage' | 'inventory-correction' | 'theft' | 'positive-adjustment';
+    adjustedItems: AdjustedItem[];
+    attachments?: Reference[];
+    evidenceStatus: 'pending' | 'partial' | 'complete';
     notes?: string;
 }
 
-// New interface for the InventoryCount schema
 export interface InventoryCount extends SanityDocument {
     _type: 'InventoryCount';
     countNumber: string;
     countDate: string;
     countedBy: Reference;
     bin: Reference;
-    status: 'pending' | 'completed' | 'on-hold';
+    status: 'draft' | 'in-progress' | 'completed' | 'adjusted';
     countedItems: CountedItem[];
     notes?: string;
 }
@@ -169,7 +167,7 @@ export interface NotificationPreference extends SanityDocument {
     description?: string;
     isEnabled: boolean;
     thresholdValue?: number;
-    notificationChannels: ('email' | 'sms')[];
+    notificationChannels: ('email' | 'sms' | 'in-app')[];
     appliesToRoles: ('admin' | 'siteManager' | 'stockController' | 'dispatchStaff' | 'auditor')[];
 }
 
@@ -191,9 +189,11 @@ export interface OrderedItem {
     _type: 'OrderedItem';
     _key: string;
     stockItem: Reference;
-    supplier: Reference;
+    supplier?: Reference;
     orderedQuantity: number;
     unitPrice: number;
+    priceManuallyUpdated?: boolean;
+    totalPrice?: number;
 }
 
 export interface ReceivedItem {
@@ -206,7 +206,6 @@ export interface ReceivedItem {
     condition: 'good' | 'damaged' | 'short-shipped' | 'over-shipped';
 }
 
-// Updated interface for DispatchedItem
 export interface DispatchedItem {
     _type: 'DispatchedItem';
     _key: string;
@@ -273,3 +272,21 @@ export interface PendingAction {
         unitPrice: number;
     }>;
 }
+
+// Union type for all document types
+export type SanityDocumentType =
+    | Category
+    | Supplier
+    | StockItem
+    | Site
+    | Bin
+    | AppUser
+    | PurchaseOrder
+    | GoodsReceipt
+    | DispatchType
+    | DispatchLog
+    | InternalTransfer
+    | StockAdjustment
+    | InventoryCount
+    | NotificationPreference
+    | FileAttachment;

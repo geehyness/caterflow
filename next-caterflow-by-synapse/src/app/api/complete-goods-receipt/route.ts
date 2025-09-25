@@ -5,7 +5,7 @@ import { groq } from 'next-sanity';
 
 export async function POST(request: Request) {
     try {
-        const { receiptId, poId, attachmentId } = await request.json();
+        const { receiptId, poId, attachmentIds } = await request.json();
 
         if (!receiptId || !poId) {
             return NextResponse.json(
@@ -33,9 +33,9 @@ export async function POST(request: Request) {
             })
         );
 
-        // 3. Add attachment to receipt if provided
-        if (attachmentId) {
-            // First check if the attachment already exists in the receipt
+        // 3. Add attachments to receipt if provided
+        if (attachmentIds && attachmentIds.length > 0) {
+            // First check if the attachments already exist in the receipt
             const currentReceipt = await writeClient.fetch(
                 groq`*[_type == "GoodsReceipt" && _id == $receiptId][0] {
                     attachments[]
@@ -43,33 +43,34 @@ export async function POST(request: Request) {
                 { receiptId }
             );
 
-            const attachmentExists = currentReceipt.attachments?.some(
-                (att: any) => att._ref === attachmentId
-            );
+            const existingAttachmentRefs = currentReceipt.attachments?.map((att: any) => att._ref) || [];
 
-            if (!attachmentExists) {
+            // Add only new attachments that don't already exist
+            const newAttachments = attachmentIds
+                .filter((attachmentId: string) => !existingAttachmentRefs.includes(attachmentId))
+                .map((attachmentId: string) => ({
+                    _type: 'reference',
+                    _ref: attachmentId,
+                    _key: Math.random().toString(36).substr(2, 9)
+                }));
+
+            if (newAttachments.length > 0) {
                 transaction.patch(receiptId, (patch) =>
-                    patch.append('attachments', [
-                        {
-                            _type: 'reference',
-                            _ref: attachmentId,
-                            _key: Math.random().toString(36).substr(2, 9)
-                        }
-                    ])
+                    patch.append('attachments', newAttachments)
                 );
             }
         }
 
         // 4. Update stock levels for all received items
         const receiptQuery = groq`
-      *[_type == "GoodsReceipt" && _id == $receiptId][0] {
-        receivedItems[] {
-          stockItem->{_id},
-          receivedQuantity,
-          receivingBin->{_id}
-        }
-      }
-    `;
+            *[_type == "GoodsReceipt" && _id == $receiptId][0] {
+                receivedItems[] {
+                    stockItem->{_id},
+                    receivedQuantity,
+                    receivingBin->{_id}
+                }
+            }
+        `;
 
         const receipt = await writeClient.fetch(receiptQuery, { receiptId });
 
@@ -79,13 +80,13 @@ export async function POST(request: Request) {
                 if (item.stockItem?._id && item.receivedQuantity && item.receivingBin?._id) {
                     // Update stock level in the bin
                     const binStockQuery = groq`
-            *[_type == "BinStock" && 
-             bin._ref == $binId && 
-             stockItem._ref == $stockItemId][0] {
-              _id,
-              quantity
-            }
-          `;
+                        *[_type == "BinStock" && 
+                         bin._ref == $binId && 
+                         stockItem._ref == $stockItemId][0] {
+                            _id,
+                            quantity
+                        }
+                    `;
 
                     const binStock = await writeClient.fetch(binStockQuery, {
                         binId: item.receivingBin?._id,
@@ -110,7 +111,7 @@ export async function POST(request: Request) {
                                 _ref: item.stockItem._id,
                             },
                             quantity: item.receivedQuantity,
-                            _id: undefined,
+                            _id: undefined, // Let Sanity generate the ID
                         });
                     }
                 }
@@ -121,12 +122,13 @@ export async function POST(request: Request) {
         const result = await transaction.commit();
 
         // Update evidence status after transaction
-        await updateEvidenceStatus(receiptId);
+        await updateEvidenceStatus(receiptId, attachmentIds);
 
         return NextResponse.json({
             success: true,
-            message: 'Goods receipt completed successfully',
+            message: `Goods receipt completed successfully with ${attachmentIds?.length || 0} attachment(s)`,
             result,
+            attachmentCount: attachmentIds?.length || 0
         });
     } catch (error: any) {
         console.error('Failed to complete goods receipt:', error);
@@ -140,21 +142,27 @@ export async function POST(request: Request) {
     }
 }
 
-// Helper function to update evidence status
-async function updateEvidenceStatus(receiptId: string) {
+// Updated helper function to handle multiple attachments
+async function updateEvidenceStatus(receiptId: string, attachmentIds: string[] = []) {
     try {
         const receipt = await writeClient.fetch(
             groq`*[_type == "GoodsReceipt" && _id == $receiptId][0] {
-        attachments[]->{_id},
-        notes
-      }`,
+                attachments[]->{_id},
+                notes
+            }`,
             { receiptId }
         );
 
         let evidenceStatus = 'pending';
 
-        if (receipt.attachments?.length > 0) {
-            evidenceStatus = receipt.notes ? 'complete' : 'partial';
+        // Check if we have attachments (either from the receipt or newly provided ones)
+        const hasAttachments = (receipt.attachments?.length > 0) || (attachmentIds.length > 0);
+        const hasNotes = receipt.notes;
+
+        if (hasAttachments && hasNotes) {
+            evidenceStatus = 'complete';
+        } else if (hasAttachments) {
+            evidenceStatus = 'partial';
         }
 
         await writeClient

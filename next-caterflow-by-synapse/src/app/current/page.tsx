@@ -28,7 +28,7 @@ import {
 } from '@chakra-ui/react';
 import { useSession } from 'next-auth/react';
 import { FiArrowLeft, FiArrowRight, FiSearch, FiRefreshCw } from 'react-icons/fi';
-import DataTable, { Column } from '@/components/DataTable';
+import DataTable, { Column } from './DataTable';
 import { Site, StockItem } from '@/lib/sanityTypes';
 import { calculateBulkStock } from '@/lib/stockCalculations';
 
@@ -38,7 +38,7 @@ interface CurrentStockItem extends StockItem {
     binName: string;
     minimumStockLevel: number;
     reorderQuantity: number;
-    unitOfMeasure: string;
+    unitOfMeasure: "kg" | "g" | "l" | "ml" | "each" | "box" | "case" | "bag";
     stockStatus: 'in-stock' | 'low-stock' | 'out-of-stock';
 }
 
@@ -96,14 +96,7 @@ export default function CurrentStockPage() {
 
             if (binIds.length === 0) {
                 console.log('⚠️ No bins found for site:', siteId);
-                const emptyItems = stockItems.map(item => ({
-                    ...item,
-                    currentStock: 0,
-                    stockStatus: 'out-of-stock',
-                    siteName: siteId ? "No bins at this site" : "No bins available",
-                    binName: "No bin"
-                }));
-                setCurrentStockItems(emptyItems);
+                setCurrentStockItems([]);
                 setIsLoading(false);
                 return;
             }
@@ -117,49 +110,45 @@ export default function CurrentStockPage() {
             const stockResults = await calculateBulkStock(stockItemIds, binIds);
             console.log('✅ Bulk stock calculation complete. Results:', Object.keys(stockResults).length, 'item-bin pairs');
 
-            // Process results and aggregate stock by item
-            console.log('📊 Processing results...');
-            const itemsWithCalculatedStock = stockItems.map(item => {
-                let totalStock = 0;
-                let primaryBin: { name: any; site: { name: any; }; } | null = null;
+            // Process results and create a separate entry for each item-bin combination with stock
+            console.log('📊 Processing results and creating individual entries for each bin...');
+            const itemsWithCalculatedStock: CurrentStockItem[] = [];
 
-                // Sum up stock from all bins for this item and find the primary bin
-                binIds.forEach((binId: string) => {
-                    const key = `${item._id}-${binId}`;
+            stockItems.forEach(item => {
+                let foundStock = false;
+
+                // Find all bins that contain this item
+                const itemBins = bins.filter((bin: any) => {
+                    const key = `${item._id}-${bin._id}`;
                     const quantity = stockResults[key] || 0;
-                    totalStock += quantity;
-
-                    // Find the first bin with stock for this item
-                    if (!primaryBin && quantity > 0) {
-                        primaryBin = bins.find((bin: any) => bin._id === binId);
+                    if (quantity > 0) {
+                        foundStock = true;
+                        return true;
                     }
+                    return false;
                 });
 
-                // If no bin with stock, use the first bin
-                if (!primaryBin && bins.length > 0) {
-                    primaryBin = bins[0];
+                if (foundStock) {
+                    // Create a separate entry for each bin that has stock
+                    itemBins.forEach((bin: any) => {
+                        const quantity = stockResults[`${item._id}-${bin._id}`];
+                        let stockStatus: 'in-stock' | 'low-stock' | 'out-of-stock' = 'in-stock';
+                        if (quantity <= item.minimumStockLevel) {
+                            stockStatus = 'low-stock';
+                        }
+
+                        itemsWithCalculatedStock.push({
+                            ...item,
+                            currentStock: quantity,
+                            stockStatus,
+                            siteName: bin.site?.name || "Unknown site",
+                            binName: bin.name,
+                        });
+                    });
                 }
-
-                // Determine stock status
-                let stockStatus: 'in-stock' | 'low-stock' | 'out-of-stock' = 'in-stock';
-                if (totalStock === 0) {
-                    stockStatus = 'out-of-stock';
-                } else if (totalStock <= item.minimumStockLevel) {
-                    stockStatus = 'low-stock';
-                }
-
-                console.log(`📦 Item ${item.name}: ${totalStock} units, status: ${stockStatus}, bin: ${primaryBin?.name || 'none'}`);
-
-                return {
-                    ...item,
-                    currentStock: totalStock,
-                    stockStatus,
-                    siteName: primaryBin ? primaryBin.site?.name || "Unknown site" : "No bin",
-                    binName: primaryBin ? primaryBin.name : "No bin"
-                };
             });
 
-            console.log('✅ Stock calculation complete. Total items:', itemsWithCalculatedStock.length);
+            console.log('✅ Stock calculation complete. Total items to display:', itemsWithCalculatedStock.length);
             setCurrentStockItems(itemsWithCalculatedStock);
 
         } catch (err: any) {

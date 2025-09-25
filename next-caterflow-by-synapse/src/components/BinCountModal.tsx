@@ -52,7 +52,7 @@ interface CountedItem {
         sku: string
     };
     countedQuantity: number;
-    systemQuantityAtCountTime?: number; // Make sure this matches API field name
+    systemQuantityAtCountTime?: number;
     variance?: number;
     _key?: string;
 }
@@ -104,6 +104,7 @@ export default function BinCountModal({ isOpen, onClose, binCount, onSave }: Bin
     const { data: session } = useSession();
     const toast = useToast();
     const [loading, setLoading] = useState(false);
+    const [isProcessing, setIsProcessing] = useState(false);
     const [isBinModalOpen, setIsBinModalOpen] = useState(false);
     const [isStockItemModalOpen, setIsStockItemModalOpen] = useState(false);
     const [selectedBin, setSelectedBin] = useState<Bin | null>(null);
@@ -117,69 +118,30 @@ export default function BinCountModal({ isOpen, onClose, binCount, onSave }: Bin
         return countedItems.map(item => item.stockItem._id);
     }, [countedItems]);
 
+    // Single optimized useEffect for initial setup
     useEffect(() => {
-        console.log('BinCountModal props:', { isOpen, binCount });
-    }, [isOpen, binCount]);
+        if (!isOpen) return; // Only run when modal is open
 
+        console.log('BinCountModal setup:', { binCount, isViewMode });
 
-    // Debug useEffect to see what data is being received
-    useEffect(() => {
-        console.log('BinCountModal received binCount:', binCount);
-        console.log('Calculated isViewMode:', isViewMode);
-    }, [binCount, isViewMode]);
-
-    useEffect(() => {
         if (binCount) {
             console.log('Setting up bin count data:', binCount);
             setSelectedBin(binCount.bin || null);
             setCountDate(new Date(binCount.countDate).toISOString().split('T')[0]);
             setNotes(binCount.notes || '');
 
-            // Debug: Log the countedItems from the API response
-            console.log('Counted items from API:', binCount.countedItems);
-            console.log('First counted item structure:', binCount.countedItems?.[0]);
-
-            // Ensure countedItems have proper _key values and valid stockItem references
+            // Process countedItems with proper validation
             const validCountedItems = (binCount.countedItems || [])
-                .filter(item => {
-                    // Check if item exists
-                    if (!item) return false;
-
-                    // Check if stockItem exists and has either _id or _ref
-                    if (!item.stockItem) return false;
-
-                    // Allow both expanded stockItem (_id, name, sku) and reference (_ref)
-                    const hasId = item.stockItem._id;
-
-                    return hasId;
-                })
-                .map(item => {
-                    // If stockItem is just a reference, we need to handle it differently
-                    if (item.stockItem._id) {
-                        console.warn('Stock item is a reference, not expanded:', item.stockItem);
-                        // For now, create a placeholder until we can fetch the actual item
-                        return {
-                            ...item,
-                            _key: item._key || nanoid(),
-                            stockItem: {
-                                _id: item.stockItem._id,
-                                name: 'Loading...',
-                                sku: 'Loading...'
-                            }
-                        };
+                .filter(item => item && item.stockItem)
+                .map(item => ({
+                    ...item,
+                    _key: item._key || nanoid(),
+                    stockItem: {
+                        _id: item.stockItem._id,
+                        name: item.stockItem.name || 'Unknown Item',
+                        sku: item.stockItem.sku || 'N/A'
                     }
-
-                    // Stock item is already expanded
-                    return {
-                        ...item,
-                        _key: item._key || nanoid(),
-                        stockItem: {
-                            _id: item.stockItem._id,
-                            name: item.stockItem.name || 'Unknown Item',
-                            sku: item.stockItem.sku || 'N/A'
-                        }
-                    };
-                });
+                }));
 
             console.log('Valid counted items after processing:', validCountedItems);
             setCountedItems(validCountedItems);
@@ -190,21 +152,84 @@ export default function BinCountModal({ isOpen, onClose, binCount, onSave }: Bin
             setNotes('');
             setCountedItems([]);
         }
-    }, [binCount, isOpen]);
+    }, [isOpen, binCount, isViewMode]);
 
+    // Optimized system quantities useEffect
     useEffect(() => {
-        if (binCount && binCount.countedItems && binCount.countedItems.length > 0) {
-            console.log('Detailed analysis of counted items:');
-            binCount.countedItems.forEach((item, index) => {
-                console.log(`Item ${index}:`, item);
-                console.log(`Item ${index} stockItem:`, item.stockItem);
-                console.log(`Item ${index} stockItem type:`, typeof item.stockItem);
-                console.log(`Item ${index} stockItem keys:`, Object.keys(item.stockItem || {}));
-            });
-        }
-    }, [binCount]);
+        const fetchSystemQuantities = async () => {
+            // Only fetch for draft counts with items and selected bin
+            if (binCount && !isViewMode && selectedBin && countedItems.length > 0) {
+                setLoading(true);
+                try {
+                    const updatedItems = await Promise.all(
+                        countedItems.map(async (item) => {
+                            // Only fetch if systemQuantityAtCountTime is missing AND we have valid IDs
+                            if ((typeof item.systemQuantityAtCountTime === 'undefined' ||
+                                item.systemQuantityAtCountTime === null) &&
+                                item.stockItem._id && selectedBin._id) {
+
+                                try {
+                                    const systemQuantityRes = await fetch(
+                                        `/api/stock-items/${item.stockItem._id}/in-bin/${selectedBin._id}`
+                                    );
+                                    if (systemQuantityRes.ok) {
+                                        const { inStock } = await systemQuantityRes.json();
+                                        return { ...item, systemQuantityAtCountTime: inStock || 0 };
+                                    }
+                                } catch (error) {
+                                    console.error(`Error fetching quantity for ${item.stockItem.name}:`, error);
+                                }
+                            }
+                            return item; // Return unchanged if no fetch needed
+                        })
+                    );
+
+                    // Only update if items actually changed
+                    const hasChanges = updatedItems.some((newItem, index) =>
+                        newItem.systemQuantityAtCountTime !== countedItems[index]?.systemQuantityAtCountTime
+                    );
+
+                    if (hasChanges) {
+                        setCountedItems(updatedItems);
+                    }
+                } catch (error) {
+                    console.error("Error fetching system quantities:", error);
+                    toast({
+                        title: 'Error',
+                        description: 'Failed to load system quantities for some items.',
+                        status: 'error',
+                        duration: 5000,
+                        isClosable: true,
+                    });
+                } finally {
+                    setLoading(false);
+                }
+            }
+        };
+
+        // Add a small delay to prevent rapid successive calls
+        const timer = setTimeout(fetchSystemQuantities, 100);
+        return () => clearTimeout(timer);
+    }, [binCount, isViewMode, selectedBin, countedItems, toast]); // ADD countedItems and toast to dependencies
+
+    // Cleanup effect
+    useEffect(() => {
+        return () => {
+            // Reset state when component unmounts or modal closes
+            if (!isOpen) {
+                setSelectedBin(null);
+                setCountDate(new Date().toISOString().split('T')[0]);
+                setNotes('');
+                setCountedItems([]);
+                setIsProcessing(false);
+            }
+        };
+    }, [isOpen]);
 
     const fixBrokenBinCount = async (countId: string) => {
+        if (isProcessing) return;
+
+        setIsProcessing(true);
         try {
             // Fetch the broken count using the main GET endpoint and find it
             const response = await fetch('/api/bin-counts');
@@ -228,14 +253,14 @@ export default function BinCountModal({ isOpen, onClose, binCount, onSave }: Bin
             const fixedPayload = {
                 countNumber: brokenCount.countNumber,
                 countDate: brokenCount.countDate,
-                bin: brokenCount.bin._id, // Use the bin's ID
+                bin: brokenCount.bin._id,
                 notes: brokenCount.notes,
                 status: brokenCount.status,
                 countedItems: (brokenCount.countedItems || [])
-                    .filter((item: any) => item && item.stockItem) // Ensure items and stockItems exist
+                    .filter((item: any) => item && item.stockItem)
                     .map((item: any) => ({
                         _key: item._key,
-                        stockItem: item.stockItem._id, // Use the stock item's ID
+                        stockItem: item.stockItem._id,
                         countedQuantity: item.countedQuantity,
                         systemQuantityAtCountTime: item.systemQuantityAtCountTime,
                         variance: item.variance,
@@ -262,7 +287,7 @@ export default function BinCountModal({ isOpen, onClose, binCount, onSave }: Bin
                 isClosable: true,
             });
 
-            onSave(); // Refresh the list
+            onSave();
         } catch (error: any) {
             console.error('Error fixing bin count:', error);
             toast({
@@ -272,14 +297,18 @@ export default function BinCountModal({ isOpen, onClose, binCount, onSave }: Bin
                 duration: 5000,
                 isClosable: true,
             });
+        } finally {
+            setIsProcessing(false);
         }
     };
 
+    const handleBinSelect = (bin: Bin) => {
+        setSelectedBin(bin);
+        setIsBinModalOpen(false);
+    };
 
-    // Also, update the handleStockItemsSelect function to ensure proper structure
     const handleStockItemsSelect = async (item: StockItemForSelector) => {
         setIsStockItemModalOpen(false);
-        setLoading(true);
 
         if (!selectedBin) {
             toast({
@@ -289,91 +318,57 @@ export default function BinCountModal({ isOpen, onClose, binCount, onSave }: Bin
                 duration: 3000,
                 isClosable: true,
             });
-            setLoading(false);
             return;
         }
 
+        // Check for duplicates
+        const existingItemIds = new Set(countedItems.map(i => i.stockItem._id));
+        if (existingItemIds.has(item._id)) {
+            toast({
+                title: "Item already added",
+                description: `${item.name} is already in your bin count.`,
+                status: "warning",
+                duration: 3000,
+                isClosable: true,
+            });
+            return;
+        }
+
+        setLoading(true);
+
         try {
-            const existingItemIds = new Set(countedItems.map(i => i.stockItem._id));
+            let systemQuantity = 0;
 
-            if (existingItemIds.has(item._id)) {
-                toast({
-                    title: "Item already added",
-                    description: `${item.name} is already in your bin count.`,
-                    status: "warning",
-                    duration: 3000,
-                    isClosable: true,
-                });
-                setLoading(false);
-                return;
-            }
-
+            // Try to fetch current system quantity
             try {
-                // Fetch the current system quantity for the item in the specific bin
-                const systemQuantityRes = await fetch(`/api/stock-items/${item._id}/in-bin/${selectedBin._id}`);
-                const { inStock } = await systemQuantityRes.json();
-
-                if (!systemQuantityRes.ok) {
-                    const errorData = await systemQuantityRes.json().catch(() => ({}));
-                    console.error(`No stock records found for ${item.name} in bin ${selectedBin.name}. This is normal for new items.`, errorData);
-
-                    toast({
-                        title: "New Item in Bin",
-                        description: `${item.name} has no previous stock records in ${selectedBin.name}. Starting with 0 system quantity.`,
-                        status: "info",
-                        duration: 5000,
-                        isClosable: true,
-                    });
-
-                    setCountedItems(prev => [...prev, {
-                        _key: nanoid(),
-                        stockItem: {
-                            _id: item._id,
-                            name: item.name,
-                            sku: item.sku || 'N/A'
-                        },
-                        countedQuantity: 0,
-                        systemQuantityAtCountTime: inStock || 0,
-                    }]);
-                    return;
+                const systemQuantityRes = await fetch(
+                    `/api/stock-items/${item._id}/in-bin/${selectedBin._id}`
+                );
+                if (systemQuantityRes.ok) {
+                    const { inStock } = await systemQuantityRes.json();
+                    systemQuantity = inStock || 0;
                 }
-
-                setCountedItems(prev => [...prev, {
-                    _key: nanoid(),
-                    stockItem: {
-                        _id: item._id,
-                        name: item.name,
-                        sku: item.sku || 'N/A'
-                    },
-                    countedQuantity: 0,
-                    systemQuantityAtCountTime: inStock || 0,
-                }]);
-            } catch (itemError) {
-                console.error(`Error processing item ${item.name}:`, itemError);
-                toast({
-                    title: "Warning",
-                    description: `Error processing ${item.name}. Using 0 as default system quantity.`,
-                    status: "warning",
-                    duration: 5000,
-                    isClosable: true,
-                });
-
-                setCountedItems(prev => [...prev, {
-                    _key: nanoid(),
-                    stockItem: {
-                        _id: item._id,
-                        name: item.name,
-                        sku: item.sku || 'N/A'
-                    },
-                    countedQuantity: 0,
-                    systemQuantityAtCountTime: 0,
-                }]);
+            } catch (error) {
+                console.warn(`Could not fetch system quantity for ${item.name}:`, error);
             }
+
+            // Batch the state update
+            setCountedItems(prev => [...prev, {
+                _key: nanoid(),
+                stockItem: {
+                    _id: item._id,
+                    name: item.name,
+                    sku: item.sku || 'N/A'
+                },
+                countedQuantity: 0,
+                systemQuantityAtCountTime: systemQuantity,
+            }]);
+
         } catch (error: any) {
-            console.error("Error in stock item selection:", error);
+            console.error("Error adding stock item:", error);
             toast({
                 title: 'Error',
-                description: error.message || 'Failed to add item. Please try again.',
+                description: 'Failed to add item. Please try again.',
                 status: 'error',
                 duration: 5000,
                 isClosable: true,
@@ -382,81 +377,6 @@ export default function BinCountModal({ isOpen, onClose, binCount, onSave }: Bin
             setLoading(false);
         }
     };
-
-    // New useEffect to fetch and update system quantity for draft counts
-    useEffect(() => {
-        const fetchSystemQuantities = async () => {
-            if (binCount && !isViewMode && selectedBin) {
-                setLoading(true);
-                try {
-                    const updatedItems = await Promise.all(
-                        countedItems.map(async (item) => {
-                            // Only fetch if systemQuantityAtCountTime is missing
-                            if (typeof item.systemQuantityAtCountTime === 'undefined' || item.systemQuantityAtCountTime === null) {
-                                const systemQuantityRes = await fetch(`/api/stock-items/${item.stockItem._id}/in-bin/${selectedBin._id}`);
-                                if (!systemQuantityRes.ok) {
-                                    throw new Error(`Failed to fetch system quantity for ${item.stockItem.name}`);
-                                }
-                                const { inStock } = await systemQuantityRes.json();
-                                return { ...item, systemQuantityAtCountTime: inStock || 0 };
-                            }
-                            return item; // Return the item as is if it already has the quantity
-                        })
-                    );
-                    setCountedItems(updatedItems);
-                } catch (error) {
-                    console.error("Error fetching system quantities on load:", error);
-                    toast({
-                        title: 'Error',
-                        description: 'Failed to load system quantities for existing items.',
-                        status: 'error',
-                        duration: 5000,
-                        isClosable: true,
-                    });
-                } finally {
-                    setLoading(false);
-                }
-            }
-        };
-
-        fetchSystemQuantities();
-    }, [binCount, isViewMode, selectedBin, toast, countedItems]);
-
-    const handleBinSelect = (bin: Bin) => {
-        setSelectedBin(bin);
-        setIsBinModalOpen(false);
-    };
-
-    useEffect(() => {
-        if (binCount) {
-            console.log('Setting up bin count data:', binCount);
-            setSelectedBin(binCount.bin || null);
-            setCountDate(new Date(binCount.countDate).toISOString().split('T')[0]);
-            setNotes(binCount.notes || '');
-
-            // Filter out items with null stockItem and create placeholders
-            const validCountedItems = (binCount.countedItems || [])
-                .filter(item => item && item.stockItem) // Only items with stockItem
-                .map(item => ({
-                    ...item,
-                    _key: item._key || nanoid(),
-                    stockItem: {
-                        _id: item.stockItem._id,
-                        name: item.stockItem.name || 'Unknown Item',
-                        sku: item.stockItem.sku || 'N/A'
-                    }
-                }));
-
-            console.log('Valid counted items after processing:', validCountedItems);
-            setCountedItems(validCountedItems);
-        } else {
-            console.log('Setting up new bin count');
-            setSelectedBin(null);
-            setCountDate(new Date().toISOString().split('T')[0]);
-            setNotes('');
-            setCountedItems([]);
-        }
-    }, [binCount, isOpen]);
 
     const handleCountedQuantityChange = (key: string, valueAsString: string, valueAsNumber: number) => {
         setCountedItems(prev => prev.map(item =>
@@ -477,6 +397,8 @@ export default function BinCountModal({ isOpen, onClose, binCount, onSave }: Bin
     }, [countedItems]);
 
     const handleSave = async (isFinalize: boolean = false) => {
+        if (isProcessing) return;
+
         // Check if any counted items have invalid stockItem references
         const hasInvalidStockItems = countedItems.some(item =>
             !item.stockItem || !item.stockItem._id
@@ -528,14 +450,12 @@ export default function BinCountModal({ isOpen, onClose, binCount, onSave }: Bin
         }
 
         setLoading(true);
+        setIsProcessing(true);
 
         const itemsWithVariance = countedItems.map(item => {
-            console.log('Saving item:', item);
-            console.log('Stock item ID:', item.stockItem._id);
-
             return {
                 _key: item._key,
-                stockItem: item.stockItem._id, // This should be the ID string, not an object
+                stockItem: item.stockItem._id,
                 countedQuantity: item.countedQuantity || 0,
                 systemQuantityAtCountTime: item.systemQuantityAtCountTime || 0,
                 variance: (item.countedQuantity || 0) - (item.systemQuantityAtCountTime || 0),
@@ -553,7 +473,6 @@ export default function BinCountModal({ isOpen, onClose, binCount, onSave }: Bin
         };
 
         console.log('Saving payload:', payload);
-
 
         try {
             const method = binCount ? 'PUT' : 'POST';
@@ -591,6 +510,7 @@ export default function BinCountModal({ isOpen, onClose, binCount, onSave }: Bin
             });
         } finally {
             setLoading(false);
+            setIsProcessing(false);
         }
     };
 
@@ -736,18 +656,16 @@ export default function BinCountModal({ isOpen, onClose, binCount, onSave }: Bin
                     </ModalBody>
 
                     <ModalFooter>
-                        <Button colorScheme="gray" mr={3} onClick={onClose} isDisabled={loading}>
+                        <Button colorScheme="gray" mr={3} onClick={onClose} isDisabled={loading || isProcessing}>
                             Cancel
                         </Button>
                         {!isViewMode && (
-
                             <HStack>
-
                                 {binCount && binCount.countedItems.some((item: any) => !item.stockItem) && (
                                     <Button
                                         colorScheme="orange"
                                         onClick={() => fixBrokenBinCount(binCount._id)}
-                                        isLoading={loading}
+                                        isLoading={isProcessing}
                                         leftIcon={<FiCheck />}
                                     >
                                         Fix Broken Count
@@ -756,7 +674,7 @@ export default function BinCountModal({ isOpen, onClose, binCount, onSave }: Bin
                                 <Button
                                     colorScheme="brand"
                                     onClick={() => handleSave(false)}
-                                    isLoading={loading}
+                                    isLoading={loading || isProcessing}
                                     leftIcon={<FiSave />}
                                 >
                                     Save Draft
@@ -764,7 +682,7 @@ export default function BinCountModal({ isOpen, onClose, binCount, onSave }: Bin
                                 <Button
                                     colorScheme="green"
                                     onClick={() => handleSave(true)}
-                                    isLoading={loading}
+                                    isLoading={loading || isProcessing}
                                     isDisabled={countedItems.length === 0}
                                     leftIcon={<FiCheck />}
                                 >

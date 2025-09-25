@@ -36,43 +36,65 @@ import {
     Badge,
 } from '@chakra-ui/react';
 import { useSession } from 'next-auth/react'
-import { FiCheckCircle, FiXCircle } from 'react-icons/fi';
+import { FiCheckCircle, FiXCircle, FiEye } from 'react-icons/fi';
 import { FaBoxes } from 'react-icons/fa';
 import { useRouter } from 'next/navigation';
 import DataTable from '../actions/DataTable';
 
-// Update the interface to match the expanded data from the API route
-interface OrderedItem {
+// Update interfaces to match the new transfer structure
+interface TransferredItem {
     _key: string;
     stockItem: {
         _id: string;
         name: string;
+        unitOfMeasure: string;
     };
-    supplier: {
-        _id: string;
-        name: string;
-    } | null; // Supplier can be null
-    orderedQuantity: number;
-    unitPrice: number;
+    transferredQuantity: number;
 }
 
-// Update the interface for an approval action
-interface ApprovalAction {
+interface TransferApproval {
     _id: string;
-    _type: string;
+    _type: 'InternalTransfer';
+    transferNumber: string;
+    transferDate: string;
+    status: 'pending-approval';
+    fromBin: {
+        _id: string;
+        name: string;
+        site: {
+            name: string;
+        };
+    };
+    toBin: {
+        _id: string;
+        name: string;
+        site: {
+            name: string;
+        };
+    };
+    transferredBy?: {
+        name: string;
+        email: string;
+    } | null;
+    transferredItems: TransferredItem[];
+    notes?: string;
+    createdAt: string;
+}
+
+interface PurchaseOrderApproval {
+    _id: string;
+    _type: 'PurchaseOrder';
+    poNumber: string;
     title: string;
     description: string;
+    status: 'pending-approval';
+    orderedItems: any[];
+    siteName: string;
     createdAt: string;
     priority: 'high' | 'medium' | 'low';
-    siteName: string;
-    status: 'pending-approval';
-    poNumber?: string;
-    orderedItems?: OrderedItem[];
-    orderedBy?: string;
-    transferNumber?: string;
-    adjustmentNumber?: string;
-    receiptNumber?: string;
 }
+
+type ApprovalAction = TransferApproval | PurchaseOrderApproval;
 
 export default function ApprovalsPage() {
     const { data: session, status } = useSession();
@@ -96,17 +118,11 @@ export default function ApprovalsPage() {
         'InternalTransfer': 'Internal Transfers',
     };
 
-    // Add this helper function at the top of your component
     const getActionTypeTitle = (type: string): string => {
         const titles: Record<string, string> = {
             PurchaseOrder: 'Purchase Orders',
-            GoodsReceipt: 'Goods Receipts',
-            DispatchLog: 'Dispatch Logs',
             InternalTransfer: 'Internal Transfers',
-            StockAdjustment: 'Stock Adjustments',
-            InventoryCount: 'Inventory Counts',
         };
-
         return titles[type] || 'Items';
     };
 
@@ -119,32 +135,71 @@ export default function ApprovalsPage() {
                 return;
             }
 
+            // Check if user has permission to view approvals
             if (user.role !== 'admin' && user.role !== 'siteManager' && user.role !== 'auditor') {
                 router.push('/');
                 return;
             }
 
-            let queryString = '';
-            if (user.role === 'admin' || user.role === 'auditor') {
-                queryString = `userRole=${user.role}`;
-            } else if (user.role === 'siteManager' && user.associatedSite?._id) {
-                queryString = `userRole=${user.role}&userSite=${user.associatedSite._id}`;
+            // Fetch both transfers AND purchase orders pending approval
+            const [transfersResponse, purchaseOrdersResponse] = await Promise.all([
+                fetch('/api/operations/transfers?status=pending-approval'),
+                fetch(`/api/approvals?userSite=${user.associatedSite || ''}&userRole=${user.role || ''}`)
+            ]);
+
+            if (!transfersResponse.ok) {
+                throw new Error('Failed to fetch transfers pending approval');
+            }
+            if (!purchaseOrdersResponse.ok) {
+                throw new Error('Failed to fetch purchase orders pending approval');
             }
 
-            if (!queryString) {
-                setPendingApprovals([]);
-                setLoading(false);
-                return;
-            }
+            const transfersData = await transfersResponse.json();
+            const purchaseOrdersData = await purchaseOrdersResponse.json();
 
-            const response = await fetch(`/api/approvals?${queryString}`);
-            const data = await response.json();
+            // Transform transfers data
+            const transferApprovals: TransferApproval[] = transfersData.map((transfer: any) => ({
+                _id: transfer._id,
+                _type: 'InternalTransfer',
+                transferNumber: transfer.transferNumber || 'Unknown',
+                transferDate: transfer.transferDate || new Date().toISOString(),
+                status: 'pending-approval',
+                fromBin: transfer.fromBin || { _id: 'unknown', name: 'Unknown Bin', site: { name: 'Unknown Site' } },
+                toBin: transfer.toBin || { _id: 'unknown', name: 'Unknown Bin', site: { name: 'Unknown Site' } },
+                transferredBy: transfer.transferredBy || null,
+                transferredItems: transfer.items || transfer.transferredItems || [],
+                notes: transfer.notes,
+                createdAt: transfer.transferDate || new Date().toISOString(),
+                title: `Transfer: ${transfer.transferNumber || 'Unknown'}`,
+                description: `Transfer from ${transfer.fromBin?.name || 'Unknown'} to ${transfer.toBin?.name || 'Unknown'}`,
+                siteName: transfer.fromBin?.site?.name || 'Unknown Site',
+                priority: 'medium' as const,
+            }));
 
-            if (!response.ok) {
-                throw new Error(data.error || `Failed to fetch approvals: ${response.statusText}`);
-            }
+            // Transform purchase orders data
+            const purchaseOrderApprovals: PurchaseOrderApproval[] = purchaseOrdersData
+                .filter((po: any) => po._type === 'PurchaseOrder')
+                .map((po: any) => ({
+                    _id: po._id,
+                    _type: 'PurchaseOrder' as const,
+                    poNumber: po.poNumber || 'Unknown',
+                    title: po.title || `Purchase Order ${po.poNumber}`,
+                    description: po.description || 'Purchase order for items',
+                    status: 'pending-approval' as const,
+                    orderedItems: po.orderedItems || [],
+                    siteName: po.siteName || po.site?.name || 'Unknown Site',
+                    createdAt: po.createdAt || po._createdAt || new Date().toISOString(),
+                    priority: po.priority || 'medium',
+                    // Add additional PO-specific fields
+                    site: po.site,
+                    orderedByName: po.orderedByName,
+                    supplierNames: po.supplierNames,
+                }));
 
-            setPendingApprovals(data);
+            // Combine all approvals
+            const allApprovals = [...transferApprovals, ...purchaseOrderApprovals];
+            setPendingApprovals(allApprovals);
+
         } catch (err: any) {
             setError(err.message);
             toast({
@@ -160,7 +215,7 @@ export default function ApprovalsPage() {
     }, [user, router, toast]);
 
     useEffect(() => {
-        if (status === 'loading') return; // Wait for auth to be ready
+        if (status === 'loading') return;
 
         if (isAuthenticated) {
             fetchPendingApprovals();
@@ -176,33 +231,51 @@ export default function ApprovalsPage() {
         setSelectedApprovals(selectedItems);
     };
 
+    // Update the handleApprove function
     const handleApprove = async () => {
         if (!selectedApproval) return;
 
         try {
-            const response = await fetch('/api/actions/update', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    id: selectedApproval._id,
-                    status: 'approved',
-                    approvedBy: user?.id,
-                    approvedAt: new Date().toISOString(),
-                }),
-            });
+            let response;
+
+            if (selectedApproval._type === 'InternalTransfer') {
+                // Approve transfer
+                response = await fetch(`/api/operations/transfers/${selectedApproval._id}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        status: 'approved'
+                    }),
+                });
+            } else {
+                // Approve purchase order
+                response = await fetch('/api/actions/update', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        id: selectedApproval._id,
+                        type: 'PurchaseOrder',
+                        status: 'approved',
+                        approvedBy: user?.id,
+                        approvedAt: new Date().toISOString(),
+                    }),
+                });
+            }
 
             if (!response.ok) {
-                throw new Error('Failed to approve action');
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Failed to approve action');
             }
 
             toast({
                 title: 'Action Approved',
-                description: 'The item has been approved and moved to the "approved" list.',
+                description: 'The item has been approved successfully.',
                 status: 'success',
                 duration: 5000,
                 isClosable: true,
             });
 
+            // Remove from pending approvals
             setPendingApprovals(prev => prev.filter(item => item._id !== selectedApproval._id));
             setSelectedApprovals(prev => prev.filter(item => item._id !== selectedApproval._id));
             onModalClose();
@@ -217,23 +290,40 @@ export default function ApprovalsPage() {
         }
     };
 
+    // Update the handleReject function similarly
     const handleReject = async () => {
         if (!selectedApproval) return;
 
         try {
-            const response = await fetch('/api/actions/update', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    id: selectedApproval._id,
-                    status: 'rejected',
-                    rejectedBy: user?.id,
-                    rejectedAt: new Date().toISOString(),
-                }),
-            });
+            let response;
+
+            if (selectedApproval._type === 'InternalTransfer') {
+                // Reject transfer
+                response = await fetch(`/api/operations/transfers/${selectedApproval._id}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        status: 'cancelled'
+                    }),
+                });
+            } else {
+                // Reject purchase order
+                response = await fetch('/api/actions/update', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        id: selectedApproval._id,
+                        type: 'PurchaseOrder',
+                        status: 'rejected',
+                        rejectedBy: user?.id,
+                        rejectedAt: new Date().toISOString(),
+                    }),
+                });
+            }
 
             if (!response.ok) {
-                throw new Error('Failed to reject action');
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Failed to reject action');
             }
 
             toast({
@@ -258,41 +348,25 @@ export default function ApprovalsPage() {
         }
     };
 
-    // Helper function to get unique supplier names with fallback
-    const getSupplierNames = (orderedItems: OrderedItem[] | undefined) => {
-        if (!orderedItems || orderedItems.length === 0) {
-            return 'No suppliers specified';
+    // Helper function to get display information based on approval type with null checks
+    const getApprovalDisplayInfo = (approval: ApprovalAction) => {
+        if (approval._type === 'InternalTransfer') {
+            return {
+                referenceNumber: approval.transferNumber || 'Unknown',
+                title: `Transfer: ${approval.transferNumber || 'Unknown'}`,
+                description: `Transfer from ${approval.fromBin?.name || 'Unknown'} to ${approval.toBin?.name || 'Unknown'}`,
+                siteName: approval.fromBin?.site?.name || 'Unknown Site',
+                requestedBy: approval.transferredBy?.name || 'Unknown User',
+            };
+        } else {
+            return {
+                referenceNumber: approval.poNumber || 'Unknown',
+                title: approval.title || 'Unknown Title',
+                description: approval.description || 'No description',
+                siteName: approval.siteName || 'Unknown Site',
+                requestedBy: 'Unknown',
+            };
         }
-
-        // Safely access the supplier name using optional chaining
-        const suppliers = orderedItems
-            .map(item => item.supplier?.name)
-            .filter(name => name && name.trim() !== '');
-
-        if (suppliers.length === 0) {
-            return 'No suppliers specified';
-        }
-
-        const uniqueSuppliers = [...new Set(suppliers)];
-        return uniqueSuppliers.join(', ');
-    };
-
-    // Helper function to get item description with fallback
-    const getItemDescription = (row: any) => {
-        if (row._type === 'PurchaseOrder' && row.orderedItems) {
-            const itemCount = row.orderedItems.length;
-            const supplierInfo = getSupplierNames(row.orderedItems);
-
-            return (
-                <Box>
-                    <Text>{row.description || `Purchase Order with ${itemCount} item(s)`}</Text>
-                    <Text fontSize="sm" color="gray.600" mt={1}>
-                        Suppliers: {supplierInfo}
-                    </Text>
-                </Box>
-            );
-        }
-        return <Text>{row.description || 'No description available'}</Text>;
     };
 
     // Filter approvals by type for tabs
@@ -301,7 +375,73 @@ export default function ApprovalsPage() {
         return action._type === type;
     });
 
-    // Update loading check to use status
+    // Columns configuration for DataTable
+    const getColumns = (type: string) => {
+        const baseColumns = [
+            {
+                accessorKey: 'actions',
+                header: 'Actions',
+                isSortable: false,
+                cell: (row: any) => (
+                    <Button
+                        size="sm"
+                        colorScheme="blue"
+                        leftIcon={<FiEye />}
+                        onClick={() => handleOpenReview(row)}
+                    >
+                        Review
+                    </Button>
+                )
+            },
+            {
+                accessorKey: 'referenceNumber',
+                header: 'Reference Number',
+                isSortable: true,
+                cell: (row: any) => {
+                    const info = getApprovalDisplayInfo(row);
+                    return info.referenceNumber;
+                }
+            },
+            {
+                accessorKey: 'description',
+                header: 'Description',
+                isSortable: true,
+                cell: (row: any) => {
+                    const info = getApprovalDisplayInfo(row);
+                    return info.description;
+                }
+            },
+            {
+                accessorKey: 'siteName',
+                header: 'Site',
+                isSortable: true,
+                cell: (row: any) => {
+                    const info = getApprovalDisplayInfo(row);
+                    return info.siteName;
+                }
+            },
+            {
+                accessorKey: 'requestedBy',
+                header: 'Requested By',
+                isSortable: true,
+                cell: (row: any) => {
+                    if (row._type === 'InternalTransfer') {
+                        return row.transferredBy?.name || 'Unknown';
+                    }
+                    return 'Unknown';
+                }
+            },
+            {
+                accessorKey: 'createdAt',
+                header: 'Created Date',
+                isSortable: true,
+                cell: (row: any) => new Date(row.createdAt).toLocaleDateString()
+            },
+        ];
+
+        return baseColumns;
+    };
+
     if (status === 'loading' || loading) {
         return (
             <Flex justifyContent="center" alignItems="center" minH="100vh">
@@ -310,14 +450,27 @@ export default function ApprovalsPage() {
         );
     }
 
-    if (error) {
+    if (!isAuthenticated) {
         return (
             <Flex justifyContent="center" alignItems="center" minH="100vh" direction="column">
                 <Text fontSize="xl" color="red.500">
-                    {error}
+                    Please log in to view approvals
                 </Text>
-                <Button onClick={fetchPendingApprovals} mt={4}>
-                    Try Again
+                <Button onClick={() => router.push('/login')} mt={4}>
+                    Go to Login
+                </Button>
+            </Flex>
+        );
+    }
+
+    if (user && (user.role !== 'admin' && user.role !== 'siteManager' && user.role !== 'auditor')) {
+        return (
+            <Flex justifyContent="center" alignItems="center" minH="100vh" direction="column">
+                <Text fontSize="xl" color="red.500">
+                    You don't have permission to view approvals
+                </Text>
+                <Button onClick={() => router.push('/')} mt={4}>
+                    Go to Dashboard
                 </Button>
             </Flex>
         );
@@ -344,86 +497,7 @@ export default function ApprovalsPage() {
                                 </Text>
                             ) : (
                                 <DataTable
-                                    columns={[
-                                        {
-                                            accessorKey: 'actions',
-                                            header: 'Action',
-                                            isSortable: false,
-                                            cell: (row: any) => (
-                                                <Button
-                                                    size="sm"
-                                                    colorScheme="blue"
-                                                    onClick={() => handleOpenReview(row)}
-                                                >
-                                                    Review
-                                                </Button>
-                                            )
-                                        },
-                                        {
-                                            accessorKey: 'poNumber',
-                                            header: 'PO Number',
-                                            isSortable: true,
-                                            cell: (row: any) => row.poNumber || 'N/A'
-                                        },
-                                        {
-                                            accessorKey: 'suppliers',
-                                            header: 'Suppliers',
-                                            isSortable: false,
-                                            cell: (row: any) => {
-                                                if (row._type === 'PurchaseOrder') {
-                                                    return getSupplierNames(row.orderedItems);
-                                                }
-                                                return 'N/A';
-                                            }
-                                        },
-                                        {
-                                            accessorKey: 'orderedItems',
-                                            header: 'Items',
-                                            isSortable: false,
-                                            cell: (row: any) => {
-                                                if (row._type === 'PurchaseOrder' && row.orderedItems) {
-                                                    return (
-                                                        <Box>
-                                                            <Text>Items:</Text>
-                                                            <Text fontSize="sm" color="gray.600" mt={1}>
-                                                                {row.orderedItems.map((item: any) =>
-                                                                    `${item.stockItem.name} (${item.orderedQuantity})`
-                                                                ).join(', ')}
-                                                            </Text>
-                                                        </Box>
-                                                    );
-                                                }
-                                                return <Text>{row.description}</Text>;
-                                            }
-                                        },
-                                        {
-                                            accessorKey: 'siteName',
-                                            header: 'Site',
-                                            isSortable: true,
-                                            cell: (row: any) => row.siteName || 'N/A'
-                                        },
-                                        {
-                                            accessorKey: 'priority',
-                                            header: 'Priority',
-                                            isSortable: true,
-                                            cell: (row: any) => (
-                                                <Badge
-                                                    colorScheme={
-                                                        row.priority === 'high' ? 'red' :
-                                                            row.priority === 'medium' ? 'orange' : 'gray'
-                                                    }
-                                                >
-                                                    {row.priority?.toUpperCase() || 'MEDIUM'}
-                                                </Badge>
-                                            )
-                                        },
-                                        {
-                                            accessorKey: 'createdAt',
-                                            header: 'Created At',
-                                            isSortable: true,
-                                            cell: (row) => new Date(row.createdAt).toLocaleDateString()
-                                        },
-                                    ]}
+                                    columns={getColumns(type)}
                                     data={filteredApprovals}
                                     loading={loading}
                                     onActionClick={handleOpenReview}
@@ -436,84 +510,194 @@ export default function ApprovalsPage() {
             </Tabs>
 
             {/* Approval Details Modal */}
-            <Modal isOpen={isModalOpen} onClose={onModalClose} size="3xl">
+            <Modal isOpen={isModalOpen} onClose={onModalClose} size="4xl">
                 <ModalOverlay />
                 <ModalContent>
                     <ModalHeader>
                         <HStack spacing={2} alignItems="center">
                             <Icon as={FaBoxes} color="blue.500" />
-                            <Text>{selectedApproval?.title} Details</Text>
+                            <Text>
+                                {selectedApproval?._type === 'InternalTransfer'
+                                    ? `Transfer: ${selectedApproval.transferNumber || 'Unknown'}`
+                                    : selectedApproval?.title || 'Approval Details'
+                                }
+                            </Text>
                         </HStack>
                     </ModalHeader>
                     <ModalBody>
                         <VStack spacing={4} align="stretch">
+                            {/* Basic Information */}
                             <Flex justifyContent="space-between" flexWrap="wrap" gap={4}>
                                 <Box>
                                     <Text fontWeight="bold">Reference Number:</Text>
                                     <Text>
-                                        {selectedApproval?.poNumber ||
-                                            selectedApproval?.transferNumber ||
-                                            selectedApproval?.adjustmentNumber ||
-                                            selectedApproval?.receiptNumber ||
-                                            'N/A'}
+                                        {selectedApproval?._type === 'InternalTransfer'
+                                            ? selectedApproval.transferNumber || 'Unknown'
+                                            : selectedApproval?.poNumber || 'N/A'
+                                        }
                                     </Text>
                                 </Box>
-                                {selectedApproval?.orderedItems && (
-                                    <Box>
-                                        <Text fontWeight="bold">Suppliers:</Text>
-                                        <Text>{getSupplierNames(selectedApproval.orderedItems)}</Text>
-                                    </Box>
-                                )}
+                                <Box>
+                                    <Text fontWeight="bold">Status:</Text>
+                                    <Badge colorScheme="orange" fontSize="sm">
+                                        Pending Approval
+                                    </Badge>
+                                </Box>
                                 <Box>
                                     <Text fontWeight="bold">Site:</Text>
-                                    <Text>{selectedApproval?.siteName || 'N/A'}</Text>
+                                    <Text>
+                                        {selectedApproval?._type === 'InternalTransfer'
+                                            ? selectedApproval.fromBin?.site?.name || 'Unknown Site'
+                                            : selectedApproval?.siteName || 'N/A'
+                                        }
+                                    </Text>
                                 </Box>
-                                {selectedApproval?.orderedBy && (
-                                    <Box>
-                                        <Text fontWeight="bold">Ordered By:</Text>
-                                        <Text>{selectedApproval.orderedBy}</Text>
-                                    </Box>
-                                )}
+                                <Box>
+                                    <Text fontWeight="bold">Requested By:</Text>
+                                    <Text>
+                                        {selectedApproval?._type === 'InternalTransfer'
+                                            ? selectedApproval.transferredBy?.name || 'Unknown User'
+                                            : 'Unknown'
+                                        }
+                                    </Text>
+                                </Box>
                             </Flex>
 
-                            {selectedApproval?.orderedItems && selectedApproval.orderedItems.length > 0 && (
+                            {/* Transfer Specific Details */}
+                            {selectedApproval?._type === 'InternalTransfer' && (
                                 <>
-                                    <Heading as="h4" size="sm" mt={4}>
-                                        Ordered Items
-                                    </Heading>
-                                    <TableContainer>
-                                        <Table variant="simple" size="sm">
-                                            <Thead>
-                                                <Tr>
-                                                    <Th>Item</Th>
-                                                    <Th isNumeric>Quantity</Th>
-                                                    <Th isNumeric>Unit Price</Th>
-                                                    <Th>Supplier</Th>
-                                                    <Th isNumeric>Total</Th>
-                                                </Tr>
-                                            </Thead>
-                                            <Tbody>
-                                                {selectedApproval.orderedItems.map((item) => (
-                                                    <Tr key={item._key}>
-                                                        <Td>{item.stockItem?.name || 'Unknown Item'}</Td>
-                                                        <Td isNumeric>{item.orderedQuantity}</Td>
-                                                        <Td isNumeric>E {item.unitPrice?.toFixed(2)}</Td>
-                                                        <Td>{item.supplier?.name || 'No supplier'}</Td>
-                                                        <Td isNumeric>E {(item.unitPrice * item.orderedQuantity).toFixed(2)}</Td>
-                                                    </Tr>
-                                                ))}
-                                            </Tbody>
-                                        </Table>
-                                    </TableContainer>
+                                    <Flex justifyContent="space-between" flexWrap="wrap" gap={4}>
+                                        <Box>
+                                            <Text fontWeight="bold">From Bin:</Text>
+                                            <Text>{selectedApproval.fromBin?.name || 'Unknown'}</Text>
+                                        </Box>
+                                        <Box>
+                                            <Text fontWeight="bold">To Bin:</Text>
+                                            <Text>{selectedApproval.toBin?.name || 'Unknown'}</Text>
+                                        </Box>
+                                        <Box>
+                                            <Text fontWeight="bold">Transfer Date:</Text>
+                                            <Text>
+                                                {selectedApproval.transferDate
+                                                    ? new Date(selectedApproval.transferDate).toLocaleDateString()
+                                                    : 'Unknown Date'
+                                                }
+                                            </Text>
+                                        </Box>
+                                    </Flex>
+
+                                    {selectedApproval.notes && (
+                                        <Box>
+                                            <Text fontWeight="bold">Notes:</Text>
+                                            <Text>{selectedApproval.notes}</Text>
+                                        </Box>
+                                    )}
                                 </>
                             )}
+
+                            {/* Purchase Order Specific Details */}
+                            {selectedApproval?._type === 'PurchaseOrder' && (
+                                <>
+                                    <Flex justifyContent="space-between" flexWrap="wrap" gap={4}>
+                                        <Box>
+                                            <Text fontWeight="bold">PO Number:</Text>
+                                            <Text>{selectedApproval.poNumber || 'Unknown'}</Text>
+                                        </Box>
+                                        {/*<Box>
+                                            <Text fontWeight="bold">Ordered By:</Text>
+                                            <Text>{selectedApproval.orderedByName || 'Unknown'}</Text>
+                                        </Box>
+                                        <Box>
+                                            <Text fontWeight="bold">Suppliers:</Text>
+                                            <Text>{selectedApproval.supplierNames || 'Unknown'}</Text>
+                                        </Box>*/}
+                                    </Flex>
+                                </>
+                            )}
+
+                            {/* Items Table - Combined for both types */}
+                            <Box>
+                                <Heading as="h4" size="sm" mb={3}>
+                                    {selectedApproval?._type === 'InternalTransfer'
+                                        ? 'Transferred Items'
+                                        : 'Ordered Items'
+                                    }
+                                </Heading>
+                                <TableContainer>
+                                    <Table variant="simple" size="sm">
+                                        <Thead>
+                                            <Tr>
+                                                <Th>Item Name</Th>
+                                                <Th isNumeric>Quantity</Th>
+                                                {selectedApproval?._type === 'InternalTransfer' && (
+                                                    <Th>Unit</Th>
+                                                )}
+                                                {selectedApproval?._type === 'PurchaseOrder' && (
+                                                    <>
+                                                        <Th isNumeric>Unit Price</Th>
+                                                        <Th isNumeric>Total</Th>
+                                                    </>
+                                                )}
+                                            </Tr>
+                                        </Thead>
+                                        <Tbody>
+                                            {/* Internal Transfer Items */}
+                                            {selectedApproval?._type === 'InternalTransfer' && selectedApproval.transferredItems.map((item) => (
+                                                <Tr key={item._key}>
+                                                    <Td>{item.stockItem?.name || 'Unknown Item'}</Td>
+                                                    <Td isNumeric>{item.transferredQuantity || 0}</Td>
+                                                    <Td>{item.stockItem?.unitOfMeasure || 'Unknown'}</Td>
+                                                </Tr>
+                                            ))}
+
+                                            {/* Purchase Order Items */}
+                                            {selectedApproval?._type === 'PurchaseOrder' && selectedApproval.orderedItems?.map((item: any) => (
+                                                <Tr key={item._key}>
+                                                    <Td>{item.stockItem?.name || 'Unknown Item'}</Td>
+                                                    <Td isNumeric>{item.orderedQuantity || 0}</Td>
+                                                    <Td isNumeric>${item.unitPrice?.toFixed(2) || '0.00'}</Td>
+                                                    <Td isNumeric>${((item.orderedQuantity || 0) * (item.unitPrice || 0)).toFixed(2)}</Td>
+                                                </Tr>
+                                            ))}
+
+                                            {/* Empty state */}
+                                            {((selectedApproval?._type === 'InternalTransfer' && selectedApproval.transferredItems.length === 0) ||
+                                                (selectedApproval?._type === 'PurchaseOrder' && (!selectedApproval.orderedItems || selectedApproval.orderedItems.length === 0))) && (
+                                                    <Tr>
+                                                        <Td
+                                                            colSpan={
+                                                                selectedApproval?._type === 'InternalTransfer' ? 3 :
+                                                                    selectedApproval?._type === 'PurchaseOrder' ? 4 : 1
+                                                            }
+                                                            textAlign="center"
+                                                            color="gray.500"
+                                                        >
+                                                            No items found
+                                                        </Td>
+                                                    </Tr>
+                                                )}
+                                        </Tbody>
+                                    </Table>
+                                </TableContainer>
+                            </Box>
                         </VStack>
                     </ModalBody>
                     <ModalFooter>
-                        <Button colorScheme="red" onClick={handleReject} leftIcon={<FiXCircle />}>
+                        <Button
+                            colorScheme="red"
+                            onClick={handleReject}
+                            leftIcon={<FiXCircle />}
+                            isDisabled={!selectedApproval}
+                        >
                             Reject
                         </Button>
-                        <Button colorScheme="green" onClick={handleApprove} ml={3} leftIcon={<FiCheckCircle />}>
+                        <Button
+                            colorScheme="green"
+                            onClick={handleApprove}
+                            ml={3}
+                            leftIcon={<FiCheckCircle />}
+                            isDisabled={!selectedApproval}
+                        >
                             Approve
                         </Button>
                         <Button variant="ghost" ml={3} onClick={onModalClose}>

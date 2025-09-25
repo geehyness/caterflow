@@ -1,16 +1,23 @@
-// schemas/transferredItem.js
+// schemas/transferredItem.ts
 import { defineType, defineField } from 'sanity';
 
 export default defineType({
-    name: 'TransferredItem', // Capitalized for consistency
+    name: 'TransferredItem',
     title: 'Transferred Item',
     type: 'object',
     fields: [
         defineField({
+            name: '_key',
+            title: 'Key',
+            type: 'string',
+            readOnly: true,
+            hidden: true,
+        }),
+        defineField({
             name: 'stockItem',
             title: 'Stock Item',
             type: 'reference',
-            to: [{ type: 'StockItem' }], // Consistent capitalization
+            to: [{ type: 'StockItem' }],
             validation: (Rule) => Rule.required(),
         }),
         defineField({
@@ -18,6 +25,12 @@ export default defineType({
             title: 'Transferred Quantity',
             type: 'number',
             validation: (Rule) => Rule.required().min(1).integer(),
+        }),
+        defineField({
+            name: 'notes',
+            title: 'Notes',
+            type: 'text',
+            rows: 2,
         }),
     ],
     preview: {
@@ -28,8 +41,8 @@ export default defineType({
         },
         prepare({ title, subtitle, unit }) {
             return {
-                title: title,
-                subtitle: `${subtitle} ${unit}`,
+                title: title || 'Unknown Item',
+                subtitle: `${subtitle || 0} ${unit || ''}`.trim(),
             };
         },
     },

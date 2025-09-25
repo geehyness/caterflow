@@ -21,10 +21,11 @@ import {
     Text,
     IconButton,
     Select,
+    VStack,
 } from '@chakra-ui/react';
-import { FiPlus, FiSearch, FiEdit, FiTrash2, FiEye, FiFilter } from 'react-icons/fi';
-import DataTable from '@/components/DataTable';
-import { useSession } from 'next-auth/react'
+import { FiPlus, FiSearch, FiEdit, FiTrash2, FiEye, FiFilter, FiArrowLeft, FiArrowRight } from 'react-icons/fi';
+import DataTable from '@/app/actions/DataTable';
+import { useSession } from 'next-auth/react';
 import TransferModal from '@/components/TransferModal';
 
 // Standardized interfaces to match TransferModal.tsx
@@ -55,95 +56,83 @@ interface Transfer {
     _id: string;
     transferNumber: string;
     transferDate: string;
-    status: 'pending' | 'completed' | 'cancelled';
+    status: 'pending' | 'completed' | 'cancelled' | 'approved' | 'pending-approval';
     fromBin: Bin | string;
     toBin: Bin | string;
     items: TransferredItem[];
     totalItems: number;
+    notes?: string;
 }
+
+const badgeColorScheme = (status: Transfer['status']) => {
+    switch (status) {
+        case 'completed':
+            return 'green';
+        case 'pending':
+            return 'orange';
+        case 'pending-approval':
+            return 'yellow';
+        case 'approved':
+            return 'blue';
+        case 'cancelled':
+            return 'red';
+        default:
+            return 'gray';
+    }
+};
 
 export default function TransfersPage() {
     const { data: session, status } = useSession();
     const user = session?.user;
 
-    const [transfers, setTransfers] = useState<Transfer[]>([]);
-    const [filteredTransfers, setFilteredTransfers] = useState<Transfer[]>([]);
-    const [selectedTransfer, setSelectedTransfer] = useState<Transfer | null>(null);
-    const [searchTerm, setSearchTerm] = useState('');
-    const [viewMode, setViewMode] = useState<'all' | 'actionRequired'>('all');
-    const [itemsPerPage, setItemsPerPage] = useState(10);
-    const [currentPage, setCurrentPage] = useState(1);
-    const [isLoading, setIsLoading] = useState(true);
-
     const { isOpen, onOpen, onClose } = useDisclosure();
     const toast = useToast();
+    const [transfers, setTransfers] = useState<Transfer[]>([]);
+    const [filteredTransfers, setFilteredTransfers] = useState<Transfer[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const [selectedTransfer, setSelectedTransfer] = useState<Transfer | null>(null);
+    const [searchTerm, setSearchTerm] = useState('');
 
-    // Chakra UI theming
-    const cardBg = useColorModeValue('white', 'gray.700');
-    const borderColor = useColorModeValue('gray.200', 'gray.600');
-    const searchIconColor = useColorModeValue('gray.400', 'gray.500');
-    const inputBg = useColorModeValue('gray.50', 'gray.600');
-    const badgeColorScheme = (status: Transfer['status']) => {
-        switch (status) {
-            case 'completed':
-                return 'green';
-            case 'pending':
-                return 'orange';
-            case 'cancelled':
-                return 'red';
-            default:
-                return 'gray';
-        }
-    };
+    const [currentPage, setCurrentPage] = useState(1);
+    const [itemsPerPage, setItemsPerPage] = useState(10);
 
-    const fetchTransfers = useCallback(async () => {
+    const handleFetchTransfers = useCallback(async () => {
         setIsLoading(true);
+        setError(null);
         try {
-            const response = await fetch('/api/operations/transfers');
+            const response = await fetch('/api/transfers');
             if (!response.ok) {
                 throw new Error('Failed to fetch transfers');
             }
             const data: Transfer[] = await response.json();
             setTransfers(data);
             setFilteredTransfers(data);
-        } catch (error) {
-            console.error('Error fetching transfers:', error);
-            toast({
-                title: 'Error fetching transfers.',
-                description: 'Failed to load transfer data. Please try again.',
-                status: 'error',
-                duration: 5000,
-                isClosable: true,
-            });
+        } catch (err: any) {
+            console.error('Failed to fetch transfers:', err);
+            setError('Failed to load transfers. Please try again.');
         } finally {
             setIsLoading(false);
         }
-    }, [toast]);
+    }, []);
 
     useEffect(() => {
-        fetchTransfers();
-    }, [fetchTransfers]);
+        handleFetchTransfers();
+    }, [handleFetchTransfers]);
 
-    useEffect(() => {
-        const lowercasedSearchTerm = searchTerm.toLowerCase();
+    const handleSaveSuccess = () => {
+        onClose();
+        handleFetchTransfers();
+        toast({
+            title: 'Transfer Saved',
+            description: 'The transfer has been updated successfully.',
+            status: 'success',
+            duration: 3000,
+            isClosable: true,
+        });
+    };
 
-        let results = transfers;
-
-        if (viewMode === 'actionRequired') {
-            results = results.filter(transfer => transfer.status === 'pending');
-        }
-
-        results = results.filter(transfer =>
-            transfer.transferNumber.toLowerCase().includes(lowercasedSearchTerm) ||
-            getSiteName(transfer.fromBin).toLowerCase().includes(lowercasedSearchTerm) ||
-            getSiteName(transfer.toBin).toLowerCase().includes(lowercasedSearchTerm)
-        );
-
-        setFilteredTransfers(results);
-        setCurrentPage(1); // Reset to first page on new search/filter
-    }, [searchTerm, transfers, viewMode]);
-
-    const handleAddTransfer = () => {
+    const handleCreateTransfer = () => {
         setSelectedTransfer(null);
         onOpen();
     };
@@ -153,185 +142,189 @@ export default function TransfersPage() {
         onOpen();
     };
 
-    const handleSaveSuccess = () => {
-        fetchTransfers();
-        onClose();
-        toast({
-            title: 'Transfer saved.',
-            description: 'The transfer has been saved successfully.',
-            status: 'success',
-            duration: 5000,
-            isClosable: true,
-        });
-    };
-
-    // Helper to get site name from a Bin object or a string
-    const getSiteName = (bin: Bin | string): string => {
-        if (typeof bin === 'object' && bin.site) {
-            return bin.site.name;
+    const handleSearch = (event: ChangeEvent<HTMLInputElement>) => {
+        const value = event.target.value;
+        setSearchTerm(value);
+        if (value === '') {
+            setFilteredTransfers(transfers);
+        } else {
+            const lowercasedValue = value.toLowerCase();
+            const filtered = transfers.filter(transfer =>
+                transfer.transferNumber.toLowerCase().includes(lowercasedValue) ||
+                (typeof transfer.fromBin === 'object' && transfer.fromBin.name.toLowerCase().includes(lowercasedValue)) ||
+                (typeof transfer.toBin === 'object' && transfer.toBin.name.toLowerCase().includes(lowercasedValue))
+            );
+            setFilteredTransfers(filtered);
         }
-        return 'N/A';
     };
 
     const columns = [
         {
-            header: 'Transfer #',
-            accessorKey: 'transferNumber',
-            cell: (row: any) => (
-                <Text
-                    fontWeight="medium"
-                    _hover={{ color: 'blue.500', cursor: 'pointer' }}
-                    onClick={() => handleEditTransfer(row.original)}
-                >
-                    {row.original.transferNumber}
-                </Text>
-            ),
-        },
-        {
-            header: 'Date',
-            accessorKey: 'transferDate',
-            cell: (row: any) => new Date(row.original.transferDate).toLocaleDateString(),
-        },
-        {
-            header: 'From Bin',
-            accessorKey: 'fromBin',
-            cell: (row: any) => getSiteName(row.original.fromBin),
-        },
-        {
-            header: 'To Bin',
-            accessorKey: 'toBin',
-            cell: (row: any) => getSiteName(row.original.toBin),
-        },
-        {
-            header: 'Total Items',
-            accessorKey: 'totalItems',
-            cell: (row: any) => row.original.totalItems,
+            header: 'Actions',
+            accessorKey: 'actions',
+            cell: (row: any) => {
+                if (!row) return null;
+                const isEditable = row.status === 'draft';
+                return (
+                    <HStack spacing={2}>
+                        <Button
+                            aria-label="View/Edit"
+                            leftIcon={isEditable ? <FiEdit /> : <FiEye />}
+                            size="sm"
+                            onClick={() => handleEditTransfer(row)}
+                            colorScheme={isEditable ? "blue" : "gray"}
+                        >
+                            {isEditable ? 'Edit' : 'View'}
+                        </Button>
+                    </HStack>
+                );
+            },
         },
         {
             header: 'Status',
             accessorKey: 'status',
-            cell: (row: any) => (
-                <Badge colorScheme={badgeColorScheme(row.original.status)}>
-                    {row.original.status}
-                </Badge>
-            ),
+            cell: (row: any) => {
+                if (!row) return null;
+                return (
+                    <Badge colorScheme={badgeColorScheme(row.status)}>
+                        {row.status}
+                    </Badge>
+                );
+            },
         },
         {
-            header: 'Actions',
-            accessorKey: 'actions',
-            cell: (row: any) => (
-                <HStack spacing={2}>
-                    <IconButton
-                        aria-label="View/Edit"
-                        icon={<FiEdit />}
-                        size="sm"
-                        onClick={() => handleEditTransfer(row.original)}
-                        colorScheme="blue"
-                    />
-                </HStack>
-            ),
+            header: 'Transfer #',
+            accessorKey: 'transferNumber',
+            cell: (row: any) => {
+                if (!row) return null;
+                return (
+                    <Text
+                        fontWeight="medium"
+                        _hover={{ color: 'blue.500', cursor: 'pointer' }}
+                        onClick={() => handleEditTransfer(row)}
+                    >
+                        {row.transferNumber}
+                    </Text>
+                );
+            },
         },
+        {
+            header: 'Date',
+            accessorKey: 'transferDate',
+            cell: (row: any) => {
+                if (!row) return null;
+                return new Date(row.transferDate).toLocaleDateString();
+            },
+        },
+        {
+            header: 'From Bin',
+            accessorKey: 'fromBin',
+            cell: (row: any) => {
+                if (!row) return null;
+                // Handle both string reference and populated object
+                if (typeof row.fromBin === 'object' && row.fromBin !== null) {
+                    return `${row.fromBin.name} (${row.fromBin.site?.name || 'No Site'})`;
+                }
+                return 'Loading...';
+            },
+        },
+        {
+            header: 'To Bin',
+            accessorKey: 'toBin',
+            cell: (row: any) => {
+                if (!row) return null;
+                if (typeof row.toBin === 'object' && row.toBin !== null) {
+                    return `${row.toBin.name} (${row.toBin.site?.name || 'No Site'})`;
+                }
+                return 'Loading...';
+            },
+        },
+        {
+            header: 'Total Items',
+            accessorKey: 'totalItems',
+            cell: (row: any) => {
+                if (!row) return null;
+                return row.totalItems || 0;
+            },
+        },
+
     ];
 
     const startIndex = (currentPage - 1) * itemsPerPage;
-    const paginatedData = filteredTransfers.slice(startIndex, startIndex + itemsPerPage);
+    const endIndex = startIndex + itemsPerPage;
+    const paginatedData = filteredTransfers.slice(startIndex, endIndex);
 
-    if (isLoading) {
-        return (
-            <Flex justifyContent="center" alignItems="center" height="100vh">
-                <Spinner size="xl" />
-            </Flex>
-        );
-    }
+    const totalPages = Math.ceil(filteredTransfers.length / itemsPerPage);
+
+    const inputBg = useColorModeValue('white', 'gray.700');
+    const cardBg = useColorModeValue('white', 'gray.700');
+    const borderColor = useColorModeValue('gray.200', 'gray.600');
 
     return (
-        <Box p={4} maxW="container.xl" mx="auto">
-            <Flex
-                justifyContent="space-between"
-                alignItems={{ base: 'flex-start', md: 'center' }}
-                py={4}
-                mb={6}
-                flexDirection={{ base: 'column', md: 'row' }}
-                gap={{ base: 4, md: 3 }}
-            >
-                <Heading as="h1" size="xl">
-                    Transfers
-                </Heading>
-                <HStack spacing={3} flexWrap="wrap">
-                    <Button
-                        leftIcon={<FiEye />}
-                        colorScheme={viewMode === 'all' ? 'brand' : 'gray'}
-                        onClick={() => setViewMode('all')}
-                        variant="outline"
-                    >
-                        View All
-                    </Button>
-
-                    <Button
-                        leftIcon={<FiFilter />}
-                        colorScheme={viewMode === 'actionRequired' ? 'brand' : 'gray'}
-                        onClick={() => setViewMode('actionRequired')}
-                        variant="outline"
-                    >
-                        Action Required
-                    </Button>
-                    <Button
-                        leftIcon={<FiPlus />}
-                        colorScheme="brand"
-                        variant="solid"
-                        onClick={handleAddTransfer}
-                    >
-                        New Transfer
+        <Box p={{ base: 4, md: 8 }} bg={useColorModeValue('gray.50', 'gray.800')} minH="100vh">
+            <Flex justifyContent="space-between" alignItems="center" mb={6} direction={{ base: 'column', md: 'row' }}>
+                <Heading as="h1" size="xl" mb={{ base: 4, md: 0 }}>Transfers</Heading>
+                <HStack>
+                    <Button leftIcon={<FiPlus />} colorScheme="blue" onClick={handleCreateTransfer}>
+                        Create New Transfer
                     </Button>
                 </HStack>
             </Flex>
 
-            <Flex direction={{ base: 'column', md: 'row' }} mb={4} justifyContent="space-between" alignItems="center" gap={{ base: 4, md: 8 }} py={4} px={0}>
-                <InputGroup maxW="100%">
-                    <InputLeftElement pointerEvents="none">
-                        <Icon as={FiSearch} color={searchIconColor} />
-                    </InputLeftElement>
-                    <Input
-                        type="text"
-                        placeholder="Search transfers..."
-                        value={searchTerm}
-                        onChange={(e: ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
-                        flex="1"
-                        bg={inputBg}
-                    />
-                </InputGroup>
-                <HStack alignItems="center" mt={{ base: 4, md: 0 }}>
-                    <Text mr={2} width={{ base: '120px', md: '160px' }} fontSize="sm" color="gray.600">
-                        Items per page:
+            {isLoading ? (
+                <Flex justifyContent="center" alignItems="center" minH="100px">
+                    <Spinner size="xl" />
+                </Flex>
+            ) : error ? (
+                <Flex justifyContent="center" alignItems="center" minH="100px" direction="column">
+                    <Text fontSize="lg" color="red.500">
+                        {error}
                     </Text>
-                    <Select
-                        value={itemsPerPage}
-                        onChange={(e) => {
-                            setItemsPerPage(Number(e.target.value));
-                            setCurrentPage(1); // Reset to first page
-                        }}
-                        maxW="100px"
-                        size="sm"
-                        bg={inputBg}
-                    >
-                        {[5, 10, 25, 50].map((size) => (
-                            <option key={size} value={size}>
-                                {size}
-                            </option>
-                        ))}
-                    </Select>
-                </HStack>
-            </Flex>
+                    <Button onClick={handleFetchTransfers} mt={4}>
+                        Try Again
+                    </Button>
+                </Flex>
+            ) : filteredTransfers.length === 0 ? (
+                <Text fontSize="lg" color="gray.500" textAlign="center" py={10}>
+                    No transfers found.
+                </Text>
+            ) : (
+                <Card bg={cardBg} border="1px" borderColor={borderColor} borderRadius="md">
+                    <CardBody p={0}>
+                        <DataTable
+                            columns={columns}
+                            data={paginatedData}
+                            loading={false}
+                        />
+                    </CardBody>
+                </Card>
+            )}
 
-            <Card bg={cardBg} border="1px" borderColor={borderColor} borderRadius="md">
-                <CardBody p={0}>
-                    <DataTable
-                        columns={columns}
-                        data={paginatedData}
-                        loading={false}
-                    />
-                </CardBody>
-            </Card>
+            {filteredTransfers.length > 0 && (
+                <Flex justifyContent="space-between" alignItems="center" mt={4} direction={{ base: 'column', md: 'row' }}>
+                    <Text fontSize="sm" color="gray.600" mb={{ base: 2, md: 0 }}>
+                        Showing {startIndex + 1} to {Math.min(endIndex, filteredTransfers.length)} of {filteredTransfers.length} entries
+                    </Text>
+                    <HStack>
+                        <Button
+                            onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                            isDisabled={currentPage === 1}
+                            leftIcon={<FiArrowLeft />}
+                            size="sm"
+                        >
+                            Previous
+                        </Button>
+                        <Button
+                            onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                            isDisabled={currentPage === totalPages}
+                            rightIcon={<FiArrowRight />}
+                            size="sm"
+                        >
+                            Next
+                        </Button>
+                    </HStack>
+                </Flex>
+            )}
 
             <TransferModal
                 isOpen={isOpen}
