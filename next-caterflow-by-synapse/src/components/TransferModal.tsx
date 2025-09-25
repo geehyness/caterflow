@@ -379,7 +379,7 @@ export default function TransferModal({ isOpen, onClose, transfer, onSave }: Tra
         }
     };
 
-    const getStatusBadge = (status: string) => {
+    const getStatusBadge = (status: 'draft' | 'pending-approval' | 'approved' | 'completed' | 'cancelled') => {
         const colorSchemes = {
             draft: 'gray',
             'pending-approval': 'orange',

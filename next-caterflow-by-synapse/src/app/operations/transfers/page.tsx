@@ -56,20 +56,42 @@ interface Transfer {
     _id: string;
     transferNumber: string;
     transferDate: string;
-    status: 'pending' | 'completed' | 'cancelled' | 'approved' | 'pending-approval';
-    fromBin: Bin | string;
-    toBin: Bin | string;
-    items: TransferredItem[];
-    totalItems: number;
+    status: 'draft' | 'pending-approval' | 'approved' | 'completed' | 'cancelled';
+    fromBin: {
+        _id: string;
+        name: string;
+        site: {
+            _id: string;
+            name: string;
+        };
+    };
+    toBin: {
+        _id: string;
+        name: string;
+        site: {
+            _id: string;
+            name: string;
+        };
+    };
+    transferredItems: TransferredItem[];
     notes?: string;
+    transferredBy?: {
+        _id: string;
+        name: string;
+    };
+    approvedBy?: {
+        _id: string;
+        name: string;
+    };
+    approvedAt?: string;
 }
 
 const badgeColorScheme = (status: Transfer['status']) => {
     switch (status) {
         case 'completed':
             return 'green';
-        case 'pending':
-            return 'orange';
+        case 'draft': // Added draft status
+            return 'gray';
         case 'pending-approval':
             return 'yellow';
         case 'approved':
@@ -97,6 +119,7 @@ export default function TransfersPage() {
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(10);
 
+    // Replace the handleFetchTransfers function:
     const handleFetchTransfers = useCallback(async () => {
         setIsLoading(true);
         setError(null);
@@ -105,9 +128,19 @@ export default function TransfersPage() {
             if (!response.ok) {
                 throw new Error('Failed to fetch transfers');
             }
-            const data: Transfer[] = await response.json();
-            setTransfers(data);
-            setFilteredTransfers(data);
+            const data: any[] = await response.json();
+
+            // Ensure bins are properly populated
+            const transformedData: Transfer[] = data.map(transfer => ({
+                ...transfer,
+                transferredItems: transfer.items || transfer.transferredItems || [],
+                // Make sure fromBin and toBin are objects, not just IDs
+                fromBin: typeof transfer.fromBin === 'object' ? transfer.fromBin : { _id: transfer.fromBin, name: 'Loading...', site: { _id: '', name: '' } },
+                toBin: typeof transfer.toBin === 'object' ? transfer.toBin : { _id: transfer.toBin, name: 'Loading...', site: { _id: '', name: '' } }
+            }));
+
+            setTransfers(transformedData);
+            setFilteredTransfers(transformedData);
         } catch (err: any) {
             console.error('Failed to fetch transfers:', err);
             setError('Failed to load transfers. Please try again.');
@@ -164,7 +197,7 @@ export default function TransfersPage() {
             accessorKey: 'actions',
             cell: (row: any) => {
                 if (!row) return null;
-                const isEditable = row.status === 'draft';
+                const isEditable = row.status === 'draft' || row.status === 'approved';
                 return (
                     <HStack spacing={2}>
                         <Button

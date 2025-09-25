@@ -441,7 +441,7 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
     };
 
     // Called by FileUploadModal when upload completes; attachmentId is expected
-    const handleFinalizeDispatch = async (attachmentId: string) => {
+    const handleFinalizeDispatch = async (attachmentIds: string[]) => {
         // close upload modal
         setIsUploadModalOpen(false);
         setIsSaving(true);
@@ -450,14 +450,16 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
             const idToUse = savedDispatchId || dispatch?._id;
             if (!idToUse) throw new Error('No dispatch ID available to finalize');
 
-            // Patch the dispatch: set evidenceStatus to complete and add attachment reference
-            // This will replace attachments array in the document with the provided array.
-            // If you prefer append behavior, ensure your server side merges/append instead.
+            if (attachmentIds.length === 0) {
+                throw new Error('No attachments uploaded');
+            }
+
+            // Patch the dispatch: set evidenceStatus to complete and add attachment references
             const body: any = {
                 evidenceStatus: 'complete',
                 status: 'completed',
                 completedAt: new Date().toISOString(),
-                attachments: [{ _type: 'reference', _ref: attachmentId }],
+                attachments: attachmentIds.map(id => ({ _type: 'reference', _ref: id })),
             };
 
             const res = await fetch(`/api/dispatches/${idToUse}`, {
@@ -473,7 +475,7 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
 
             toast({
                 title: 'Dispatch completed',
-                description: 'Evidence uploaded and dispatch marked as complete.',
+                description: `Evidence uploaded (${attachmentIds.length} files) and dispatch marked as complete.`,
                 status: 'success',
                 duration: 4000,
                 isClosable: true,
