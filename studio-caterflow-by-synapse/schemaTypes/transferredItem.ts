@@ -7,7 +7,7 @@ export default defineType({
     type: 'object',
     fields: [
         defineField({
-            name: '_key',
+            name: 'key',
             title: 'Key',
             type: 'string',
             readOnly: true,
