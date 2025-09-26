@@ -337,7 +337,7 @@ export default function CreatePurchaseOrderModal({
                             </VStack>
 
                             <HStack mt={4} justifyContent="space-between" alignItems="center" flexWrap="wrap">
-                                <Text fontSize="lg" fontWeight="bold">Total: ${totalCost.toFixed(2)}</Text>
+                                <Text fontSize="lg" fontWeight="bold">Total: E {totalCost.toFixed(2)}</Text>
                                 <Button
                                     size="sm"
                                     colorScheme="brand"

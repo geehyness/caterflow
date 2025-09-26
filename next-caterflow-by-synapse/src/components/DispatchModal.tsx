@@ -57,6 +57,7 @@ interface DispatchedItem {
         unitPrice?: number;
     };
     dispatchedQuantity: number;
+    unitPrice?: number; // ADD THIS
     totalCost?: number;
     notes?: string;
 }
@@ -259,8 +260,40 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
     // Determine editability based on evidenceStatus or status
     const isEditable = !(dispatch?.evidenceStatus === 'complete' || dispatch?.status === 'completed');
 
+    // Add this function after handleQuantityChange
+    const handleUnitPriceChange = (key: string, _valueAsString: string, valueAsNumber: number) => {
+        setDispatchedItems(prevItems =>
+            prevItems.map(item => {
+                if (item._key === key) {
+                    const unitPrice = isNaN(valueAsNumber) ? 0 : valueAsNumber;
+                    const totalCost = unitPrice * item.dispatchedQuantity;
+                    return {
+                        ...item,
+                        unitPrice,
+                        totalCost
+                    };
+                }
+                return item;
+            })
+        );
+    };
+
+    // Add this function to calculate grand total
+    const calculateGrandTotal = (): number => {
+        return dispatchedItems.reduce((total, item) => {
+            return total + (item.totalCost || 0);
+        }, 0);
+    };
+
+    // Add this function to calculate cost per person
+    const calculateCostPerPerson = (): number => {
+        const grandTotal = calculateGrandTotal();
+        return peopleFed && peopleFed > 0 ? grandTotal / peopleFed : 0;
+    };
+
     // Stock item selection
     const handleStockItemSelect = (item: any) => {
+        const unitPrice = item.unitPrice || 0;
         const newItem: DispatchedItem = {
             _key: nanoid(),
             stockItem: {
@@ -269,10 +302,11 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
                 sku: item.sku,
                 unitOfMeasure: item.unitOfMeasure,
                 currentStock: item.currentStock,
-                unitPrice: item.unitPrice,
+                unitPrice: unitPrice,
             },
             dispatchedQuantity: 1,
-            totalCost: item.unitPrice || 0,
+            unitPrice: unitPrice, // Store on dispatched item
+            totalCost: unitPrice * 1, // Calculate initial total
             notes: '',
         };
 
@@ -298,8 +332,13 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
         setDispatchedItems(prevItems =>
             prevItems.map(item => {
                 if (item._key === key) {
-                    const totalCost = item.stockItem.unitPrice ? item.stockItem.unitPrice * valueAsNumber : 0;
-                    return { ...item, dispatchedQuantity: valueAsNumber, totalCost };
+                    const unitPrice = item.unitPrice || 0;
+                    const totalCost = unitPrice * valueAsNumber;
+                    return {
+                        ...item,
+                        dispatchedQuantity: valueAsNumber,
+                        totalCost
+                    };
                 }
                 return item;
             })
@@ -343,9 +382,13 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
                 dispatchedItems: dispatchedItems.map(item => ({
                     _type: 'DispatchedItem',
                     _key: item._key || nanoid(),
-                    stockItem: { _type: 'reference', _ref: item.stockItem._id },
+                    stockItem: {
+                        _type: 'reference',
+                        _ref: item.stockItem._id
+                    },
                     dispatchedQuantity: item.dispatchedQuantity,
-                    totalCost: item.totalCost || 0,
+                    unitPrice: item.unitPrice || 0, // ✅ Ensure this is included
+                    totalCost: item.totalCost || 0, // ✅ Ensure this is included
                     notes: item.notes || '',
                 })),
                 notes,
@@ -522,7 +565,7 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
                 scrollBehavior="inside"
             >
                 <ModalOverlay />
-                <ModalContent>
+                <ModalContent maxH="100vh">
                     <ModalHeader>{dispatch ? 'Update Dispatch' : 'Create New Dispatch'}</ModalHeader>
                     <ModalCloseButton isDisabled={isSaving} />
                     {loading && !dispatch ? (
@@ -532,7 +575,7 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
                         </Box>
                     ) : (
                         <form onSubmit={handleSubmit}>
-                            <ModalBody>
+                            <ModalBody maxHeight="80vh" overflowY="auto">
                                 <VStack spacing={4} align="stretch">
                                     {/* Use responsive grid for two-column layout on medium screens and up */}
                                     <Grid templateColumns={{ base: '1fr', md: 'repeat(2, 1fr)' }} gap={4}>
@@ -659,7 +702,6 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
                                             </Box>
                                         ) : (
                                             <TableContainer
-                                                // Ensure TableContainer uses the theme's card styling
                                                 bg={tableBg}
                                                 borderRadius="lg"
                                                 boxShadow={tableBoxShadow}
@@ -670,7 +712,9 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
                                                     <Thead>
                                                         <Tr>
                                                             <Th color={tableHeaderColor} borderColor={tableBorderColor}>Item</Th>
+                                                            <Th color={tableHeaderColor} borderColor={tableBorderColor}>Unit Price</Th>
                                                             <Th color={tableHeaderColor} borderColor={tableBorderColor}>Quantity</Th>
+                                                            <Th color={tableHeaderColor} borderColor={tableBorderColor}>Total Cost</Th>
                                                             <Th color={tableHeaderColor} borderColor={tableBorderColor}>Unit</Th>
                                                             <Th color={tableHeaderColor} borderColor={tableBorderColor}>Actions</Th>
                                                         </Tr>
@@ -679,6 +723,25 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
                                                         {dispatchedItems.map((item, index) => (
                                                             <Tr key={item._key}>
                                                                 <Td borderColor={tableBorderColor}>{item.stockItem.name}</Td>
+                                                                <Td borderColor={tableBorderColor}>
+                                                                    <NumberInput
+                                                                        value={item.unitPrice || 0}
+                                                                        onChange={(valueAsString, valueAsNumber) =>
+                                                                            handleUnitPriceChange(item._key, valueAsString, valueAsNumber)
+                                                                        }
+                                                                        min={0}
+                                                                        precision={2}
+                                                                        size="sm"
+                                                                        width="100px"
+                                                                        isDisabled={!isEditable}
+                                                                    >
+                                                                        <NumberInputField />
+                                                                        <NumberInputStepper>
+                                                                            <NumberIncrementStepper />
+                                                                            <NumberDecrementStepper />
+                                                                        </NumberInputStepper>
+                                                                    </NumberInput>
+                                                                </Td>
                                                                 <Td borderColor={tableBorderColor}>
                                                                     <NumberInput
                                                                         value={item.dispatchedQuantity}
@@ -696,6 +759,11 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
                                                                             <NumberDecrementStepper />
                                                                         </NumberInputStepper>
                                                                     </NumberInput>
+                                                                </Td>
+                                                                <Td borderColor={tableBorderColor}>
+                                                                    <Text fontWeight="medium">
+                                                                        E {(item.totalCost || 0).toFixed(2)}
+                                                                    </Text>
                                                                 </Td>
                                                                 <Td borderColor={tableBorderColor}>{item.stockItem.unitOfMeasure}</Td>
                                                                 <Td borderColor={tableBorderColor}>
@@ -722,6 +790,36 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
                                                     </Tbody>
                                                 </Table>
                                             </TableContainer>
+                                        )}
+
+                                        {/* Cost Summary Section */}
+                                        {dispatchedItems.length > 0 && (
+                                            <VStack align="stretch" mt={4} p={4} bg="gray.50" borderRadius="md">
+                                                <HStack justify="space-between">
+                                                    <Text fontWeight="bold">Grand Total Cost:</Text>
+                                                    <Text fontWeight="bold" fontSize="lg">
+                                                        E{calculateGrandTotal().toFixed(2)}
+                                                    </Text>
+                                                </HStack>
+
+                                                {peopleFed && peopleFed > 0 ? (
+                                                    <>
+                                                        <HStack justify="space-between">
+                                                            <Text>Cost per Person:</Text>
+                                                            <Text fontWeight="medium">
+                                                                E {calculateCostPerPerson().toFixed(2)}
+                                                            </Text>
+                                                        </HStack>
+                                                        <Text fontSize="sm" color="gray.600">
+                                                            Based on {peopleFed} people fed
+                                                        </Text>
+                                                    </>
+                                                ) : (
+                                                    <Text fontSize="sm" color="gray.600" fontStyle="italic">
+                                                        No people fed specified
+                                                    </Text>
+                                                )}
+                                            </VStack>
                                         )}
 
                                         <Button

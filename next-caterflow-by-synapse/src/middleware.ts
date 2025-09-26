@@ -25,6 +25,7 @@ export default withAuth(
       '/operations/adjustments': ['admin', 'siteManager', 'stockController', 'auditor'],
       '/reporting': ['admin', 'auditor'],
       '/admin': ['admin'],
+      '/dispatch-types': ['admin'], // ← Add this line
     };
 
     const isProtectedRoute = Object.keys(protectedRoutes).some(
@@ -78,5 +79,6 @@ export const config = {
     '/reporting',
     '/admin',
     // Removed '/login' from here
+    '/dispatch-types', // ← Add this line
   ],
 };
