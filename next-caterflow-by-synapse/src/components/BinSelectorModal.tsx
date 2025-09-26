@@ -1,4 +1,3 @@
-// components/BinSelectorModal.tsx
 import React, { useState, useEffect, useCallback } from 'react';
 import {
     Modal,
@@ -22,6 +21,7 @@ import {
     InputGroup,
     InputLeftElement,
     Spinner,
+    useColorModeValue,
 } from '@chakra-ui/react';
 import { FiSearch } from 'react-icons/fi';
 
@@ -53,6 +53,14 @@ export default function BinSelectorModal({ isOpen, onClose, onSelect, selectedSi
     const [searchTerm, setSearchTerm] = useState('');
     const [loading, setLoading] = useState(true);
     const toast = useToast();
+
+    // Theme-aware colors
+    const modalBg = useColorModeValue('neutral.light.bg-secondary', 'neutral.dark.bg-secondary');
+    const headerBg = useColorModeValue('neutral.light.bg-header', 'neutral.dark.bg-header');
+    const borderColor = useColorModeValue('neutral.light.border-color', 'neutral.dark.border-color');
+    const listItemBg = useColorModeValue('neutral.light.bg-secondary', 'neutral.dark.bg-secondary');
+    const listItemHoverBg = useColorModeValue('neutral.light.bg-primary', 'neutral.dark.bg-primary');
+    const placeholderColor = useColorModeValue('neutral.light.text-placeholder', 'neutral.dark.text-placeholder');
 
     const fetchBinsAndSites = useCallback(async () => {
         setLoading(true);
@@ -110,33 +118,50 @@ export default function BinSelectorModal({ isOpen, onClose, onSelect, selectedSi
 
     const getBinTypeColor = (binType: string) => {
         switch (binType) {
-            case 'storage':
+            case 'main-storage':
+                return 'brand';
+            case 'overflow-storage':
                 return 'blue';
-            case 'coldStorage':
+            case 'refrigerator':
+            case 'freezer':
                 return 'cyan';
-            case 'display':
+            case 'dispensing-point':
                 return 'green';
+            case 'receiving-area':
+                return 'purple';
             default:
                 return 'gray';
         }
     };
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} size="xl">
+        <Modal
+            isOpen={isOpen}
+            onClose={onClose}
+            size={{ base: 'full', md: 'xl' }}
+            scrollBehavior="inside"
+        >
             <ModalOverlay />
-            <ModalContent>
-                <ModalHeader>Select a Bin</ModalHeader>
+            <ModalContent bg={modalBg}>
+                <ModalHeader
+                    bg={headerBg}
+                    borderBottom="1px solid"
+                    borderColor={borderColor}
+                >
+                    Select a Bin
+                </ModalHeader>
                 <ModalCloseButton />
                 <ModalBody>
-                    <VStack spacing={4} align="stretch">
+                    <VStack spacing={4} align="stretch" py={4}>
                         <InputGroup>
                             <InputLeftElement pointerEvents="none">
-                                <FiSearch color="gray.300" />
+                                <FiSearch color={placeholderColor} />
                             </InputLeftElement>
                             <Input
                                 placeholder="Search bins..."
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
+                                _placeholder={{ color: placeholderColor }}
                             />
                         </InputGroup>
                         <Select
@@ -157,7 +182,7 @@ export default function BinSelectorModal({ isOpen, onClose, onSelect, selectedSi
                                     <Spinner size="xl" />
                                 </Box>
                             ) : filteredBins.length === 0 ? (
-                                <Text textAlign="center" color="gray.500" mt={4}>
+                                <Text textAlign="center" color="neutral.light.text-secondary" mt={4}>
                                     No bins found.
                                 </Text>
                             ) : (
@@ -168,7 +193,9 @@ export default function BinSelectorModal({ isOpen, onClose, onSelect, selectedSi
                                             p={3}
                                             borderWidth="1px"
                                             borderRadius="md"
-                                            _hover={{ bg: 'gray.100', cursor: 'pointer' }}
+                                            borderColor={borderColor}
+                                            bg={listItemBg}
+                                            _hover={{ bg: listItemHoverBg, cursor: 'pointer' }}
                                             onClick={() => handleBinSelect(bin)}
                                         >
                                             <VStack align="start" spacing={1}>
@@ -178,9 +205,9 @@ export default function BinSelectorModal({ isOpen, onClose, onSelect, selectedSi
                                                         {bin.binType}
                                                     </Badge>
                                                 </HStack>
-                                                <Text fontSize="sm">Site: {bin.site.name}</Text>
+                                                <Text fontSize="sm" color="neutral.light.text-secondary">Site: {bin.site.name}</Text>
                                                 {bin.locationDescription && (
-                                                    <Text fontSize="sm">Location: {bin.locationDescription}</Text>
+                                                    <Text fontSize="sm" color="neutral.light.text-secondary">Location: {bin.locationDescription}</Text>
                                                 )}
                                             </VStack>
                                         </ListItem>
@@ -190,7 +217,10 @@ export default function BinSelectorModal({ isOpen, onClose, onSelect, selectedSi
                         </Box>
                     </VStack>
                 </ModalBody>
-                <ModalFooter>
+                <ModalFooter
+                    borderTop="1px solid"
+                    borderColor={borderColor}
+                >
                     <Button variant="ghost" onClick={onClose}>
                         Cancel
                     </Button>

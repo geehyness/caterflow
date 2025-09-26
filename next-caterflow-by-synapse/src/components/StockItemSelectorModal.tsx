@@ -21,6 +21,7 @@ import {
     InputGroup,
     InputLeftElement,
     Spinner,
+    useColorModeValue, // Added this import
 } from '@chakra-ui/react';
 import { FiSearch } from 'react-icons/fi';
 
@@ -59,6 +60,14 @@ export default function StockItemSelectorModal({ isOpen, onClose, onSelect, exis
     const [searchTerm, setSearchTerm] = useState('');
     const [loading, setLoading] = useState(true);
     const toast = useToast();
+
+    // Theme-aware colors
+    const searchIconColor = useColorModeValue('neutral.light.icon-color', 'neutral.dark.icon-color');
+    const noItemsTextColor = useColorModeValue('neutral.light.text-secondary', 'neutral.dark.text-secondary');
+    const listItemHoverBg = useColorModeValue('neutral.light.bg-secondary', 'neutral.dark.bg-card-hover');
+    const listItemBorderColor = useColorModeValue('neutral.light.border-color', 'neutral.dark.border-color');
+    const footerBorderColor = useColorModeValue('neutral.light.border-color', 'neutral.dark.border-color');
+
 
     const fetchStockItems = useCallback(async () => {
         setLoading(true);
@@ -129,7 +138,7 @@ export default function StockItemSelectorModal({ isOpen, onClose, onSelect, exis
                     <VStack spacing={4} align="stretch">
                         <InputGroup>
                             <InputLeftElement pointerEvents="none">
-                                <FiSearch color="gray.300" />
+                                <FiSearch color={searchIconColor} />
                             </InputLeftElement>
                             <Input
                                 placeholder="Search items..."
@@ -155,7 +164,7 @@ export default function StockItemSelectorModal({ isOpen, onClose, onSelect, exis
                                     <Spinner size="xl" />
                                 </Box>
                             ) : filteredItems.length === 0 ? (
-                                <Text textAlign="center" color="gray.500" mt={4}>
+                                <Text textAlign="center" color={noItemsTextColor} mt={4}>
                                     No stock items found.
                                 </Text>
                             ) : (
@@ -165,8 +174,9 @@ export default function StockItemSelectorModal({ isOpen, onClose, onSelect, exis
                                             key={item._id}
                                             p={3}
                                             borderWidth="1px"
+                                            borderColor={listItemBorderColor}
                                             borderRadius="md"
-                                            _hover={{ bg: 'gray.100', cursor: 'pointer' }}
+                                            _hover={{ bg: listItemHoverBg, cursor: 'pointer' }}
                                             onClick={() => handleItemSelect(item)}
                                         >
                                             <VStack align="start" spacing={1}>
@@ -191,7 +201,10 @@ export default function StockItemSelectorModal({ isOpen, onClose, onSelect, exis
                         </Box>
                     </VStack>
                 </ModalBody>
-                <ModalFooter>
+                <ModalFooter
+                    borderTop="1px solid"
+                    borderColor={footerBorderColor}
+                >
                     <Button variant="ghost" onClick={onClose}>
                         Cancel
                     </Button>

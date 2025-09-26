@@ -1,7 +1,6 @@
-// src/app/low-stock/page.tsx
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
     Box,
     Heading,
@@ -18,6 +17,7 @@ import {
     NumberInput,
     NumberInputField,
     NumberInputStepper,
+    useColorModeValue,
 } from '@chakra-ui/react';
 import { useSession } from 'next-auth/react'
 import { FiPlusCircle, FiArrowLeft, FiArrowRight } from 'react-icons/fi';
@@ -62,6 +62,14 @@ export default function LowStockPage() {
     const { isOpen, onOpen, onClose } = useDisclosure();
     const toast = useToast();
     const sitesContainerRef = useRef<HTMLDivElement>(null);
+
+    // Theming props
+    const bgPrimary = useColorModeValue('neutral.light.bg-primary', 'neutral.dark.bg-primary');
+    const primaryTextColor = useColorModeValue('neutral.light.text-primary', 'neutral.dark.text-primary');
+    const secondaryTextColor = useColorModeValue('neutral.light.text-secondary', 'neutral.dark.text-secondary');
+    const borderColor = useColorModeValue('neutral.light.border-color', 'neutral.dark.border-color');
+    const errorColor = useColorModeValue('red.500', 'red.300');
+
 
     const fetchLowStockItems = async (siteId: string | null) => {
         setIsLoading(true);
@@ -182,11 +190,11 @@ export default function LowStockPage() {
                 body: JSON.stringify({
                     poNumber: `PO-${Date.now()}`,
                     orderDate: new Date().toISOString(),
-                    orderedBy: user?.id, // Changed from user?._id to user?.id
+                    orderedBy: user?.id,
                     orderedItems: items,
                     totalAmount,
                     status: 'draft',
-                    site: siteId || selectedSiteId, // Use the provided siteId or fallback to selectedSiteId
+                    site: siteId || selectedSiteId,
                 }),
             });
 
@@ -199,15 +207,9 @@ export default function LowStockPage() {
                     isClosable: true,
                 });
 
-                // Get the IDs of the items that were just ordered
                 const orderedItemIds = items.map(item => item.stockItem);
-
-                // Filter out the items that were just ordered from the lowStockItems state
                 setLowStockItems(prev => prev.filter(item => !orderedItemIds.includes(item._id)));
-
-                // Clear the selected items state
                 setSelectedItems([]);
-
                 onClose();
             } else {
                 const errorData = await response.json();
@@ -241,7 +243,7 @@ export default function LowStockPage() {
             header: 'Current Stock',
             isSortable: true,
             cell: (row) => (
-                <Text color={row.currentStock <= row.minimumStockLevel ? 'red.500' : 'inherit'}>
+                <Text color={row.currentStock <= row.minimumStockLevel ? errorColor : primaryTextColor}>
                     {row.currentStock}
                 </Text>
             ),
@@ -277,6 +279,8 @@ export default function LowStockPage() {
                     min={1}
                     max={1000}
                     width="100px"
+                    borderColor={borderColor}
+                    _focus={{ borderColor: 'brand.500', boxShadow: '0 0 0 1px var(--chakra-colors-brand-500)' }}
                 >
                     <NumberInputField />
                     <NumberInputStepper>
@@ -299,41 +303,46 @@ export default function LowStockPage() {
 
     if (status === 'loading') {
         return (
-            <Flex justifyContent="center" alignItems="center" minH="100vh">
+            <Flex justifyContent="center" alignItems="center" minH="100vh" bg={bgPrimary}>
                 <Spinner size="xl" />
             </Flex>
         );
     }
 
     return (
-        <Box p={8}>
-            <HStack justifyContent="space-between" mb={6}>
-                <Heading as="h1" size="xl">
+        <Box p={{ base: 4, md: 8 }} bg={bgPrimary}>
+            <HStack justifyContent="space-between" mb={6} flexWrap="wrap" gap={4}>
+                <Heading as="h1" size={{ base: 'xl', md: '2xl' }} color={primaryTextColor}>
                     Low Stock Items
                 </Heading>
                 <Button
-                    colorScheme="blue"
+                    colorScheme="brand"
                     leftIcon={<FiPlusCircle />}
                     onClick={handleOpenOrderModal}
                     isDisabled={selectedItems.length === 0}
+                    size="md"
                 >
                     Create Purchase Order ({selectedItems.length})
                 </Button>
             </HStack>
 
             {/* Sites Section */}
-            <Flex justify="space-between" align="center" mb={4}>
-                <Heading as="h2" size="md">Sites</Heading>
+            <Flex justify="space-between" align="center" mb={4} flexWrap="wrap" gap={4}>
+                <Heading as="h2" size="lg" color={primaryTextColor}>Sites</Heading>
                 <HStack>
                     <IconButton
                         aria-label="Scroll left"
                         icon={<FiArrowLeft />}
                         onClick={() => handleScroll('left')}
+                        variant="ghost"
+                        colorScheme="brand"
                     />
                     <IconButton
                         aria-label="Scroll right"
                         icon={<FiArrowRight />}
                         onClick={() => handleScroll('right')}
+                        variant="ghost"
+                        colorScheme="brand"
                     />
                 </HStack>
             </Flex>
@@ -356,20 +365,21 @@ export default function LowStockPage() {
                             onClick={() => handleSiteClick(site._id)}
                             mx={2}
                             variant={selectedSiteId === site._id ? 'solid' : 'outline'}
-                            colorScheme={selectedSiteId === site._id ? 'blue' : 'gray'}
+                            colorScheme="brand"
                             minW="120px"
+                            _first={{ ml: 0 }}
                         >
                             {site.name}
                         </Button>
                     ))}
                 </Flex>
             ) : (
-                <Text color="gray.500" mb={6}>No sites found for your account.</Text>
+                <Text color={secondaryTextColor} mb={6}>No sites found for your account.</Text>
             )}
 
             {error ? (
                 <Flex justifyContent="center" alignItems="center" minH="100px" direction="column">
-                    <Text fontSize="lg" color="red.500">
+                    <Text fontSize="lg" color={errorColor}>
                         {error}
                     </Text>
                     <Button onClick={() => fetchLowStockItems(selectedSiteId)} mt={4}>
@@ -377,7 +387,7 @@ export default function LowStockPage() {
                     </Button>
                 </Flex>
             ) : lowStockItems.length === 0 && !isLoading ? (
-                <Text fontSize="lg" color="gray.500">
+                <Text fontSize="lg" color={secondaryTextColor}>
                     No items are currently below their minimum stock level.
                 </Text>
             ) : (
@@ -396,7 +406,7 @@ export default function LowStockPage() {
                 suppliers={suppliers}
                 onSave={handleCreateOrders}
                 selectedSiteId={selectedSiteId}
-                sites={sites} // Pass the sites data to the modal
+                sites={sites}
             />
         </Box>
     );

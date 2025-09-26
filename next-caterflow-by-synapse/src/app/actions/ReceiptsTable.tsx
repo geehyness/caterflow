@@ -157,10 +157,6 @@ export default function DataTable({
     return (
         <Box
             className="data-table-container"
-            borderWidth="1px"
-            borderRadius="lg"
-            p={4}
-            boxShadow="sm"
             overflowX="auto"
         >
             <Flex mb={4} justifyContent="space-between" alignItems="center" flexWrap="wrap">
@@ -268,9 +264,6 @@ export default function DataTable({
                         isDisabled={currentPage === 1}
                         size="sm"
                         variant="outline"
-                        borderColor="gray.300"
-                        color="gray.600"
-                        _hover={{ bg: 'gray.100' }}
                         rounded="md"
                     />
                     <Text fontSize="sm" className="font-medium text-gray-600">
@@ -283,9 +276,6 @@ export default function DataTable({
                         isDisabled={currentPage === totalPages || totalPages === 0}
                         size="sm"
                         variant="outline"
-                        borderColor="gray.300"
-                        color="gray.600"
-                        _hover={{ bg: 'gray.100' }}
                         rounded="md"
                     />
                 </HStack>

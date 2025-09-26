@@ -1,4 +1,3 @@
-// src/app/purchases/page.tsx
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -30,11 +29,12 @@ import {
 } from '@chakra-ui/react';
 import { FiPlus, FiSearch, FiEye, FiFilter, FiEdit } from 'react-icons/fi';
 import DataTable from '@/app/actions/DataTable';
-import { useSession } from 'next-auth/react'
+import { useSession } from 'next-auth/react';
 import CreatePurchaseOrderModal from '@/app/actions/CreatePurchaseOrderModal';
 import PurchaseOrderModal, { PurchaseOrderDetails } from '@/app/actions/PurchaseOrderModal';
 import { PendingAction } from '@/app/actions/types';
 import { StockItem, Category, Site } from '@/lib/sanityTypes';
+import { FaCheck } from 'react-icons/fa';
 
 // Interfaces remain the same...
 interface PurchaseOrderItem {
@@ -59,6 +59,7 @@ export interface PurchaseOrder {
         unitPrice: number;
         stockItem: {
             name: string;
+            _id: string;
         };
         supplier: {
             name: string;
@@ -98,6 +99,7 @@ export default function PurchasesPage() {
     const [viewMode, setViewMode] = useState<'actionRequired' | 'all'>('all');
 
     const [isConfirmDialogOpen, setIsConfirmDialogOpen] = useState(false);
+    const [poToSubmit, setPoToSubmit] = useState<PurchaseOrderDetails | null>(null);
 
     const [selectedAction, setSelectedAction] = useState<PurchaseOrderDetails | null>(null);
 
@@ -113,9 +115,13 @@ export default function PurchasesPage() {
     const [editedQuantities, setEditedQuantities] = useState<{ [key: string]: number | undefined }>({});
     const [isSaving, setIsSaving] = useState(false);
 
-    // Theme-based color values
+
+    const bgPrimary = useColorModeValue('neutral.light.bg-primary', 'neutral.dark.bg-primary');
+    const bgCard = useColorModeValue('neutral.light.bg-card', 'neutral.dark.bg-card');
+    const borderColor = useColorModeValue('neutral.light.border-color', 'neutral.dark.border-color');
+    const primaryTextColor = useColorModeValue('neutral.light.text-primary', 'neutral.dark.text-primary');
     const secondaryTextColor = useColorModeValue('neutral.light.text-secondary', 'neutral.dark.text-secondary');
-    const searchIconColor = useColorModeValue('gray.300', 'gray.500');
+
 
     useEffect(() => {
         const fetchSuppliers = async () => {
@@ -195,6 +201,14 @@ export default function PurchasesPage() {
             ? filtered.filter(order => order.status === 'draft')
             : filtered;
 
+        // Sort by PO number, descending
+        ordersToDisplay.sort((a, b) => {
+            const numA = parseInt(a.poNumber.split('-')[1] || '0', 10);
+            const numB = parseInt(b.poNumber.split('-')[1] || '0', 10);
+            return numB - numA;
+        });
+
+
         setFilteredOrders(ordersToDisplay);
 
     }, [purchaseOrders, searchTerm, viewMode]);
@@ -203,7 +217,6 @@ export default function PurchasesPage() {
         fetchPurchaseOrders();
     }, [fetchPurchaseOrders]);
 
-    // Handlers remain the same...
     const handleAddOrder = () => onOpen();
 
     const handleCreateOrders = async (items: OrderItem[], siteId?: string) => {
@@ -216,7 +229,7 @@ export default function PurchasesPage() {
                 body: JSON.stringify({
                     poNumber: `PO-${Date.now()}`,
                     orderDate: new Date().toISOString(),
-                    orderedBy: user?.id, // Changed from user?._id to user?.id
+                    orderedBy: user?.id,
                     orderedItems: items,
                     totalAmount,
                     status: 'draft',
@@ -232,7 +245,7 @@ export default function PurchasesPage() {
                     isClosable: true,
                 });
                 onClose();
-                fetchPurchaseOrders(); // Refresh data
+                fetchPurchaseOrders();
             } else {
                 const errorData = await response.json();
                 throw new Error(errorData.error || 'Failed to create purchase order');
@@ -387,28 +400,31 @@ export default function PurchasesPage() {
         } : null);
     };
 
+    const handleConfirmSubmit = (po: PurchaseOrderDetails) => {
+        setPoToSubmit(po);
+        setIsConfirmDialogOpen(true);
+    };
+
     const proceedWithOrderUpdate = async () => {
         setIsConfirmDialogOpen(false);
+        if (!poDetails) return;
+
         setIsSaving(true);
         try {
-            await handleSaveOrder();
-            if (poDetails) {
-                await handleApprovePO(poDetails);
-            }
+            await handleApprovePO(poDetails);
             onOrderModalClose(); // Close the modal here after successful update and approval
         } catch (error) {
-            // Errors are handled in the specific functions, toast will be shown
+            // Error handling is done inside handleApprovePO
         } finally {
             setIsSaving(false);
         }
     };
 
-    // UPDATED: Aligns with custom theme variants for Tags/Badges
     const getStatusColor = (status: string) => {
         switch (status) {
             case 'draft': return 'gray';
-            case 'pending-approval': return 'orange';
-            case 'approved': return 'purple';
+            case 'pending-approval': return 'yellow';
+            case 'approved': return 'brand';
             case 'received': return 'green';
             case 'partially-received': return 'orange';
             case 'cancelled':
@@ -441,8 +457,16 @@ export default function PurchasesPage() {
                 </Button>
             )
         },
-        { accessorKey: 'poNumber', header: 'PO Number' },
-        { accessorKey: 'supplierNames', header: 'Suppliers' },
+        {
+            accessorKey: 'poNumber',
+            header: 'PO Number',
+            cell: (row: any) => <Text fontWeight="bold" color={primaryTextColor}>{row.poNumber}</Text>
+        },
+        {
+            accessorKey: 'supplierNames',
+            header: 'Suppliers',
+            cell: (row: any) => <Text color={secondaryTextColor}>{row.supplierNames}</Text>
+        },
         {
             accessorKey: 'description',
             header: 'Description',
@@ -455,7 +479,11 @@ export default function PurchasesPage() {
                 </Box>
             )
         },
-        { accessorKey: 'siteName', header: 'Site' },
+        {
+            accessorKey: 'siteName',
+            header: 'Site',
+            cell: (row: any) => <Text color={primaryTextColor}>{row.siteName}</Text>
+        },
         {
             accessorKey: 'status',
             header: 'Status',
@@ -468,12 +496,22 @@ export default function PurchasesPage() {
         {
             accessorKey: 'orderDate',
             header: 'Order Date',
-            cell: (row: any) => new Date(row.orderDate).toLocaleDateString()
+            cell: (row: any) => <Text color={secondaryTextColor}>{new Date(row.orderDate).toLocaleDateString()}</Text>
         },
     ];
 
+    if (loading || status === 'loading') {
+        return (
+            <Box p={4}>
+                <Flex justifyContent="center" alignItems="center" height="50vh">
+                    <Spinner size="xl" />
+                </Flex>
+            </Box>
+        );
+    }
+
     return (
-        <Box p={{ base: 2, md: 4 }}>
+        <Box p={{ base: 4, md: 8 }} bg={bgPrimary} minH="100vh">
             <Flex
                 justifyContent="space-between"
                 alignItems={{ base: 'flex-start', md: 'center' }}
@@ -482,35 +520,40 @@ export default function PurchasesPage() {
                 flexDirection={{ base: 'column', md: 'row' }}
                 gap={{ base: 4, md: 3 }}
             >
-                <Heading as="h1" size="xl">
+                <Heading as="h1" size={{ base: 'xl', md: '2xl' }} color={primaryTextColor}>
                     Purchase Orders
                 </Heading>
                 <HStack spacing={3} flexWrap="wrap">
+
                     <Button
                         leftIcon={<FiEye />}
-                        colorScheme={viewMode === 'all' ? 'brand' : 'gray'}
+                        colorScheme="brand"
+                        variant={viewMode === 'all' ? 'solid' : 'outline'}
                         onClick={() => setViewMode('all')}
-                        variant="outline"
                     >
                         View All
                     </Button>
 
                     <Button
                         leftIcon={<FiFilter />}
-                        colorScheme={viewMode === 'actionRequired' ? 'brand' : 'gray'}
+                        colorScheme="brand"
+                        variant={viewMode === 'actionRequired' ? 'solid' : 'outline'}
                         onClick={() => setViewMode('actionRequired')}
-                        variant="outline"
                     >
                         Action Required
                     </Button>
 
-                    <Button leftIcon={<FiPlus />} colorScheme="brand" onClick={handleAddOrder}>
+                    <Button
+                        leftIcon={<FiPlus />}
+                        colorScheme="brand"
+                        onClick={handleAddOrder}
+                    >
                         New Order
                     </Button>
                 </HStack>
             </Flex>
 
-            <Card>
+            <Card bg={bgCard} border="1px" borderColor={borderColor}>
                 <CardBody p={0}>
                     <DataTable
                         columns={columns}
@@ -536,16 +579,18 @@ export default function PurchasesPage() {
                     isOpen={isOrderModalOpen}
                     onClose={onOrderModalClose}
                     poDetails={poDetails}
+                    isSaving={isSaving}
+                    onSave={handleSaveOrder}
+                    onApproveRequest={() => handleConfirmSubmit(poDetails)}
                     editedPrices={editedPrices}
                     setEditedPrices={setEditedPrices}
                     editedQuantities={editedQuantities}
                     setEditedQuantities={setEditedQuantities}
-                    isSaving={isSaving}
-                    onSave={handleSaveOrder}
-                    onApproveRequest={proceedWithOrderUpdate} // Changed prop name here
-                    onRemoveItem={handleRemoveItem}
+                    onRemoveItem={handleRemoveItem} // This is the missing prop
                 />
             )}
+
+
 
 
             <AlertDialog
@@ -553,19 +598,19 @@ export default function PurchasesPage() {
                 onClose={() => setIsConfirmDialogOpen(false)}
                 leastDestructiveRef={cancelRef}>
                 <AlertDialogOverlay>
-                    <AlertDialogContent>
-                        <AlertDialogHeader fontSize="lg" fontWeight="bold">
+                    <AlertDialogContent bg={bgCard} border="1px" borderColor={borderColor}>
+                        <AlertDialogHeader fontSize="lg" fontWeight="bold" color={primaryTextColor}>
                             Confirm Submission
                         </AlertDialogHeader>
-                        <AlertDialogBody>
+                        <AlertDialogBody color={secondaryTextColor}>
                             Are you sure you want to submit this Purchase Order for approval?
                             This action cannot be undone.
                         </AlertDialogBody>
                         <AlertDialogFooter>
-                            <Button onClick={() => setIsConfirmDialogOpen(false)}>
+                            <Button variant="ghost" ref={cancelRef} onClick={() => setIsConfirmDialogOpen(false)}>
                                 Cancel
                             </Button>
-                            <Button colorScheme="blue" onClick={proceedWithOrderUpdate} ml={3}>
+                            <Button colorScheme="brand" onClick={proceedWithOrderUpdate} ml={3}>
                                 Confirm Submit
                             </Button>
                         </AlertDialogFooter>

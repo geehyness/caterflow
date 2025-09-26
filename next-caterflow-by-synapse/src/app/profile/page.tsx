@@ -27,6 +27,7 @@ import {
     InputGroup,
     InputRightElement,
     IconButton,
+    useColorModeValue,
 } from '@chakra-ui/react';
 import { ViewIcon, ViewOffIcon } from '@chakra-ui/icons';
 import { useSession } from 'next-auth/react'
@@ -59,6 +60,16 @@ export default function ProfilePage() {
 
     const toast = useToast();
     const router = useRouter();
+
+    // Theming values from theme.ts
+    const bgPrimary = useColorModeValue('neutral.light.bg-primary', 'neutral.dark.bg-primary');
+    const bgCard = useColorModeValue('neutral.light.bg-card', 'neutral.dark.bg-card');
+    const borderColor = useColorModeValue('neutral.light.border-color', 'neutral.dark.border-color');
+    const inputBg = useColorModeValue('neutral.light.bg-input', 'neutral.dark.bg-input');
+    const inputBorderColor = useColorModeValue('neutral.light.border-color', 'neutral.dark.border-color');
+    const primaryTextColor = useColorModeValue('neutral.light.text-primary', 'neutral.dark.text-primary');
+    const secondaryTextColor = useColorModeValue('neutral.light.text-secondary', 'neutral.dark.text-secondary');
+    const brand500 = useColorModeValue('brand.500', 'brand.300'); // Use theme's brand color for light/dark mode
 
     useEffect(() => {
         if (isAuthReady && !isAuthenticated) {
@@ -237,76 +248,76 @@ export default function ProfilePage() {
     if (!isAuthReady || (isAuthReady && !isAuthenticated)) {
         return (
             <Flex justifyContent="center" alignItems="center" height="100vh">
-                <Spinner size="xl" color="brand.500" />
+                <Spinner size="xl" color={brand500} />
             </Flex>
         );
     }
 
     return (
-        <Box p={{ base: 3, md: 4 }} minH="100vh" bg="neutral.bg-primary">
+        <Box p={{ base: 3, md: 4 }} minH="100vh" bg={bgPrimary}>
             <VStack spacing={6} align="stretch" mx="auto" maxW="2xl">
-                <Heading as="h1" size={{ base: 'md', md: 'lg' }} color="neutral.text-primary">
+                <Heading as="h1" size={{ base: 'md', md: 'lg' }} color={primaryTextColor}>
                     My Profile
                 </Heading>
 
-                <Card bg="neutral.bg-card" borderWidth="1px" borderColor="neutral.border-color" boxShadow="md">
+                <Card bg={bgCard} borderWidth="1px" borderColor={borderColor} boxShadow="md">
                     <CardBody>
                         <Alert status="info" borderRadius="md" variant="subtle" mb={6}>
                             <AlertIcon />
-                            <Text color="neutral.text-primary">
+                            <Text color={primaryTextColor}>
                                 Welcome, <strong>{user?.name}</strong>! Here you can manage your account settings.
                             </Text>
                         </Alert>
 
                         <Box mb={6}>
-                            <Heading as="h2" size="md" mb={4} color="neutral.text-primary">
+                            <Heading as="h2" size="md" mb={4} color={primaryTextColor}>
                                 Account Details
                             </Heading>
                             <Stack spacing={3}>
                                 <Flex alignItems="center">
-                                    <Text fontWeight="bold" minW="100px" color="neutral.text-secondary">
+                                    <Text fontWeight="bold" minW="100px" color={secondaryTextColor}>
                                         Name:
                                     </Text>
-                                    <Text color="neutral.text-primary">{user?.name}</Text>
+                                    <Text color={primaryTextColor}>{user?.name}</Text>
                                 </Flex>
                                 <Flex alignItems="center">
-                                    <Text fontWeight="bold" minW="100px" color="neutral.text-secondary">
+                                    <Text fontWeight="bold" minW="100px" color={secondaryTextColor}>
                                         Email:
                                     </Text>
-                                    <Text color="neutral.text-primary">{user?.email}</Text>
+                                    <Text color={primaryTextColor}>{user?.email}</Text>
                                 </Flex>
                                 <Flex alignItems="center">
-                                    <Text fontWeight="bold" minW="100px" color="neutral.text-secondary">
+                                    <Text fontWeight="bold" minW="100px" color={secondaryTextColor}>
                                         Role:
                                     </Text>
-                                    <Text textTransform="capitalize" color="neutral.text-primary">
+                                    <Text textTransform="capitalize" color={primaryTextColor}>
                                         {user?.role}
                                     </Text>
                                 </Flex>
                                 {user?.associatedSite && (
                                     <Flex alignItems="center">
-                                        <Text fontWeight="bold" minW="100px" color="neutral.text-secondary">
+                                        <Text fontWeight="bold" minW="100px" color={secondaryTextColor}>
                                             Site:
                                         </Text>
-                                        <Text color="neutral.text-primary">{user.associatedSite.name}</Text>
+                                        <Text color={primaryTextColor}>{user.associatedSite.name}</Text>
                                     </Flex>
                                 )}
                             </Stack>
                         </Box>
 
-                        <Divider mb={6} borderColor="neutral.border-color" />
+                        <Divider mb={6} borderColor={borderColor} />
 
                         <Tabs variant="enclosed" index={activeTab} onChange={setActiveTab}>
                             <TabList mb={4}>
                                 <Tab
-                                    _selected={{ color: 'brand.500', borderColor: 'brand.500' }}
-                                    color="neutral.text-secondary"
+                                    _selected={{ color: brand500, borderColor: brand500 }}
+                                    color={secondaryTextColor}
                                 >
                                     Change Password
                                 </Tab>
                                 <Tab
-                                    _selected={{ color: 'brand.500', borderColor: 'brand.500' }}
-                                    color="neutral.text-secondary"
+                                    _selected={{ color: brand500, borderColor: brand500 }}
+                                    color={secondaryTextColor}
                                 >
                                     Reset Password
                                 </Tab>
@@ -317,17 +328,18 @@ export default function ProfilePage() {
                                     <form onSubmit={handlePasswordChange}>
                                         <VStack spacing={4}>
                                             <FormControl id="current-password" isRequired>
-                                                <FormLabel color="neutral.text-primary">Current Password</FormLabel>
+                                                <FormLabel color={primaryTextColor}>Current Password</FormLabel>
                                                 <InputGroup>
                                                     <Input
                                                         type={showCurrentPassword ? 'text' : 'password'}
                                                         value={currentPassword}
                                                         onChange={(e) => setCurrentPassword(e.target.value)}
                                                         placeholder="Enter your current password"
-                                                        bg="neutral.input-bg"
-                                                        borderColor="neutral.input-border"
-                                                        _hover={{ borderColor: 'brand.300' }}
-                                                        _focus={{ borderColor: 'brand.500', boxShadow: '0 0 0 1px brand.500' }}
+                                                        bg={inputBg}
+                                                        borderColor={inputBorderColor}
+                                                        _hover={{ borderColor: brand500 }}
+                                                        _focus={{ borderColor: brand500, boxShadow: `0 0 0 1px ${brand500}` }}
+                                                        color={primaryTextColor}
                                                     />
                                                     <InputRightElement>
                                                         <IconButton
@@ -336,23 +348,25 @@ export default function ProfilePage() {
                                                             variant="ghost"
                                                             size="sm"
                                                             onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                                                            color={secondaryTextColor}
                                                         />
                                                     </InputRightElement>
                                                 </InputGroup>
                                             </FormControl>
 
                                             <FormControl id="new-password" isRequired>
-                                                <FormLabel color="neutral.text-primary">New Password</FormLabel>
+                                                <FormLabel color={primaryTextColor}>New Password</FormLabel>
                                                 <InputGroup>
                                                     <Input
                                                         type={showNewPassword ? 'text' : 'password'}
                                                         value={newPassword}
                                                         onChange={(e) => setNewPassword(e.target.value)}
                                                         placeholder="Enter your new password"
-                                                        bg="neutral.input-bg"
-                                                        borderColor="neutral.input-border"
-                                                        _hover={{ borderColor: 'brand.300' }}
-                                                        _focus={{ borderColor: 'brand.500', boxShadow: '0 0 0 1px brand.500' }}
+                                                        bg={inputBg}
+                                                        borderColor={inputBorderColor}
+                                                        _hover={{ borderColor: brand500 }}
+                                                        _focus={{ borderColor: brand500, boxShadow: `0 0 0 1px ${brand500}` }}
+                                                        color={primaryTextColor}
                                                     />
                                                     <InputRightElement>
                                                         <IconButton
@@ -361,23 +375,25 @@ export default function ProfilePage() {
                                                             variant="ghost"
                                                             size="sm"
                                                             onClick={() => setShowNewPassword(!showNewPassword)}
+                                                            color={secondaryTextColor}
                                                         />
                                                     </InputRightElement>
                                                 </InputGroup>
                                             </FormControl>
 
                                             <FormControl id="confirm-password" isRequired>
-                                                <FormLabel color="neutral.text-primary">Confirm New Password</FormLabel>
+                                                <FormLabel color={primaryTextColor}>Confirm New Password</FormLabel>
                                                 <InputGroup>
                                                     <Input
                                                         type={showConfirmPassword ? 'text' : 'password'}
                                                         value={confirmPassword}
                                                         onChange={(e) => setConfirmPassword(e.target.value)}
                                                         placeholder="Confirm your new password"
-                                                        bg="neutral.input-bg"
-                                                        borderColor="neutral.input-border"
-                                                        _hover={{ borderColor: 'brand.300' }}
-                                                        _focus={{ borderColor: 'brand.500', boxShadow: '0 0 0 1px brand.500' }}
+                                                        bg={inputBg}
+                                                        borderColor={inputBorderColor}
+                                                        _hover={{ borderColor: brand500 }}
+                                                        _focus={{ borderColor: brand500, boxShadow: `0 0 0 1px ${brand500}` }}
+                                                        color={primaryTextColor}
                                                     />
                                                     <InputRightElement>
                                                         <IconButton
@@ -386,6 +402,7 @@ export default function ProfilePage() {
                                                             variant="ghost"
                                                             size="sm"
                                                             onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                                                            color={secondaryTextColor}
                                                         />
                                                     </InputRightElement>
                                                 </InputGroup>
@@ -410,7 +427,7 @@ export default function ProfilePage() {
                                         <VStack spacing={4}>
                                             {!isCodeSent ? (
                                                 <>
-                                                    <Text color="neutral.text-secondary" fontSize="sm">
+                                                    <Text color={secondaryTextColor} fontSize="sm">
                                                         A verification code will be sent to your email address to reset your password.
                                                     </Text>
                                                     <Button
@@ -427,37 +444,39 @@ export default function ProfilePage() {
                                                 <>
                                                     <Alert status="info" borderRadius="md" variant="subtle">
                                                         <AlertIcon />
-                                                        <Text color="neutral.text-primary">
+                                                        <Text color={primaryTextColor}>
                                                             A verification code has been sent to your email.
                                                         </Text>
                                                     </Alert>
 
                                                     <FormControl id="verification-code" isRequired>
-                                                        <FormLabel color="neutral.text-primary">Verification Code</FormLabel>
+                                                        <FormLabel color={primaryTextColor}>Verification Code</FormLabel>
                                                         <Input
                                                             type="text"
                                                             value={verificationCode}
                                                             onChange={(e) => setVerificationCode(e.target.value)}
                                                             placeholder="Enter the code sent to your email"
-                                                            bg="neutral.input-bg"
-                                                            borderColor="neutral.input-border"
-                                                            _hover={{ borderColor: 'brand.300' }}
-                                                            _focus={{ borderColor: 'brand.500', boxShadow: '0 0 0 1px brand.500' }}
+                                                            bg={inputBg}
+                                                            borderColor={inputBorderColor}
+                                                            _hover={{ borderColor: brand500 }}
+                                                            _focus={{ borderColor: brand500, boxShadow: `0 0 0 1px ${brand500}` }}
+                                                            color={primaryTextColor}
                                                         />
                                                     </FormControl>
 
                                                     <FormControl id="reset-password" isRequired>
-                                                        <FormLabel color="neutral.text-primary">New Password</FormLabel>
+                                                        <FormLabel color={primaryTextColor}>New Password</FormLabel>
                                                         <InputGroup>
                                                             <Input
                                                                 type={showResetPassword ? 'text' : 'password'}
                                                                 value={resetPassword}
                                                                 onChange={(e) => setResetPassword(e.target.value)}
                                                                 placeholder="Enter your new password"
-                                                                bg="neutral.input-bg"
-                                                                borderColor="neutral.input-border"
-                                                                _hover={{ borderColor: 'brand.300' }}
-                                                                _focus={{ borderColor: 'brand.500', boxShadow: '0 0 0 1px brand.500' }}
+                                                                bg={inputBg}
+                                                                borderColor={inputBorderColor}
+                                                                _hover={{ borderColor: brand500 }}
+                                                                _focus={{ borderColor: brand500, boxShadow: `0 0 0 1px ${brand500}` }}
+                                                                color={primaryTextColor}
                                                             />
                                                             <InputRightElement>
                                                                 <IconButton
@@ -466,23 +485,25 @@ export default function ProfilePage() {
                                                                     variant="ghost"
                                                                     size="sm"
                                                                     onClick={() => setShowResetPassword(!showResetPassword)}
+                                                                    color={secondaryTextColor}
                                                                 />
                                                             </InputRightElement>
                                                         </InputGroup>
                                                     </FormControl>
 
                                                     <FormControl id="confirm-reset-password" isRequired>
-                                                        <FormLabel color="neutral.text-primary">Confirm New Password</FormLabel>
+                                                        <FormLabel color={primaryTextColor}>Confirm New Password</FormLabel>
                                                         <InputGroup>
                                                             <Input
                                                                 type={showConfirmResetPassword ? 'text' : 'password'}
                                                                 value={confirmResetPassword}
                                                                 onChange={(e) => setConfirmResetPassword(e.target.value)}
                                                                 placeholder="Confirm your new password"
-                                                                bg="neutral.input-bg"
-                                                                borderColor="neutral.input-border"
-                                                                _hover={{ borderColor: 'brand.300' }}
-                                                                _focus={{ borderColor: 'brand.500', boxShadow: '0 0 0 1px brand.500' }}
+                                                                bg={inputBg}
+                                                                borderColor={inputBorderColor}
+                                                                _hover={{ borderColor: brand500 }}
+                                                                _focus={{ borderColor: brand500, boxShadow: `0 0 0 1px ${brand500}` }}
+                                                                color={primaryTextColor}
                                                             />
                                                             <InputRightElement>
                                                                 <IconButton
@@ -491,6 +512,7 @@ export default function ProfilePage() {
                                                                     variant="ghost"
                                                                     size="sm"
                                                                     onClick={() => setShowConfirmResetPassword(!showConfirmResetPassword)}
+                                                                    color={secondaryTextColor}
                                                                 />
                                                             </InputRightElement>
                                                         </InputGroup>

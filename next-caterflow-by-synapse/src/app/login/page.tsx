@@ -29,10 +29,11 @@ import {
   IconButton,
   Alert,
   AlertIcon,
+  useColorModeValue,
 } from '@chakra-ui/react';
 import { ViewIcon, ViewOffIcon } from '@chakra-ui/icons';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { signIn, useSession } from 'next-auth/react'; // Changed import
+import { signIn, useSession } from 'next-auth/react';
 import { motion } from 'framer-motion';
 
 export default function LoginPage() {
@@ -42,17 +43,25 @@ export default function LoginPage() {
   const [resetEmail, setResetEmail] = useState('');
   const [isResetting, setIsResetting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [resetSuccess, setResetSuccess] = useState(false);
 
   const toast = useToast();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { data: session, status } = useSession(); // Use NextAuth's useSession
+  const { data: session, status } = useSession();
   const { isOpen, onOpen, onClose } = useDisclosure();
 
   const cardWidth = useBreakpointValue({ base: '90%', sm: '400px' });
 
   // Get the redirect parameter from URL
   const redirect = searchParams.get('redirect') || '/';
+
+  // Theming props
+  const bgPrimary = useColorModeValue('neutral.light.bg-primary', 'neutral.dark.bg-primary');
+  const bgCard = useColorModeValue('neutral.light.bg-card', 'neutral.dark.bg-card');
+  const borderColor = useColorModeValue('neutral.light.border-color', 'neutral.dark.border-color');
+  const primaryTextColor = useColorModeValue('neutral.light.text-primary', 'neutral.dark.text-primary');
+  const secondaryTextColor = useColorModeValue('neutral.light.text-secondary', 'neutral.dark.text-secondary');
 
   useEffect(() => {
     // Redirect if already logged in
@@ -116,6 +125,7 @@ export default function LoginPage() {
 
   const handlePasswordReset = async (event: React.FormEvent) => {
     event.preventDefault();
+    setResetSuccess(false); // Reset success state
 
     if (!resetEmail) {
       toast({
@@ -140,15 +150,7 @@ export default function LoginPage() {
       const data = await response.json();
 
       if (response.ok) {
-        toast({
-          title: 'Reset email sent!',
-          description: 'Check your email for a verification code to reset your password.',
-          status: 'success',
-          duration: 5000,
-          isClosable: true,
-        });
-        onClose();
-        setResetEmail('');
+        setResetSuccess(true);
       } else {
         toast({
           title: 'Failed to send reset email.',
@@ -174,9 +176,9 @@ export default function LoginPage() {
 
   if (status === 'loading') {
     return (
-      <Box minH="100vh" display="flex" justifyContent="center" alignItems="center">
+      <Flex justify="center" align="center" minH="100vh" bg={bgPrimary}>
         <Spinner size="xl" color="brand.500" />
-      </Box>
+      </Flex>
     );
   }
 
@@ -186,7 +188,7 @@ export default function LoginPage() {
         minH="100vh"
         align="center"
         justify="center"
-        bg="neutral.bg-primary"
+        bg={bgPrimary}
         p={4}
       >
         <motion.div
@@ -195,60 +197,60 @@ export default function LoginPage() {
           transition={{ duration: 0.5 }}
         >
           <Card
-            bg="neutral.bg-card"
+            bg={bgCard}
             boxShadow="xl"
             borderRadius="xl"
             borderWidth="1px"
-            borderColor="neutral.border-color"
+            borderColor={borderColor}
             w={cardWidth}
           >
             <CardBody p={8}>
               <VStack spacing={6} align="stretch">
                 <Box textAlign="center">
-                  <Heading as="h1" size="xl" color="neutral.text-primary" mb={2}>
+                  <Heading as="h1" size="xl" color={primaryTextColor} mb={2}>
                     Caterflow
                   </Heading>
-                  <Text color="neutral.text-secondary" fontSize="md">
+                  <Text color={secondaryTextColor} fontSize="md">
                     Inventory Management System
                   </Text>
                 </Box>
 
                 <Box>
-                  <Heading as="h2" size="lg" color="neutral.text-primary" mb={2} textAlign="center">
+                  <Heading as="h2" size="lg" color={primaryTextColor} mb={2} textAlign="center">
                     Welcome Back
                   </Heading>
-                  <Text color="neutral.text-secondary" textAlign="center" mb={6}>
+                  <Text color={secondaryTextColor} textAlign="center" mb={6}>
                     Sign in to your account
                   </Text>
 
                   <form onSubmit={handleLogin}>
                     <VStack spacing={4}>
                       <FormControl id="email" isRequired>
-                        <FormLabel color="neutral.text-primary">Email</FormLabel>
+                        <FormLabel color={secondaryTextColor}>Email</FormLabel>
                         <Input
                           type="email"
                           value={email}
                           onChange={(e) => setEmail(e.target.value)}
                           placeholder="Enter your email"
-                          bg="neutral.input-bg"
-                          borderColor="neutral.input-border"
-                          _hover={{ borderColor: 'brand.300' }}
-                          _focus={{ borderColor: 'brand.500', boxShadow: '0 0 0 1px brand.500' }}
+                          borderColor={borderColor}
+                          _placeholder={{ color: secondaryTextColor }}
+                          _hover={{ borderColor: 'brand.500' }}
+                          _focus={{ borderColor: 'brand.500', boxShadow: '0 0 0 1px var(--chakra-colors-brand-500)' }}
                         />
                       </FormControl>
 
                       <FormControl id="password" isRequired>
-                        <FormLabel color="neutral.text-primary">Password</FormLabel>
+                        <FormLabel color={secondaryTextColor}>Password</FormLabel>
                         <InputGroup>
                           <Input
                             type={showPassword ? 'text' : 'password'}
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
                             placeholder="Enter your password"
-                            bg="neutral.input-bg"
-                            borderColor="neutral.input-border"
-                            _hover={{ borderColor: 'brand.300' }}
-                            _focus={{ borderColor: 'brand.500', boxShadow: '0 0 0 1px brand.500' }}
+                            borderColor={borderColor}
+                            _placeholder={{ color: secondaryTextColor }}
+                            _hover={{ borderColor: 'brand.500' }}
+                            _focus={{ borderColor: 'brand.500', boxShadow: '0 0 0 1px var(--chakra-colors-brand-500)' }}
                           />
                           <InputRightElement>
                             <IconButton
@@ -257,6 +259,7 @@ export default function LoginPage() {
                               variant="ghost"
                               size="sm"
                               onClick={() => setShowPassword(!showPassword)}
+                              color={secondaryTextColor}
                             />
                           </InputRightElement>
                         </InputGroup>
@@ -296,30 +299,38 @@ export default function LoginPage() {
       <Modal isOpen={isOpen} onClose={onClose} isCentered>
         <ModalOverlay />
         <ModalContent
-          bg="neutral.bg-card"
+          bg={bgCard}
           borderWidth="1px"
-          borderColor="neutral.border-color"
+          borderColor={borderColor}
         >
-          <ModalHeader color="neutral.text-primary">Reset Password</ModalHeader>
-          <ModalCloseButton />
+          <ModalHeader color={primaryTextColor}>Reset Password</ModalHeader>
+          <ModalCloseButton color={secondaryTextColor} />
           <form onSubmit={handlePasswordReset}>
             <ModalBody>
-              <Alert status="info" mb={4} borderRadius="md" variant="subtle">
-                <AlertIcon />
-                Enter your email address and we'll send you a verification code to reset your password.
-              </Alert>
+              {resetSuccess ? (
+                <Alert status="success" mb={4} borderRadius="md" variant="subtle">
+                  <AlertIcon />
+                  A password reset link has been sent to **{resetEmail}**.
+                  Please check your inbox to continue.
+                </Alert>
+              ) : (
+                <Alert status="info" mb={4} borderRadius="md" variant="subtle">
+                  <AlertIcon />
+                  Enter your email address and we'll send you a verification code to reset your password.
+                </Alert>
+              )}
 
-              <FormControl id="reset-email" isRequired>
-                <FormLabel color="neutral.text-primary">Email Address</FormLabel>
+              <FormControl id="reset-email" isRequired isDisabled={resetSuccess}>
+                <FormLabel color={secondaryTextColor}>Email Address</FormLabel>
                 <Input
                   type="email"
                   value={resetEmail}
                   onChange={(e) => setResetEmail(e.target.value)}
                   placeholder="Enter your email address"
-                  bg="neutral.input-bg"
-                  borderColor="neutral.input-border"
-                  _hover={{ borderColor: 'brand.300' }}
-                  _focus={{ borderColor: 'brand.500', boxShadow: '0 0 0 1px brand.500' }}
+                  borderColor={borderColor}
+                  _placeholder={{ color: secondaryTextColor }}
+                  _hover={{ borderColor: 'brand.500' }}
+                  _focus={{ borderColor: 'brand.500', boxShadow: '0 0 0 1px var(--chakra-colors-brand-500)' }}
                 />
               </FormControl>
             </ModalBody>
@@ -333,6 +344,7 @@ export default function LoginPage() {
                 type="submit"
                 isLoading={isResetting}
                 loadingText="Sending..."
+                isDisabled={resetSuccess}
               >
                 Send Reset Code
               </Button>

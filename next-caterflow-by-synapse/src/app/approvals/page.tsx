@@ -1,5 +1,3 @@
-// src/app/approvals/page.tsx
-
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
@@ -34,6 +32,7 @@ import {
     HStack,
     VStack,
     Badge,
+    useColorModeValue,
 } from '@chakra-ui/react';
 import { useSession } from 'next-auth/react'
 import { FiCheckCircle, FiXCircle, FiEye } from 'react-icons/fi';
@@ -385,7 +384,8 @@ export default function ApprovalsPage() {
                 cell: (row: any) => (
                     <Button
                         size="sm"
-                        colorScheme="blue"
+                        colorScheme="brand"
+                        variant="outline"
                         leftIcon={<FiEye />}
                         onClick={() => handleOpenReview(row)}
                     >
@@ -442,6 +442,12 @@ export default function ApprovalsPage() {
         return baseColumns;
     };
 
+    // Theming props
+    const bgPrimary = useColorModeValue('neutral.light.bg-primary', 'neutral.dark.bg-primary');
+    const bgCard = useColorModeValue('neutral.light.bg-card', 'neutral.dark.bg-card');
+    const primaryTextColor = useColorModeValue('neutral.light.text-primary', 'neutral.dark.text-primary');
+    const borderColor = useColorModeValue('neutral.light.border-color', 'neutral.dark.border-color');
+
     if (status === 'loading' || loading) {
         return (
             <Flex justifyContent="center" alignItems="center" minH="100vh">
@@ -477,12 +483,12 @@ export default function ApprovalsPage() {
     }
 
     return (
-        <Box p={8}>
-            <Heading as="h1" size="xl" mb={6}>
+        <Box p={{ base: 3, md: 4 }} bg={bgPrimary} minH="100vh">
+            <Heading as="h1" size={{ base: 'md', md: 'xl' }} mb={6} color={primaryTextColor}>
                 Pending Approvals
             </Heading>
 
-            <Tabs variant="enclosed" onChange={(index) => setActiveTab(index)}>
+            <Tabs variant="enclosed" onChange={(index) => setActiveTab(index)} colorScheme="brand">
                 <TabList>
                     {actionTypes.map((type, index) => (
                         <Tab key={type}>{actionTypeTitles[type]}</Tab>
@@ -492,7 +498,7 @@ export default function ApprovalsPage() {
                     {actionTypes.map((type, index) => (
                         <TabPanel key={type}>
                             {filteredApprovals.length === 0 ? (
-                                <Text fontSize="lg" color="gray.500">
+                                <Text fontSize="lg" color="gray.500" py={8} textAlign="center">
                                     No pending {getActionTypeTitle(type).toLowerCase()} for approval.
                                 </Text>
                             ) : (
@@ -510,12 +516,12 @@ export default function ApprovalsPage() {
             </Tabs>
 
             {/* Approval Details Modal */}
-            <Modal isOpen={isModalOpen} onClose={onModalClose} size="4xl">
+            <Modal isOpen={isModalOpen} onClose={onModalClose} size={{ base: 'full', md: '3xl', lg: '4xl' }}>
                 <ModalOverlay />
-                <ModalContent>
-                    <ModalHeader>
+                <ModalContent bg={bgCard}>
+                    <ModalHeader borderBottomWidth="1px" borderColor={borderColor}>
                         <HStack spacing={2} alignItems="center">
-                            <Icon as={FaBoxes} color="blue.500" />
+                            <Icon as={FaBoxes} color="brand.500" />
                             <Text>
                                 {selectedApproval?._type === 'InternalTransfer'
                                     ? `Transfer: ${selectedApproval.transferNumber || 'Unknown'}`
@@ -529,8 +535,8 @@ export default function ApprovalsPage() {
                             {/* Basic Information */}
                             <Flex justifyContent="space-between" flexWrap="wrap" gap={4}>
                                 <Box>
-                                    <Text fontWeight="bold">Reference Number:</Text>
-                                    <Text>
+                                    <Text fontWeight="bold" color={primaryTextColor}>Reference Number:</Text>
+                                    <Text color={primaryTextColor}>
                                         {selectedApproval?._type === 'InternalTransfer'
                                             ? selectedApproval.transferNumber || 'Unknown'
                                             : selectedApproval?.poNumber || 'N/A'
@@ -538,14 +544,14 @@ export default function ApprovalsPage() {
                                     </Text>
                                 </Box>
                                 <Box>
-                                    <Text fontWeight="bold">Status:</Text>
+                                    <Text fontWeight="bold" color={primaryTextColor}>Status:</Text>
                                     <Badge colorScheme="orange" fontSize="sm">
                                         Pending Approval
                                     </Badge>
                                 </Box>
                                 <Box>
-                                    <Text fontWeight="bold">Site:</Text>
-                                    <Text>
+                                    <Text fontWeight="bold" color={primaryTextColor}>Site:</Text>
+                                    <Text color={primaryTextColor}>
                                         {selectedApproval?._type === 'InternalTransfer'
                                             ? selectedApproval.fromBin?.site?.name || 'Unknown Site'
                                             : selectedApproval?.siteName || 'N/A'
@@ -553,8 +559,8 @@ export default function ApprovalsPage() {
                                     </Text>
                                 </Box>
                                 <Box>
-                                    <Text fontWeight="bold">Requested By:</Text>
-                                    <Text>
+                                    <Text fontWeight="bold" color={primaryTextColor}>Requested By:</Text>
+                                    <Text color={primaryTextColor}>
                                         {selectedApproval?._type === 'InternalTransfer'
                                             ? selectedApproval.transferredBy?.name || 'Unknown User'
                                             : 'Unknown'
@@ -568,16 +574,16 @@ export default function ApprovalsPage() {
                                 <>
                                     <Flex justifyContent="space-between" flexWrap="wrap" gap={4}>
                                         <Box>
-                                            <Text fontWeight="bold">From Bin:</Text>
-                                            <Text>{selectedApproval.fromBin?.name || 'Unknown'}</Text>
+                                            <Text fontWeight="bold" color={primaryTextColor}>From Bin:</Text>
+                                            <Text color={primaryTextColor}>{selectedApproval.fromBin?.name || 'Unknown'}</Text>
                                         </Box>
                                         <Box>
-                                            <Text fontWeight="bold">To Bin:</Text>
-                                            <Text>{selectedApproval.toBin?.name || 'Unknown'}</Text>
+                                            <Text fontWeight="bold" color={primaryTextColor}>To Bin:</Text>
+                                            <Text color={primaryTextColor}>{selectedApproval.toBin?.name || 'Unknown'}</Text>
                                         </Box>
                                         <Box>
-                                            <Text fontWeight="bold">Transfer Date:</Text>
-                                            <Text>
+                                            <Text fontWeight="bold" color={primaryTextColor}>Transfer Date:</Text>
+                                            <Text color={primaryTextColor}>
                                                 {selectedApproval.transferDate
                                                     ? new Date(selectedApproval.transferDate).toLocaleDateString()
                                                     : 'Unknown Date'
@@ -588,8 +594,8 @@ export default function ApprovalsPage() {
 
                                     {selectedApproval.notes && (
                                         <Box>
-                                            <Text fontWeight="bold">Notes:</Text>
-                                            <Text>{selectedApproval.notes}</Text>
+                                            <Text fontWeight="bold" color={primaryTextColor}>Notes:</Text>
+                                            <Text color={primaryTextColor}>{selectedApproval.notes}</Text>
                                         </Box>
                                     )}
                                 </>
@@ -600,24 +606,16 @@ export default function ApprovalsPage() {
                                 <>
                                     <Flex justifyContent="space-between" flexWrap="wrap" gap={4}>
                                         <Box>
-                                            <Text fontWeight="bold">PO Number:</Text>
-                                            <Text>{selectedApproval.poNumber || 'Unknown'}</Text>
+                                            <Text fontWeight="bold" color={primaryTextColor}>PO Number:</Text>
+                                            <Text color={primaryTextColor}>{selectedApproval.poNumber || 'Unknown'}</Text>
                                         </Box>
-                                        {/*<Box>
-                                            <Text fontWeight="bold">Ordered By:</Text>
-                                            <Text>{selectedApproval.orderedByName || 'Unknown'}</Text>
-                                        </Box>
-                                        <Box>
-                                            <Text fontWeight="bold">Suppliers:</Text>
-                                            <Text>{selectedApproval.supplierNames || 'Unknown'}</Text>
-                                        </Box>*/}
                                     </Flex>
                                 </>
                             )}
 
                             {/* Items Table - Combined for both types */}
                             <Box>
-                                <Heading as="h4" size="sm" mb={3}>
+                                <Heading as="h4" size="sm" mb={3} color={primaryTextColor}>
                                     {selectedApproval?._type === 'InternalTransfer'
                                         ? 'Transferred Items'
                                         : 'Ordered Items'
@@ -627,15 +625,15 @@ export default function ApprovalsPage() {
                                     <Table variant="simple" size="sm">
                                         <Thead>
                                             <Tr>
-                                                <Th>Item Name</Th>
-                                                <Th isNumeric>Quantity</Th>
+                                                <Th color={primaryTextColor}>Item Name</Th>
+                                                <Th isNumeric color={primaryTextColor}>Quantity</Th>
                                                 {selectedApproval?._type === 'InternalTransfer' && (
-                                                    <Th>Unit</Th>
+                                                    <Th color={primaryTextColor}>Unit</Th>
                                                 )}
                                                 {selectedApproval?._type === 'PurchaseOrder' && (
                                                     <>
-                                                        <Th isNumeric>Unit Price</Th>
-                                                        <Th isNumeric>Total</Th>
+                                                        <Th isNumeric color={primaryTextColor}>Unit Price</Th>
+                                                        <Th isNumeric color={primaryTextColor}>Total</Th>
                                                     </>
                                                 )}
                                             </Tr>
@@ -644,19 +642,19 @@ export default function ApprovalsPage() {
                                             {/* Internal Transfer Items */}
                                             {selectedApproval?._type === 'InternalTransfer' && selectedApproval.transferredItems.map((item) => (
                                                 <Tr key={item._key}>
-                                                    <Td>{item.stockItem?.name || 'Unknown Item'}</Td>
-                                                    <Td isNumeric>{item.transferredQuantity || 0}</Td>
-                                                    <Td>{item.stockItem?.unitOfMeasure || 'Unknown'}</Td>
+                                                    <Td color={primaryTextColor}>{item.stockItem?.name || 'Unknown Item'}</Td>
+                                                    <Td isNumeric color={primaryTextColor}>{item.transferredQuantity || 0}</Td>
+                                                    <Td color={primaryTextColor}>{item.stockItem?.unitOfMeasure || 'Unknown'}</Td>
                                                 </Tr>
                                             ))}
 
                                             {/* Purchase Order Items */}
                                             {selectedApproval?._type === 'PurchaseOrder' && selectedApproval.orderedItems?.map((item: any) => (
                                                 <Tr key={item._key}>
-                                                    <Td>{item.stockItem?.name || 'Unknown Item'}</Td>
-                                                    <Td isNumeric>{item.orderedQuantity || 0}</Td>
-                                                    <Td isNumeric>${item.unitPrice?.toFixed(2) || '0.00'}</Td>
-                                                    <Td isNumeric>${((item.orderedQuantity || 0) * (item.unitPrice || 0)).toFixed(2)}</Td>
+                                                    <Td color={primaryTextColor}>{item.stockItem?.name || 'Unknown Item'}</Td>
+                                                    <Td isNumeric color={primaryTextColor}>{item.orderedQuantity || 0}</Td>
+                                                    <Td isNumeric color={primaryTextColor}>${item.unitPrice?.toFixed(2) || '0.00'}</Td>
+                                                    <Td isNumeric color={primaryTextColor}>${((item.orderedQuantity || 0) * (item.unitPrice || 0)).toFixed(2)}</Td>
                                                 </Tr>
                                             ))}
 
@@ -682,7 +680,7 @@ export default function ApprovalsPage() {
                             </Box>
                         </VStack>
                     </ModalBody>
-                    <ModalFooter>
+                    <ModalFooter borderTopWidth="1px" borderColor={borderColor}>
                         <Button
                             colorScheme="red"
                             onClick={handleReject}

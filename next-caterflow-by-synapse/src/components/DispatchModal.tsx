@@ -37,7 +37,8 @@ import {
     Tr,
     Th,
     Td,
-    TableContainer
+    TableContainer,
+    useColorModeValue // Import useColorModeValue for theme-based colors
 } from '@chakra-ui/react';
 import { FiPlus, FiTrash2 } from 'react-icons/fi';
 import StockItemSelectorModal from './StockItemSelectorModal';
@@ -134,6 +135,14 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
     const user = session?.user as unknown as User;
     const userSite = user?.associatedSite;
     const userRole = user?.role;
+
+    // Get colors and other theme values at the top level, outside of any conditionals
+    const tableHeaderColor = useColorModeValue('neutral.light.text-primary', 'neutral.dark.text-primary');
+    const tableBorderColor = useColorModeValue('neutral.light.border-color', 'neutral.dark.border-color');
+    const tableBg = useColorModeValue('neutral.light.bg-card', 'neutral.dark.bg-card');
+    const textSecondaryColor = useColorModeValue('neutral.light.text-secondary', 'neutral.dark.text-secondary');
+    const tableBoxShadow = useColorModeValue('md', 'dark-md');
+
 
     const existingItemIds = dispatchedItems.filter(item => item.stockItem).map(item => item.stockItem._id);
 
@@ -504,7 +513,14 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
 
     return (
         <>
-            <Modal isOpen={isOpen} onClose={onClose} size="4xl" closeOnOverlayClick={!isSaving && !isUploadModalOpen}>
+            {/* Set modal size responsively, e.g., full on mobile and 4xl on larger screens */}
+            <Modal
+                isOpen={isOpen}
+                onClose={onClose}
+                size={{ base: 'full', md: '4xl' }}
+                closeOnOverlayClick={!isSaving && !isUploadModalOpen}
+                scrollBehavior="inside"
+            >
                 <ModalOverlay />
                 <ModalContent>
                     <ModalHeader>{dispatch ? 'Update Dispatch' : 'Create New Dispatch'}</ModalHeader>
@@ -518,6 +534,7 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
                         <form onSubmit={handleSubmit}>
                             <ModalBody>
                                 <VStack spacing={4} align="stretch">
+                                    {/* Use responsive grid for two-column layout on medium screens and up */}
                                     <Grid templateColumns={{ base: '1fr', md: 'repeat(2, 1fr)' }} gap={4}>
                                         <GridItem>
                                             <FormControl isRequired>
@@ -556,19 +573,20 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
                                                         </option>
                                                     ))}
                                                 </Select>
+                                                {/* Use theme-based colors for secondary text */}
                                                 {dispatch ? (
-                                                    <Text fontSize="sm" color="gray.600" mt={1}>
+                                                    <Text fontSize="sm" color={textSecondaryColor} mt={1}>
                                                         Source bin cannot be changed for existing dispatches
                                                     </Text>
                                                 ) : (
                                                     <>
                                                         {userSite && userRole !== 'admin' && (
-                                                            <Text fontSize="sm" color="gray.600" mt={1}>
+                                                            <Text fontSize="sm" color={textSecondaryColor} mt={1}>
                                                                 Your site: {userSite.name}
                                                             </Text>
                                                         )}
                                                         {userRole === 'admin' && (
-                                                            <Text fontSize="sm" color="gray.600" mt={1}>
+                                                            <Text fontSize="sm" color={textSecondaryColor} mt={1}>
                                                                 Admin: All bins available
                                                             </Text>
                                                         )}
@@ -624,6 +642,7 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
                                         />
                                     </FormControl>
 
+                                    {/* Use theme-based Divider styling */}
                                     <Divider />
 
                                     <VStack spacing={4} align="stretch">
@@ -635,25 +654,32 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
                                         </HStack>
 
                                         {dispatchedItems.length === 0 ? (
-                                            <Box textAlign="center" py={4} color="gray.500">
+                                            <Box textAlign="center" py={4} color={textSecondaryColor}>
                                                 No items added yet
                                             </Box>
                                         ) : (
-                                            <TableContainer>
+                                            <TableContainer
+                                                // Ensure TableContainer uses the theme's card styling
+                                                bg={tableBg}
+                                                borderRadius="lg"
+                                                boxShadow={tableBoxShadow}
+                                                border="1px solid"
+                                                borderColor={tableBorderColor}
+                                            >
                                                 <Table variant="simple" size="sm">
                                                     <Thead>
                                                         <Tr>
-                                                            <Th>Item</Th>
-                                                            <Th>Quantity</Th>
-                                                            <Th>Unit</Th>
-                                                            <Th>Actions</Th>
+                                                            <Th color={tableHeaderColor} borderColor={tableBorderColor}>Item</Th>
+                                                            <Th color={tableHeaderColor} borderColor={tableBorderColor}>Quantity</Th>
+                                                            <Th color={tableHeaderColor} borderColor={tableBorderColor}>Unit</Th>
+                                                            <Th color={tableHeaderColor} borderColor={tableBorderColor}>Actions</Th>
                                                         </Tr>
                                                     </Thead>
                                                     <Tbody>
                                                         {dispatchedItems.map((item, index) => (
                                                             <Tr key={item._key}>
-                                                                <Td>{item.stockItem.name}</Td>
-                                                                <Td>
+                                                                <Td borderColor={tableBorderColor}>{item.stockItem.name}</Td>
+                                                                <Td borderColor={tableBorderColor}>
                                                                     <NumberInput
                                                                         value={item.dispatchedQuantity}
                                                                         min={1}
@@ -671,8 +697,8 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
                                                                         </NumberInputStepper>
                                                                     </NumberInput>
                                                                 </Td>
-                                                                <Td>{item.stockItem.unitOfMeasure}</Td>
-                                                                <Td>
+                                                                <Td borderColor={tableBorderColor}>{item.stockItem.unitOfMeasure}</Td>
+                                                                <Td borderColor={tableBorderColor}>
                                                                     <HStack>
                                                                         <IconButton
                                                                             aria-label="Edit item"
@@ -738,7 +764,7 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
                                         </Button>
                                     </>
                                 ) : (
-                                    <Text color="gray.600" fontSize="sm">Dispatch is completed — read-only.</Text>
+                                    <Text color={textSecondaryColor} fontSize="sm">Dispatch is completed — read-only.</Text>
                                 )}
                             </ModalFooter>
                         </form>

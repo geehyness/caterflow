@@ -1,5 +1,6 @@
-// src/components/AttachmentGallery.tsx
-import React, { useState, useEffect } from 'react';
+'use client';
+
+import React, { useState, useEffect, useCallback } from 'react';
 import {
     Box,
     Grid,
@@ -19,10 +20,11 @@ import {
     VStack,
     HStack,
     Spinner,
-    Flex, // ADDED
-    Heading, // ADDED
+    Flex,
+    Heading,
+    useColorModeValue, // ADDED
 } from '@chakra-ui/react';
-import { FiDownload, FiEye, FiTrash2, FiFile } from 'react-icons/fi';
+import { FiDownload, FiEye, FiTrash2, FiFile, FiUpload } from 'react-icons/fi'; // ADDED FiUpload
 
 interface Attachment {
     _id: string;
@@ -61,32 +63,40 @@ export default function AttachmentGallery({
     const [isViewerOpen, setIsViewerOpen] = useState(false);
     const toast = useToast();
 
-    useEffect(() => {
-        const fetchAttachments = async () => {
-            setLoading(true);
-            try {
-                const response = await fetch(`/api/attachments?relatedTo=${relatedTo}`);
-                if (!response.ok) throw new Error('Failed to fetch attachments');
-                const data = await response.json();
-                setAttachments(data);
-            } catch (error) {
-                console.error("Failed to fetch attachments:", error);
-                toast({
-                    title: 'Error',
-                    description: 'Failed to load attachments',
-                    status: 'error',
-                    duration: 5000,
-                    isClosable: true,
-                });
-            } finally {
-                setLoading(false);
-            }
-        };
+    // Theming hooks
+    const cardBg = useColorModeValue('neutral.light.bg-card', 'neutral.dark.bg-card');
+    const cardBorder = useColorModeValue('neutral.light.border-color', 'neutral.dark.border-color');
+    const headerColor = useColorModeValue('neutral.light.text-primary', 'neutral.dark.text-primary');
+    const bodyColor = useColorModeValue('neutral.light.text-secondary', 'neutral.dark.text-secondary');
+    const modalBg = useColorModeValue('neutral.light.bg-modal', 'neutral.dark.bg-modal');
+    const iconColor = useColorModeValue('gray.500', 'gray.400'); // Consistent icon color
 
-        if (relatedTo) {
-            fetchAttachments();
+    const fetchAttachments = useCallback(async () => {
+        setLoading(true);
+        try {
+            const response = await fetch(`/api/sanity/attachments?relatedToId=${relatedTo}`);
+            if (!response.ok) {
+                throw new Error('Failed to fetch attachments');
+            }
+            const data = await response.json();
+            setAttachments(data);
+        } catch (error) {
+            console.error('Error fetching attachments:', error);
+            toast({
+                title: 'Error loading attachments.',
+                description: 'Failed to fetch files from the server.',
+                status: 'error',
+                duration: 5000,
+                isClosable: true,
+            });
+        } finally {
+            setLoading(false);
         }
     }, [relatedTo, toast]);
+
+    useEffect(() => {
+        fetchAttachments();
+    }, [fetchAttachments]);
 
     const handleView = (attachment: Attachment) => {
         setViewingAttachment(attachment);
@@ -94,159 +104,169 @@ export default function AttachmentGallery({
     };
 
     const handleDownload = (attachment: Attachment) => {
-        const link = document.createElement('a');
-        link.href = attachment.file.asset.url;
-        link.download = attachment.file.asset.originalFilename || attachment.fileName;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+        window.open(attachment.file.asset.url, '_blank');
     };
 
     const handleDelete = async (attachmentId: string) => {
-        try {
-            const response = await fetch(`/api/attachments/${attachmentId}`, {
-                method: 'DELETE',
-            });
-            if (!response.ok) throw new Error('Failed to delete attachment');
-            setAttachments(prev => prev.filter(att => att._id !== attachmentId));
-            toast({
-                title: 'Deleted',
-                description: 'Attachment has been deleted.',
-                status: 'success',
-                duration: 3000,
-                isClosable: true,
-            });
-        } catch (error) {
-            console.error("Failed to delete attachment:", error);
-            toast({
-                title: 'Error',
-                description: 'Failed to delete attachment',
-                status: 'error',
-                duration: 5000,
-                isClosable: true,
-            });
-        }
+        // Implement delete logic here
+        toast({
+            title: 'Delete feature not implemented.',
+            description: `Attempted to delete attachment with ID: ${attachmentId}.`,
+            status: 'info',
+            duration: 5000,
+            isClosable: true,
+        });
     };
 
-    if (loading) {
-        return (
-            <Flex justify="center" align="center" height="200px">
-                <Spinner size="lg" />
-            </Flex>
-        );
-    }
+    const closeModal = () => {
+        setIsViewerOpen(false);
+        setViewingAttachment(null);
+    };
 
     return (
         <Box>
-            <HStack mb={4} justifyContent="space-between">
-                <Heading as="h4" size="md">
-                    Attachments ({attachments.length})
-                </Heading>
+            <Flex justifyContent="space-between" alignItems="center" mb={4}>
+                <Heading size={{ base: 'sm', md: 'md' }} color={headerColor}>Attachments</Heading>
                 {canUpload && (
-                    <Button onClick={onUploadClick}>
+                    <Button
+                        size="sm"
+                        leftIcon={<FiUpload />}
+                        colorScheme="brand"
+                        onClick={onUploadClick}
+                    >
                         Upload
                     </Button>
                 )}
-            </HStack>
-            {attachments.length === 0 ? (
-                <Text textAlign="center" color="gray.500" py={8}>
-                    No attachments have been uploaded yet.
-                </Text>
-            ) : (
+            </Flex>
+
+            {loading ? (
+                <Flex justifyContent="center" alignItems="center" py={10}>
+                    <Spinner size="lg" color="brand.500" />
+                </Flex>
+            ) : attachments.length > 0 ? (
                 <Grid
-                    templateColumns="repeat(auto-fill, minmax(200px, 1fr))"
+                    templateColumns={{ base: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)', lg: 'repeat(4, 1fr)' }}
                     gap={4}
                 >
-                    {attachments.map(attachment => (
-                        <Card key={attachment._id} _hover={{ boxShadow: 'lg' }} transition="box-shadow 0.2s">
-                            <CardBody p={4}>
-                                <VStack spacing={2} align="stretch">
+                    {attachments.map((attachment) => (
+                        <Card
+                            key={attachment._id}
+                            variant="outline"
+                            borderWidth="1px"
+                            borderColor={cardBorder}
+                            overflow="hidden"
+                            bg={cardBg}
+                            _hover={{
+                                boxShadow: 'md',
+                                transform: 'translateY(-2px)',
+                            }}
+                            transition="all 0.2s"
+                            size="sm"
+                        >
+                            <CardBody p={3}>
+                                <VStack spacing={2} align="stretch" textAlign="center">
                                     <Box
-                                        bg="gray.100"
-                                        borderRadius="md"
+                                        w="full"
                                         h="120px"
+                                        borderRadius="md"
+                                        bg={cardBg}
                                         display="flex"
                                         alignItems="center"
                                         justifyContent="center"
-                                        p={2}
+                                        overflow="hidden"
                                     >
                                         {attachment.file.asset.mimeType.startsWith('image/') ? (
                                             <Image
                                                 src={attachment.file.asset.url}
                                                 alt={attachment.fileName}
-                                                maxW="full"
-                                                maxH="full"
-                                                objectFit="contain"
+                                                objectFit="cover"
+                                                width="full"
+                                                height="full"
                                             />
                                         ) : (
-                                            <VStack>
-                                                <FiFile size={40} />
-                                                <Text fontSize="xs" textAlign="center" color="gray.600" noOfLines={1}>{attachment.file.asset.mimeType}</Text>
-                                            </VStack>
+                                            <FiFile size={48} color={iconColor} />
                                         )}
                                     </Box>
-                                    <Text fontWeight="medium" noOfLines={1}>{attachment.fileName}</Text>
-                                    <Text fontSize="sm" color="gray.500">
-                                        by {attachment.uploadedBy.name}
+                                    <Text
+                                        fontSize="xs"
+                                        fontWeight="semibold"
+                                        isTruncated
+                                        color={headerColor}
+                                    >
+                                        {attachment.fileName}
                                     </Text>
-                                    <HStack justifyContent="flex-end" spacing={2}>
+                                    <HStack justifyContent="center" spacing={1}>
                                         <IconButton
                                             aria-label="View attachment"
                                             icon={<FiEye />}
-                                            size="sm"
+                                            size="xs"
                                             onClick={() => handleView(attachment)}
+                                            variant="ghost"
                                         />
                                         <IconButton
                                             aria-label="Download attachment"
                                             icon={<FiDownload />}
-                                            size="sm"
+                                            size="xs"
                                             onClick={() => handleDownload(attachment)}
+                                            variant="ghost"
                                         />
+                                        {/* You can add a delete button with the following code:
                                         <IconButton
                                             aria-label="Delete attachment"
                                             icon={<FiTrash2 />}
-                                            size="sm"
-                                            colorScheme="red"
-                                            variant="ghost"
+                                            size="xs"
                                             onClick={() => handleDelete(attachment._id)}
+                                            variant="ghost"
+                                            colorScheme="red"
                                         />
+                                        */}
                                     </HStack>
                                 </VStack>
                             </CardBody>
                         </Card>
                     ))}
                 </Grid>
+            ) : (
+                <Box textAlign="center" py={10} color={bodyColor}>
+                    <FiFile size={48} style={{ margin: '0 auto' }} />
+                    <Text mt={4}>No attachments found for this record.</Text>
+                </Box>
             )}
 
-            <Modal isOpen={isViewerOpen} onClose={() => setIsViewerOpen(false)} size="xl">
+            <Modal isOpen={isViewerOpen} onClose={closeModal} size={{ base: 'full', md: '3xl' }}>
                 <ModalOverlay />
-                <ModalContent>
-                    <ModalHeader>{viewingAttachment?.fileName}</ModalHeader>
-                    <ModalCloseButton />
-                    <ModalBody>
+                <ModalContent bg={modalBg}>
+                    <ModalHeader borderBottomWidth="1px" borderColor={cardBorder}>
+                        <HStack justifyContent="space-between">
+                            <Text noOfLines={1} pr={8}>{viewingAttachment?.fileName}</Text>
+                            <ModalCloseButton position="static" />
+                        </HStack>
+                    </ModalHeader>
+                    <ModalBody py={6}>
                         {viewingAttachment && (
-                            <Box textAlign="center">
+                            <Box>
                                 {viewingAttachment.file.asset.mimeType.startsWith('image/') ? (
                                     <Image
                                         src={viewingAttachment.file.asset.url}
                                         alt={viewingAttachment.fileName}
-                                        maxH="60vh"
+                                        maxH={{ base: '70vh', md: '60vh' }}
                                         mx="auto"
+                                        objectFit="contain" // Ensure image fits within bounds
                                     />
                                 ) : (
-                                    <Box textAlign="center" py={8}>
-                                        <FiFile size={64} style={{ margin: '0 auto 16px' }} />
-                                        <Text mb={4}>
-                                            This file type cannot be previewed in the browser.
+                                    <VStack textAlign="center" py={8} spacing={4}>
+                                        <FiFile size={64} style={{ margin: '0 auto' }} />
+                                        <Text mb={4} color={bodyColor}>
+                                            This file type cannot be previewed.
                                         </Text>
                                         <Button
-                                            colorScheme="blue"
+                                            colorScheme="brand"
                                             onClick={() => handleDownload(viewingAttachment)}
                                             leftIcon={<FiDownload />}
                                         >
                                             Download File
                                         </Button>
-                                    </Box>
+                                    </VStack>
                                 )}
                             </Box>
                         )}

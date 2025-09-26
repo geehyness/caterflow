@@ -57,10 +57,12 @@ const SidebarContent = ({ onItemClick }: { onItemClick?: () => void }) => {
     const [expandedGroups, setExpandedGroups] = useState<string[]>(['Overview', 'Inventory', 'Operations', 'Administration']);
     const { setLoading } = useLoading();
 
+    // Theme-aware colors
     const sidebarBg = useColorModeValue(theme.colors.neutral.light['bg-secondary'], theme.colors.neutral.dark['bg-secondary']);
     const activeBg = useColorModeValue(theme.colors.brand['100'], theme.colors.brand['700']);
     const borderColor = useColorModeValue(theme.colors.neutral.light['border-color'], theme.colors.neutral.dark['border-color']);
-    const iconColor = useColorModeValue(theme.colors.neutral.light['text-primary'], theme.colors.neutral.dark['text-primary']);
+    const iconColor = useColorModeValue('neutral.light.text-primary', 'neutral.dark.text-primary');
+    const textSecondaryColor = useColorModeValue('neutral.light.text-secondary', 'neutral.dark.text-secondary');
     const hoverBg = useColorModeValue('gray.100', 'gray.700');
 
     // Define menu items with roles and groups - Improved icons for better distinction
@@ -188,7 +190,7 @@ const SidebarContent = ({ onItemClick }: { onItemClick?: () => void }) => {
                     />
                 </Box>
             </Flex>
-            <Divider mb={4} />
+            <Divider mb={4} borderColor={borderColor} />
 
             {/* Scrollable Menu Items */}
             <Flex direction="column" overflowY="auto" overflowX="hidden" flex="1" px={2}>
@@ -209,12 +211,12 @@ const SidebarContent = ({ onItemClick }: { onItemClick?: () => void }) => {
                                 }}
                             >
                                 <Flex align="center">
-                                    <Icon as={group.icon} boxSize={4} mr={2} color="gray.500" />
+                                    <Icon as={group.icon} boxSize={4} mr={2} color={textSecondaryColor} />
                                     <Text
                                         fontSize="xs"
                                         fontWeight="bold"
                                         textTransform="uppercase"
-                                        color="gray.500"
+                                        color={textSecondaryColor}
                                     >
                                         {group.heading}
                                     </Text>
@@ -222,7 +224,7 @@ const SidebarContent = ({ onItemClick }: { onItemClick?: () => void }) => {
                                 <Icon
                                     as={expandedGroups.includes(group.heading) ? FiChevronDown : FiChevronUp}
                                     boxSize={4}
-                                    color="gray.500"
+                                    color={textSecondaryColor}
                                 />
                             </Flex>
                             <Collapse in={expandedGroups.includes(group.heading)} animateOpacity>
@@ -236,7 +238,7 @@ const SidebarContent = ({ onItemClick }: { onItemClick?: () => void }) => {
                                             leftIcon={<Icon as={item.icon} boxSize={5} />}
                                             color={pathname === item.href ? theme.colors.brand['500'] : iconColor}
                                             bg={pathname === item.href ? activeBg : 'transparent'}
-                                            _hover={{ bg: activeBg, color: theme.colors.brand['500'] }}
+                                            _hover={{ bg: activeBg }}
                                             onClick={() => handleItemClick(item.href)}
                                         >
                                             {item.label}
@@ -258,7 +260,7 @@ const SidebarContent = ({ onItemClick }: { onItemClick?: () => void }) => {
                 p={4}
                 boxShadow="sm"
             >
-                <Divider my={4} />
+                <Divider my={4} borderColor={borderColor} />
                 <Button
                     w="full"
                     variant="ghost"
@@ -274,7 +276,7 @@ const SidebarContent = ({ onItemClick }: { onItemClick?: () => void }) => {
                         variant="ghost"
                         justifyContent="flex-start"
                         leftIcon={<Icon as={FiUser} />}
-                        _hover={{ bg: activeBg, color: theme.colors.brand['500'] }}
+                        _hover={{ bg: activeBg }}
                         onClick={() => handleItemClick("/profile")}
                     >
                         Profile
@@ -286,6 +288,7 @@ const SidebarContent = ({ onItemClick }: { onItemClick?: () => void }) => {
                         variant="ghost"
                         justifyContent="flex-start"
                         leftIcon={<Icon as={FiLogOut} />}
+                        _hover={{ bg: 'red.500', color: 'white' }}
                         onClick={handleLogout}
                     >
                         Logout
@@ -301,6 +304,7 @@ export function Sidebar({ appName = 'Caterflow' }: SidebarProps) {
     const { isOpen, closeSidebar } = useSidebar();
     const theme = useTheme();
     const sidebarBg = useColorModeValue(theme.colors.neutral.light['bg-secondary'], theme.colors.neutral.dark['bg-secondary']);
+    const borderColor = useColorModeValue(theme.colors.neutral.light['border-color'], theme.colors.neutral.dark['border-color']);
 
     if (isMobile) {
         return (
@@ -329,7 +333,7 @@ export function Sidebar({ appName = 'Caterflow' }: SidebarProps) {
             w="250px"
             bg={sidebarBg}
             borderRight="1px solid"
-            borderColor="gray.200"
+            borderColor={borderColor}
             position="fixed"
             left="0"
             top="0"

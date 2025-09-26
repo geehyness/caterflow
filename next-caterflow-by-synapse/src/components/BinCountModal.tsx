@@ -12,7 +12,6 @@ import {
     FormControl,
     FormLabel,
     Input,
-    Select,
     useToast,
     VStack,
     HStack,
@@ -24,7 +23,6 @@ import {
     NumberIncrementStepper,
     NumberDecrementStepper,
     Box,
-    Flex,
     Icon,
     Table,
     Thead,
@@ -37,6 +35,8 @@ import {
     Heading,
     Card,
     CardBody,
+    useColorModeValue,
+    Divider,
 } from '@chakra-ui/react';
 import { FiPlus, FiTrash2, FiSearch, FiCheck, FiSave } from 'react-icons/fi';
 import BinSelectorModal from './BinSelectorModal';
@@ -114,6 +114,13 @@ export default function BinCountModal({ isOpen, onClose, binCount, onSave }: Bin
 
     const isViewMode = binCount?.status === 'completed' || binCount?.status === 'adjusted';
 
+    // Theme-aware colors
+    const cardBg = useColorModeValue('neutral.light.bg-card', 'neutral.dark.bg-card');
+    const modalBg = useColorModeValue('neutral.light.bg-secondary', 'neutral.dark.bg-secondary');
+    const borderColor = useColorModeValue('neutral.light.border-color', 'neutral.dark.border-color');
+    const tableHeaderBg = useColorModeValue('neutral.100', 'neutral.700');
+    const tableHeaderText = useColorModeValue('neutral.700', 'neutral.200');
+
     const countedItemIds = useMemo(() => {
         return countedItems.map(item => item.stockItem._id);
     }, [countedItems]);
@@ -122,10 +129,7 @@ export default function BinCountModal({ isOpen, onClose, binCount, onSave }: Bin
     useEffect(() => {
         if (!isOpen) return; // Only run when modal is open
 
-        console.log('BinCountModal setup:', { binCount, isViewMode });
-
         if (binCount) {
-            console.log('Setting up bin count data:', binCount);
             setSelectedBin(binCount.bin || null);
             setCountDate(new Date(binCount.countDate).toISOString().split('T')[0]);
             setNotes(binCount.notes || '');
@@ -142,11 +146,8 @@ export default function BinCountModal({ isOpen, onClose, binCount, onSave }: Bin
                         sku: item.stockItem.sku || 'N/A'
                     }
                 }));
-
-            console.log('Valid counted items after processing:', validCountedItems);
             setCountedItems(validCountedItems);
         } else {
-            console.log('Setting up new bin count');
             setSelectedBin(null);
             setCountDate(new Date().toISOString().split('T')[0]);
             setNotes('');
@@ -472,8 +473,6 @@ export default function BinCountModal({ isOpen, onClose, binCount, onSave }: Bin
             ...(binCount && { countNumber: binCount.countNumber }),
         };
 
-        console.log('Saving payload:', payload);
-
         try {
             const method = binCount ? 'PUT' : 'POST';
             const url = '/api/bin-counts';
@@ -516,24 +515,37 @@ export default function BinCountModal({ isOpen, onClose, binCount, onSave }: Bin
 
     return (
         <>
-            <Modal isOpen={isOpen} onClose={onClose} size="3xl" scrollBehavior="inside">
+            <Modal isOpen={isOpen} onClose={onClose} size={{ base: 'full', md: '3xl' }} scrollBehavior="inside">
                 <ModalOverlay />
-                <ModalContent>
-                    <ModalHeader>{binCount ? `Bin Count ${binCount.countNumber}` : 'New Bin Count'}</ModalHeader>
+                <ModalContent bg={modalBg}>
+                    <ModalHeader
+                        bg={useColorModeValue('neutral.light.bg-header', 'neutral.dark.bg-header')}
+                        borderBottom="1px solid"
+                        borderColor={borderColor}
+                        pb={4}
+                    >
+                        <Heading size="md" fontWeight="bold">
+                            {binCount ? `Bin Count ${binCount.countNumber}` : 'New Bin Count'}
+                        </Heading>
+                    </ModalHeader>
                     <ModalCloseButton />
                     <ModalBody>
-                        <VStack spacing={4}>
+                        <VStack spacing={4} pt={4}>
                             <FormControl id="bin-name" isRequired>
                                 <FormLabel>Bin</FormLabel>
-                                <HStack>
+                                <HStack spacing={2} flexWrap="wrap">
                                     <Input
                                         placeholder="Select a Bin"
                                         value={selectedBin?.name || ''}
                                         readOnly
+                                        flex="1"
                                     />
                                     <Button
                                         onClick={() => setIsBinModalOpen(true)}
                                         isDisabled={isViewMode || !!binCount}
+                                        minW="120px"
+                                        colorScheme="brand"
+                                        variant="outline"
                                     >
                                         Select Bin
                                     </Button>
@@ -560,17 +572,18 @@ export default function BinCountModal({ isOpen, onClose, binCount, onSave }: Bin
 
                             <Box w="100%" mt={8}>
                                 <Heading size="md" mb={4}>Counted Items</Heading>
-                                <Card>
-                                    <CardBody p={0}>
-                                        <TableContainer>
+                                <Card bg={cardBg} shadow="md" borderWidth="1px" borderColor={borderColor}>
+                                    <CardBody p={{ base: 2, md: 4 }}>
+                                        {/* Desktop View: Table */}
+                                        <TableContainer display={{ base: 'none', md: 'block' }}>
                                             <Table variant="simple" size="sm">
-                                                <Thead>
+                                                <Thead bg={tableHeaderBg}>
                                                     <Tr>
-                                                        <Th>Item</Th>
-                                                        <Th>System Qty</Th>
-                                                        <Th isNumeric>Counted Qty</Th>
-                                                        <Th isNumeric>Variance</Th>
-                                                        {!isViewMode && <Th>Actions</Th>}
+                                                        <Th color={tableHeaderText}>Item</Th>
+                                                        <Th color={tableHeaderText}>System Qty</Th>
+                                                        <Th isNumeric color={tableHeaderText}>Counted Qty</Th>
+                                                        <Th isNumeric color={tableHeaderText}>Variance</Th>
+                                                        {!isViewMode && <Th color={tableHeaderText}>Actions</Th>}
                                                     </Tr>
                                                 </Thead>
                                                 <Tbody>
@@ -579,7 +592,7 @@ export default function BinCountModal({ isOpen, onClose, binCount, onSave }: Bin
                                                             <Td>
                                                                 <VStack align="start" spacing={0}>
                                                                     <Text fontWeight="bold">{item.stockItem.name}</Text>
-                                                                    <Text fontSize="xs" color="gray.500">{item.stockItem.sku}</Text>
+                                                                    <Text fontSize="xs" color="neutral.light.text-secondary">{item.stockItem.sku}</Text>
                                                                 </VStack>
                                                             </Td>
                                                             <Td>{item.systemQuantityAtCountTime}</Td>
@@ -621,12 +634,74 @@ export default function BinCountModal({ isOpen, onClose, binCount, onSave }: Bin
                                                 </Tbody>
                                             </Table>
                                         </TableContainer>
+
+                                        {/* Mobile View: Card List */}
+                                        <VStack display={{ base: 'flex', md: 'none' }} spacing={4} align="stretch">
+                                            {countedItems.length > 0 ? (
+                                                countedItems.map((item) => (
+                                                    <Card key={item._key} bg={cardBg} variant="outline" borderColor={borderColor}>
+                                                        <CardBody p={4}>
+                                                            <VStack align="stretch" spacing={2}>
+                                                                <HStack justifyContent="space-between">
+                                                                    <VStack align="start" spacing={0}>
+                                                                        <Text fontWeight="bold">{item.stockItem.name}</Text>
+                                                                        <Text fontSize="sm" color="gray.500">{item.stockItem.sku}</Text>
+                                                                    </VStack>
+                                                                    {!isViewMode && (
+                                                                        <IconButton
+                                                                            aria-label="Remove item"
+                                                                            icon={<FiTrash2 />}
+                                                                            size="sm"
+                                                                            variant="ghost"
+                                                                            colorScheme="red"
+                                                                            onClick={() => handleRemoveItem(item._key!)}
+                                                                        />
+                                                                    )}
+                                                                </HStack>
+                                                                <Divider />
+                                                                <HStack justifyContent="space-between" pt={2}>
+                                                                    <Text fontSize="sm" fontWeight="medium">System Qty:</Text>
+                                                                    <Text fontSize="sm">{item.systemQuantityAtCountTime}</Text>
+                                                                </HStack>
+                                                                <HStack justifyContent="space-between">
+                                                                    <Text fontSize="sm" fontWeight="medium">Counted Qty:</Text>
+                                                                    <Box w="100px">
+                                                                        <NumberInput
+                                                                            value={item.countedQuantity}
+                                                                            onChange={(valStr, valNum) => handleCountedQuantityChange(item._key!, valStr, valNum)}
+                                                                            min={0}
+                                                                            isDisabled={isViewMode}
+                                                                        >
+                                                                            <NumberInputField />
+                                                                            <NumberInputStepper>
+                                                                                <NumberIncrementStepper />
+                                                                                <NumberDecrementStepper />
+                                                                            </NumberInputStepper>
+                                                                        </NumberInput>
+                                                                    </Box>
+                                                                </HStack>
+                                                                <HStack justifyContent="space-between">
+                                                                    <Text fontSize="sm" fontWeight="medium">Variance:</Text>
+                                                                    <Badge
+                                                                        colorScheme={(item.countedQuantity - (item.systemQuantityAtCountTime || 0)) === 0 ? 'green' : 'red'}
+                                                                    >
+                                                                        {item.countedQuantity - (item.systemQuantityAtCountTime || 0)}
+                                                                    </Badge>
+                                                                </HStack>
+                                                            </VStack>
+                                                        </CardBody>
+                                                    </Card>
+                                                ))
+                                            ) : (
+                                                <Text textAlign="center" color="neutral.light.text-secondary" py={4}>No items added yet.</Text>
+                                            )}
+                                        </VStack>
                                     </CardBody>
                                 </Card>
                             </Box>
 
                             {!isViewMode && (
-                                <HStack w="100%" justifyContent="space-between" mt={4}>
+                                <HStack w="100%" justifyContent="space-between" mt={4} flexDirection={{ base: 'column', md: 'row' }} spacing={{ base: 4, md: 0 }}>
                                     <Button
                                         leftIcon={<FiPlus />}
                                         onClick={() => {
@@ -643,6 +718,7 @@ export default function BinCountModal({ isOpen, onClose, binCount, onSave }: Bin
                                             setIsStockItemModalOpen(true);
                                         }}
                                         isDisabled={isViewMode}
+                                        colorScheme="brand"
                                     >
                                         Add Item
                                     </Button>
@@ -655,12 +731,16 @@ export default function BinCountModal({ isOpen, onClose, binCount, onSave }: Bin
                         </VStack>
                     </ModalBody>
 
-                    <ModalFooter>
+                    <ModalFooter
+                        borderTopWidth="1px"
+                        borderColor={borderColor}
+                        pt={4}
+                    >
                         <Button colorScheme="gray" mr={3} onClick={onClose} isDisabled={loading || isProcessing}>
                             Cancel
                         </Button>
                         {!isViewMode && (
-                            <HStack>
+                            <HStack spacing={3} flexWrap="wrap">
                                 {binCount && binCount.countedItems.some((item: any) => !item.stockItem) && (
                                     <Button
                                         colorScheme="orange"
@@ -673,6 +753,7 @@ export default function BinCountModal({ isOpen, onClose, binCount, onSave }: Bin
                                 )}
                                 <Button
                                     colorScheme="brand"
+                                    variant="outline"
                                     onClick={() => handleSave(false)}
                                     isLoading={loading || isProcessing}
                                     leftIcon={<FiSave />}

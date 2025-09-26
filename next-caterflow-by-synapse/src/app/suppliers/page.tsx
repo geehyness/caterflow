@@ -16,6 +16,7 @@ import {
     Input,
     InputGroup,
     InputLeftElement,
+    VStack,
 } from '@chakra-ui/react';
 import { FiPlus, FiSearch, FiEdit, FiTrash2 } from 'react-icons/fi';
 import DataTable from '@/components/DataTable';
@@ -44,11 +45,15 @@ export default function SuppliersPage() {
     const { isOpen, onOpen, onClose } = useDisclosure();
     const toast = useToast();
 
-    const cardBg = useColorModeValue('white', 'gray.700');
-    const borderColor = useColorModeValue('gray.200', 'gray.600');
-    const inputBg = useColorModeValue('white', 'gray.800');
+    // Theming values from theme.ts
+    const pageBg = useColorModeValue('neutral.light.bg-primary', 'neutral.dark.bg-primary');
+    const headingColor = useColorModeValue('neutral.light.text-primary', 'neutral.dark.text-primary');
+    const cardBg = useColorModeValue('neutral.light.bg-card', 'neutral.dark.bg-card');
+    const borderColor = useColorModeValue('neutral.light.border-color', 'neutral.dark.border-color');
+    const inputBg = useColorModeValue('neutral.light.bg-input', 'neutral.dark.bg-input');
+    const brand500 = useColorModeValue('brand.500', 'brand.300');
+    const secondaryTextColor = useColorModeValue('neutral.light.text-secondary', 'neutral.dark.text-secondary');
 
-    // FIX 1: Wrap fetchSuppliers in useCallback to memoize it
     const fetchSuppliers = useCallback(async () => {
         try {
             const response = await fetch('/api/suppliers');
@@ -70,9 +75,8 @@ export default function SuppliersPage() {
         } finally {
             setLoading(false);
         }
-    }, [toast]); // Add toast to the dependency array of useCallback
+    }, [toast]);
 
-    // FIX 2: Add fetchSuppliers to the useEffect dependency array
     useEffect(() => {
         fetchSuppliers();
     }, [fetchSuppliers]);
@@ -139,8 +143,11 @@ export default function SuppliersPage() {
         onClose();
     };
 
+    // Assuming 'admin' and 'manager' roles have CRUD permissions
+    const canManage = user?.role === 'admin' || user?.role === 'manager';
+
     const columns = [
-        {
+        ...(canManage ? [{
             accessorKey: 'actions',
             header: 'Actions',
             cell: (row: Supplier) => (
@@ -162,7 +169,7 @@ export default function SuppliersPage() {
                     />
                 </Flex>
             ),
-        },
+        }] : []),
         {
             accessorKey: 'name',
             header: 'Name',
@@ -187,37 +194,39 @@ export default function SuppliersPage() {
 
     if (loading || status === 'loading') {
         return (
-            <Box p={4}>
-                <Flex justifyContent="center" alignItems="center" height="50vh">
-                    <Spinner size="xl" />
-                </Flex>
-            </Box>
+            <Flex justifyContent="center" alignItems="center" height="100vh">
+                <Spinner size="xl" color={brand500} />
+            </Flex>
         );
     }
 
     return (
-        <Box p={4}>
-            <Flex justifyContent="space-between" alignItems="center" mb={6}>
-                <Heading as="h1" size="lg">Suppliers</Heading>
-                <Button
-                    leftIcon={<FiPlus />}
-                    colorScheme="blue"
-                    onClick={handleAddSupplier}
-                >
-                    Add Supplier
-                </Button>
-            </Flex>
+        <Box p={{ base: 4, md: 8 }} bg={pageBg}>
+            <VStack spacing={6} align="stretch" maxW="full">
+                <Flex justifyContent="space-between" alignItems="center">
+                    <Heading as="h1" size="lg" color={headingColor}>Suppliers</Heading>
+                    {canManage && (
+                        <Button
+                            leftIcon={<FiPlus />}
+                            colorScheme="brand"
+                            onClick={handleAddSupplier}
+                        >
+                            Add Supplier
+                        </Button>
+                    )}
+                </Flex>
 
-            {/* Suppliers Table */}
-            <Card bg={cardBg} border="1px" borderColor={borderColor} borderRadius="md">
-                <CardBody p={0}>
-                    <DataTable
-                        columns={columns}
-                        data={filteredSuppliers}
-                        loading={false}
-                    />
-                </CardBody>
-            </Card>
+                <Card bg={cardBg} border="1px" borderColor={borderColor} borderRadius="md" boxShadow="md">
+                    <CardBody>
+
+                        <DataTable
+                            columns={columns}
+                            data={filteredSuppliers}
+                            loading={false}
+                        />
+                    </CardBody>
+                </Card>
+            </VStack>
 
             <SupplierModal
                 isOpen={isOpen}

@@ -38,7 +38,8 @@ import {
     Th,
     Td,
     TableContainer,
-    Badge
+    Badge,
+    useColorModeValue
 } from '@chakra-ui/react';
 import { FiPlus, FiTrash2, FiRefreshCw, FiSave, FiSend } from 'react-icons/fi';
 import StockItemSelectorModal from './StockItemSelectorModal';
@@ -124,12 +125,28 @@ export default function TransferModal({ isOpen, onClose, transfer, onSave }: Tra
     const isApproved = transfer?.status === 'approved';
     const isCompleted = transfer?.status === 'completed';
 
+    // Theme-aware colors
+    const tableHeaderColor = useColorModeValue('neutral.light.text-primary', 'neutral.dark.text-primary');
+    const tableBorderColor = useColorModeValue('neutral.light.border-color', 'neutral.dark.border-color');
+    const tableBg = useColorModeValue('neutral.light.bg-card', 'neutral.dark.bg-card');
+    const textSecondaryColor = useColorModeValue('neutral.light.text-secondary', 'neutral.dark.text-secondary');
+    const tableBoxShadow = useColorModeValue('md', 'dark-md');
+
+    // Validation colors
+    const positiveColor = useColorModeValue('green.500', 'green.300');
+    const negativeColor = useColorModeValue('red.500', 'red.300');
+
+    // Button colors
+    const brandColorScheme = useColorModeValue('brand', 'brand');
+    const neutralColorScheme = useColorModeValue('gray', 'gray');
+
+
+    // This function is now memoized using useCallback
     const refreshStockLevels = useCallback(async (binId: string, itemIds?: string[]) => {
+        if (!binId) return;
         setRefreshingStock(true);
         try {
-            // Use the itemIds passed as an argument, or fallback to state
-            const idsToFetch = itemIds || transferredItems.map(item => item.stockItem._id);
-
+            const idsToFetch = itemIds && itemIds.length > 0 ? itemIds : transferredItems.map(item => item.stockItem?._id).filter(Boolean); // Filter out any null or undefined IDs
             if (idsToFetch.length > 0) {
                 const stockData = await getBinStock(idsToFetch, binId);
                 setStockLevels(stockData);
@@ -143,11 +160,11 @@ export default function TransferModal({ isOpen, onClose, transfer, onSave }: Tra
         }
     }, [transferredItems]);
 
-    // Fetch bins and initialize form data
+    // Fetch bins and initialize form data on modal open or transfer change
     useEffect(() => {
-        const fetchData = async () => {
-            if (!isOpen) return;
+        if (!isOpen) return;
 
+        const fetchData = async () => {
             setLoading(true);
             try {
                 // Fetch bins
@@ -159,7 +176,14 @@ export default function TransferModal({ isOpen, onClose, transfer, onSave }: Tra
 
                 // Initialize form data
                 const today = new Date().toISOString().split('T')[0];
-                const latestTransfer = transfer?._id ? await fetch(`/api/operations/transfers/${transfer._id}`).then(res => res.json()) : transfer;
+                let latestTransfer = transfer;
+
+                if (transfer?._id) {
+                    const res = await fetch(`/api/operations/transfers/${transfer._id}`);
+                    if (res.ok) {
+                        latestTransfer = await res.json();
+                    }
+                }
 
                 setTransferDate(latestTransfer?.transferDate ? latestTransfer.transferDate.split('T')[0] : today);
                 setFromBin(latestTransfer?.fromBin || null);
@@ -167,10 +191,6 @@ export default function TransferModal({ isOpen, onClose, transfer, onSave }: Tra
                 setTransferredItems(latestTransfer?.transferredItems || []);
                 setNotes(latestTransfer?.notes || '');
 
-                // Refresh stock levels for the fromBin
-                if (latestTransfer?.fromBin?._id && !isCompleted) {
-                    await refreshStockLevels(latestTransfer.fromBin._id);
-                }
             } catch (error) {
                 console.error('Error fetching transfer data:', error);
                 toast({
@@ -186,14 +206,14 @@ export default function TransferModal({ isOpen, onClose, transfer, onSave }: Tra
         };
 
         fetchData();
-    }, [isOpen, transfer, toast, isCompleted, refreshStockLevels]);
+    }, [isOpen, transfer, toast]);
 
     // Refresh stock levels when fromBin changes
     useEffect(() => {
         if (fromBin?._id && !isCompleted) {
             refreshStockLevels(fromBin._id);
         }
-    }, [fromBin, isCompleted, refreshStockLevels]); // ADD refreshStockLevels to dependencies
+    }, [fromBin, isCompleted, refreshStockLevels]);
 
     const handleRefreshStock = async () => {
         if (fromBin?._id && !isCompleted) {
@@ -229,12 +249,6 @@ export default function TransferModal({ isOpen, onClose, transfer, onSave }: Tra
             } else {
                 updatedItems.push(newItem);
             }
-
-            // Add this line to refresh stock levels after the item is added
-            if (fromBin?._id) {
-                refreshStockLevels(fromBin._id, updatedItems.map(i => i.stockItem._id));
-            }
-
             return updatedItems;
         });
 
@@ -266,6 +280,7 @@ export default function TransferModal({ isOpen, onClose, transfer, onSave }: Tra
     };
 
     const isQuantityValid = (item: TransferredItem): boolean => {
+        if (!item || !item.stockItem) return false;
         const availableStock = getAvailableStock(item.stockItem._id);
         return item.transferredQuantity > 0 && item.transferredQuantity <= availableStock;
     };
@@ -505,36 +520,48 @@ export default function TransferModal({ isOpen, onClose, transfer, onSave }: Tra
                                         </HStack>
 
                                         {transferredItems.length === 0 ? (
-                                            <Box textAlign="center" py={4} color="gray.500">
+                                            <Box textAlign="center" py={4} color={textSecondaryColor}>
                                                 No items added yet
                                             </Box>
                                         ) : (
-                                            <TableContainer>
+                                            <TableContainer
+                                                bg={tableBg}
+                                                borderRadius="lg"
+                                                boxShadow={tableBoxShadow}
+                                                border="1px solid"
+                                                borderColor={tableBorderColor}
+                                            >
                                                 <Table variant="simple" size="sm">
                                                     <Thead>
                                                         <Tr>
-                                                            <Th>Item</Th>
-                                                            {!isCompleted && <Th>Available Stock</Th>}
-                                                            <Th>Quantity</Th>
-                                                            <Th>Unit</Th>
-                                                            {isEditable && <Th>Actions</Th>}
+                                                            <Th color={tableHeaderColor} borderColor={tableBorderColor}>Item</Th>
+                                                            {!isCompleted && <Th color={tableHeaderColor} borderColor={tableBorderColor}>Available Stock</Th>}
+                                                            <Th color={tableHeaderColor} borderColor={tableBorderColor}>Quantity</Th>
+                                                            <Th color={tableHeaderColor} borderColor={tableBorderColor}>Unit</Th>
+                                                            {isEditable && <Th color={tableHeaderColor} borderColor={tableBorderColor}>Actions</Th>}
                                                         </Tr>
                                                     </Thead>
                                                     <Tbody>
                                                         {transferredItems.map((item, index) => {
+                                                            // Add defensive check for item.stockItem
+                                                            if (!item.stockItem) {
+                                                                console.warn('Skipping item with missing stockItem:', item);
+                                                                return null;
+                                                            }
+
                                                             const availableStock = getAvailableStock(item.stockItem._id);
                                                             const isValid = isQuantityValid(item);
                                                             return (
                                                                 <Tr key={item._key}>
-                                                                    <Td>{item.stockItem.name}</Td>
+                                                                    <Td borderColor={tableBorderColor}>{item.stockItem.name}</Td>
                                                                     {!isCompleted && (
-                                                                        <Td>
-                                                                            <Text color={availableStock > 0 ? 'green.500' : 'red.500'}>
+                                                                        <Td borderColor={tableBorderColor}>
+                                                                            <Text color={availableStock > 0 ? positiveColor : negativeColor}>
                                                                                 {availableStock}
                                                                             </Text>
                                                                         </Td>
                                                                     )}
-                                                                    <Td>
+                                                                    <Td borderColor={tableBorderColor}>
                                                                         <NumberInput
                                                                             value={item.transferredQuantity}
                                                                             min={1}
@@ -554,14 +581,14 @@ export default function TransferModal({ isOpen, onClose, transfer, onSave }: Tra
                                                                             </NumberInputStepper>
                                                                         </NumberInput>
                                                                         {!isValid && !isCompleted && (
-                                                                            <Text fontSize="xs" color="red.500">
+                                                                            <Text fontSize="xs" color={negativeColor}>
                                                                                 Exceeds available stock
                                                                             </Text>
                                                                         )}
                                                                     </Td>
-                                                                    <Td>{item.stockItem.unitOfMeasure}</Td>
+                                                                    <Td borderColor={tableBorderColor}>{item.stockItem.unitOfMeasure}</Td>
                                                                     {isEditable && (
-                                                                        <Td>
+                                                                        <Td borderColor={tableBorderColor}>
                                                                             <HStack>
                                                                                 <IconButton
                                                                                     aria-label="Edit item"
@@ -610,7 +637,7 @@ export default function TransferModal({ isOpen, onClose, transfer, onSave }: Tra
                                     <>
                                         <Button
                                             leftIcon={<FiSave />}
-                                            colorScheme="blue"
+                                            colorScheme={brandColorScheme}
                                             onClick={() => handleSave('draft')}
                                             isLoading={isSaving}
                                             loadingText="Saving..."
@@ -619,7 +646,7 @@ export default function TransferModal({ isOpen, onClose, transfer, onSave }: Tra
                                         </Button>
                                         <Button
                                             leftIcon={<FiSend />}
-                                            colorScheme="green"
+                                            colorScheme={brandColorScheme}
                                             onClick={() => handleSave('pending-approval')}
                                             isLoading={isSaving}
                                             ml={3}
@@ -629,19 +656,19 @@ export default function TransferModal({ isOpen, onClose, transfer, onSave }: Tra
                                         </Button>
                                     </>
                                 ) : isPendingApproval ? (
-                                    <Text color="orange.500" fontSize="sm">
+                                    <Text color={neutralColorScheme} fontSize="sm">
                                         Waiting for approval - read only
                                     </Text>
                                 ) : isApproved ? (
                                     <Button
-                                        colorScheme="purple"
+                                        colorScheme={brandColorScheme}
                                         onClick={() => handleSave('completed')}
                                         isLoading={isSaving}
                                     >
                                         Complete Transfer
                                     </Button>
                                 ) : isCompleted ? (
-                                    <Text color="green.500" fontSize="sm">
+                                    <Text color={positiveColor} fontSize="sm">
                                         Transfer completed - read only
                                     </Text>
                                 ) : null}

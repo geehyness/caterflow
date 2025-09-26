@@ -49,11 +49,11 @@ import {
     Input,
     InputGroup,
     InputLeftElement,
+    useColorModeValue,
 } from '@chakra-ui/react';
 import { useSession } from 'next-auth/react'
 import { FaBoxes } from 'react-icons/fa';
 import { FiPackage, FiFilter, FiEye, FiSearch, FiPlus } from 'react-icons/fi';
-import ActionCard from './ActionCard';
 import PurchaseOrderModal, { PurchaseOrderDetails } from './PurchaseOrderModal';
 import FileUploadModal from '@/components/FileUploadModal';
 
@@ -187,6 +187,10 @@ export default function ActionsPage() {
     const user = session?.user as any; // Temporary any type
     const isAuthenticated = status === 'authenticated';
     const isAuthReady = status !== 'loading';
+
+    // Theme-based colors
+    const primaryBgColor = useColorModeValue('neutral.light.bg-primary', 'neutral.dark.bg-primary');
+    const primaryTextColor = useColorModeValue('neutral.light.text-primary', 'neutral.dark.text-primary');
 
     const fetchActions = useCallback(async () => {
         setLoading(true);
@@ -889,19 +893,19 @@ export default function ActionsPage() {
 
     if (status === 'loading' || loading) {
         return (
-            <Flex justifyContent="center" alignItems="center" minH="100vh">
-                <Spinner size="xl" />
+            <Flex justifyContent="center" alignItems="center" minH="100vh" bg={primaryBgColor}>
+                <Spinner size="xl" color="brand.500" />
             </Flex>
         );
     }
 
     if (error) {
         return (
-            <Flex justifyContent="center" alignItems="center" minH="100vh" direction="column">
+            <Flex justifyContent="center" alignItems="center" minH="100vh" direction="column" bg={primaryBgColor}>
                 <Text fontSize="xl" color="red.500">
                     {error}
                 </Text>
-                <Button onClick={fetchActions} mt={4}>
+                <Button onClick={fetchActions} mt={4} colorScheme="brand">
                     Try Again
                 </Button>
             </Flex>
@@ -909,13 +913,13 @@ export default function ActionsPage() {
     }
 
     return (
-        <Box p={8}>
-            <Heading as="h1" size="xl" mb={6}>
+        <Box p={{ base: 4, md: 8 }} bg={primaryBgColor} minH="calc(100vh - 60px)">
+            <Heading as="h1" size={{ base: 'lg', md: 'xl' }} mb={6} color={primaryTextColor}>
                 Pending Actions
             </Heading>
 
-            <Tabs variant="enclosed" onChange={(index) => setActiveTab(index)}>
-                <TabList>
+            <Tabs variant="enclosed" onChange={(index) => setActiveTab(index)} colorScheme="brand">
+                <TabList overflowX="auto" whiteSpace="nowrap">
                     {actionTypes.map((type, index) => (
                         <Tab key={type}>{actionTypeTitles[type as keyof typeof actionTypeTitles]}</Tab>
                     ))}
@@ -923,18 +927,29 @@ export default function ActionsPage() {
                 <TabPanels>
                     {actionTypes.map((type, index) => (
                         <TabPanel key={type}>
-                            <Flex justifyContent="space-between" alignItems="center" mb={4} gap={3}>
+                            <Flex
+                                direction={{ base: 'column', sm: 'row' }}
+                                justifyContent="space-between"
+                                alignItems="center"
+                                mb={4}
+                                gap={3}
+                            >
                                 {/* New Order button for PurchaseOrder tab */}
                                 {type === 'PurchaseOrder' && (
                                     <Button
                                         leftIcon={<FiPlus />}
                                         colorScheme="brand"
                                         onClick={handleAddOrder}
+                                        w={{ base: '100%', sm: 'auto' }}
                                     >
                                         New Order
                                     </Button>
                                 )}
-                                <HStack justifyContent="flex-end" flex="1">
+                                <HStack
+                                    justifyContent={{ base: 'flex-start', sm: 'flex-end' }}
+                                    flex="1"
+                                    w={{ base: '100%', sm: 'auto' }}
+                                >
                                     <Button
                                         leftIcon={<FiFilter />}
                                         colorScheme={viewMode === 'actionRequired' ? 'brand' : 'gray'}
@@ -981,7 +996,8 @@ export default function ActionsPage() {
                                                         cell: (row: any) => (
                                                             <Button
                                                                 size="sm"
-                                                                colorScheme="blue"
+                                                                colorScheme="brand"
+                                                                variant="outline"
                                                                 onClick={() => handleOpenApprovalDetails(row)}
                                                             >
                                                                 View
@@ -998,7 +1014,7 @@ export default function ActionsPage() {
                                                                 return (
                                                                     <Box>
                                                                         <Text>{row.description}</Text>
-                                                                        <Text fontSize="sm" color="gray.600" mt={1}>
+                                                                        <Text fontSize="sm" color="neutral.light.text-secondary">
                                                                             Items: {row.orderedItems.map((item: any) =>
                                                                                 `${item.stockItem.name} (${item.orderedQuantity})`
                                                                             ).join(', ')}
@@ -1030,14 +1046,21 @@ export default function ActionsPage() {
 
                             {type === 'GoodsReceipt' && (
                                 <>
-                                    <Flex justifyContent="space-between" alignItems="center" mb={4}>
-                                        <Heading as="h3" size="md">
+                                    <Flex
+                                        direction={{ base: 'column', sm: 'row' }}
+                                        justifyContent="space-between"
+                                        alignItems="center"
+                                        mb={4}
+                                        gap={3}
+                                    >
+                                        <Heading as="h3" size="md" color={primaryTextColor} w={{ base: '100%', sm: 'auto' }}>
                                             Pending Goods Receipts
                                         </Heading>
                                         <Button
                                             leftIcon={<Icon as={FiPlus} />}
-                                            colorScheme="blue"
+                                            colorScheme="brand"
                                             onClick={handleAddReceipt}
+                                            w={{ base: '100%', sm: 'auto' }}
                                         >
                                             New Receipt
                                         </Button>
@@ -1047,7 +1070,7 @@ export default function ActionsPage() {
                                         action.actionType === 'GoodsReceipt' &&
                                         (action.status === 'draft' || action.status === 'partial')
                                     ).length === 0 ? (
-                                        <Text fontSize="lg" color="gray.500">
+                                        <Text fontSize="lg" color="neutral.light.text-secondary">
                                             No pending goods receipts at this time.
                                         </Text>
                                     ) : (
@@ -1093,7 +1116,7 @@ export default function ActionsPage() {
                             {type !== 'GoodsReceipt' && (
                                 <>
                                     {getActionsToDisplay(index).length === 0 ? (
-                                        <Text fontSize="lg" color="gray.500">
+                                        <Text fontSize="lg" color="neutral.light.text-secondary">
                                             {viewMode === 'actionRequired'
                                                 ? `No ${actionTypeTitles[type as keyof typeof actionTypeTitles].toLowerCase()} actions requiring attention at this time.`
                                                 : `No ${actionTypeTitles[type as keyof typeof actionTypeTitles].toLowerCase()} actions found.`
@@ -1198,7 +1221,7 @@ export default function ActionsPage() {
                                 <Spinner size="xl" />
                             </Flex>
                         ) : approvedPOsWithoutReceipts.length === 0 ? (
-                            <Text fontSize="lg" color="gray.500">
+                            <Text fontSize="lg" color="neutral.light.text-secondary">
                                 No approved purchase orders available for receiving.
                             </Text>
                         ) : (
@@ -1233,12 +1256,12 @@ export default function ActionsPage() {
                                                     </Text>
                                                 ))}
                                                 {row.orderedItems?.length > 2 && (
-                                                    <Text fontSize="sm" color="gray.500">
+                                                    <Text fontSize="sm" color="neutral.light.text-secondary">
                                                         +{row.orderedItems.length - 2} more items
                                                     </Text>
                                                 )}
                                                 {(!row.orderedItems || row.orderedItems.length === 0) && (
-                                                    <Text fontSize="sm" color="gray.500">No items</Text>
+                                                    <Text fontSize="sm" color="neutral.light.text-secondary">No items</Text>
                                                 )}
                                             </Box>
                                         )
@@ -1294,7 +1317,7 @@ export default function ActionsPage() {
                             <Button ref={cancelRef} onClick={() => setIsConfirmDialogOpen(false)}>
                                 Cancel
                             </Button>
-                            <Button colorScheme="blue" onClick={proceedWithOrderUpdate} ml={3}>
+                            <Button colorScheme="brand" onClick={proceedWithOrderUpdate} ml={3}>
                                 Confirm
                             </Button>
                         </AlertDialogFooter>
@@ -1316,7 +1339,7 @@ export default function ActionsPage() {
                             <Text mb={3}>The following items have a price of £0.00:</Text>
                             <VStack align="start" spacing={1}>
                                 {hasZeroPriceItems.map((item, index) => (
-                                    <Text key={index} fontSize="sm" color="orange.600">
+                                    <Text key={index} fontSize="sm" color="orange.500">
                                         • {item}
                                     </Text>
                                 ))}

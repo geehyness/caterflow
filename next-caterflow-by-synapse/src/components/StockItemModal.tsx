@@ -20,6 +20,7 @@ import {
     NumberInputStepper,
     NumberIncrementStepper,
     NumberDecrementStepper,
+    useColorModeValue,
 } from '@chakra-ui/react';
 
 interface StockItem {
@@ -55,6 +56,10 @@ export default function StockItemModal({ isOpen, onClose, item, onSave }: StockI
     const [unitOfMeasure, setUnitOfMeasure] = useState('');
     const [loading, setLoading] = useState(false);
     const toast = useToast();
+
+    // Theme-aware colors
+    const brandColorScheme = useColorModeValue('brand', 'brand');
+    const neutralColorScheme = useColorModeValue('gray', 'gray');
 
     useEffect(() => {
         if (item) {
@@ -180,10 +185,10 @@ export default function StockItemModal({ isOpen, onClose, item, onSave }: StockI
                     </ModalBody>
 
                     <ModalFooter>
-                        <Button colorScheme="gray" mr={3} onClick={onClose} isDisabled={loading}>
+                        <Button colorScheme={neutralColorScheme} mr={3} onClick={onClose} isDisabled={loading} variant="ghost">
                             Cancel
                         </Button>
-                        <Button colorScheme="blue" type="submit" isLoading={loading}>
+                        <Button colorScheme={brandColorScheme} type="submit" isLoading={loading}>
                             {item ? 'Update Item' : 'Create Item'}
                         </Button>
                     </ModalFooter>
