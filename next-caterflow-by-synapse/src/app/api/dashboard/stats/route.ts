@@ -8,6 +8,18 @@ import Decimal from 'decimal.js';
 const cache = new Map();
 const CACHE_TTL = 30000; // 30 seconds
 
+// Add this function to calculate total stock count (simple version)
+async function calculateTotalStockCount(siteIds: string[]): Promise<number> {
+    try {
+        const query = groq`count(*[_type == "StockItem"])`;
+        return await client.fetch(query);
+    } catch (error) {
+        console.error('Error counting stock items:', error);
+        return 0;
+    }
+}
+
+// Then update the main POST function to include this calculation
 export async function POST(request: NextRequest) {
     try {
         const { siteIds } = await request.json();
@@ -33,7 +45,7 @@ export async function POST(request: NextRequest) {
         const startOfWeek = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
         const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
 
-        // Fetch all needed data in parallel
+        // Fetch all needed data in parallel - ADD totalStockCount HERE
         const [
             transactions,
             stockItems,
@@ -44,7 +56,8 @@ export async function POST(request: NextRequest) {
             pendingTransfersCount,
             draftOrdersCount,
             weeklyActivityCount,
-            todayActivityCount
+            todayActivityCount,
+            totalStockCount // ← Add this line
         ] = await Promise.all([
             fetchTransactions(siteIds),
             fetchStockItems(),
@@ -55,7 +68,8 @@ export async function POST(request: NextRequest) {
             countPendingTransfers(siteIds),
             countDraftOrders(siteIds),
             countWeeklyActivity(siteIds, startOfWeek),
-            countTodayActivity(siteIds, startOfToday)
+            countTodayActivity(siteIds, startOfToday),
+            calculateTotalStockCount(siteIds) // ← Add this line
         ]);
 
         // Calculate low stock items using the original method
@@ -83,7 +97,10 @@ export async function POST(request: NextRequest) {
 
                 // Card 5: Recent Activity
                 weeklyActivityCount,
-                todayActivityCount
+                todayActivityCount,
+
+                // Card 6: Total Stock Count (NEW)
+                totalStockCount // ← Add this line
             }
         };
 
@@ -103,7 +120,6 @@ export async function POST(request: NextRequest) {
         );
     }
 }
-
 // Original low stock calculation method
 async function calculateLowStockCounts(stockItems: any[], bins: any[], siteIds: string[]) {
     // Filter bins to only include those from selected sites

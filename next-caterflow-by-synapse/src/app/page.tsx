@@ -493,14 +493,14 @@ export default function Home() {
             viewAllLink="/low-stock"
           />
 
-          {/* Card 5: Total Stock */}
+          {/* Card 5: Current Stock - Using actual count */}
           <StatCard
-            title="Total Stock"
+            title="Current Stock"
             value={dashboardStats?.totalStockCount || 0}
-            subValue={`${dashboardStats?.todayActivityCount || 0} items moved today`}
+            subValue="All stock items"
             icon={BsClipboardData}
             colorScheme="brand"
-            viewAllLink="/inventory"
+            viewAllLink="/current"
           />
         </SimpleGrid>
       )}
