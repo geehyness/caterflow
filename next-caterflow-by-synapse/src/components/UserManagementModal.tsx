@@ -196,17 +196,6 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({
                                 <FormErrorMessage>{errors.email}</FormErrorMessage>
                             </FormControl>
 
-                            <FormControl isInvalid={!!errors.password} isRequired={!userToEdit}>
-                                <FormLabel>Password</FormLabel>
-                                <Input
-                                    type="password"
-                                    value={password}
-                                    onChange={(e) => setPassword(e.target.value)}
-                                    placeholder={userToEdit ? 'Leave blank to keep current password' : 'Enter password'}
-                                />
-                                <FormErrorMessage>{errors.password}</FormErrorMessage>
-                            </FormControl>
-
                             <FormControl isRequired>
                                 <FormLabel>Role</FormLabel>
                                 <Select value={role} onChange={(e) => setRole(e.target.value)}>

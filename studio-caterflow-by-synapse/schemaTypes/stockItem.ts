@@ -190,11 +190,6 @@ export default defineType({
             by: [{ field: 'minimumStockLevel', direction: 'asc' }],
         },
         {
-            name: 'minStockLevelAsc',
-            title: 'Min Stock Level (Low to High)',
-            by: [{ field: 'minimumStockLevel', direction: 'asc' }],
-        },
-        {
             name: 'minStockLevelDesc',
             title: 'Min Stock Level (High to Low)',
             by: [{ field: 'minimumStockLevel', direction: 'desc' }],

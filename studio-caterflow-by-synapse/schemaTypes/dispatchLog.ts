@@ -145,6 +145,20 @@ export default defineType({
             validation: (Rule) => Rule.required(),
         }),
         defineField({
+            name: 'totalCost',
+            title: 'Total Dispatch Cost',
+            type: 'number',
+            description: 'Total cost of all dispatched items',
+            readOnly: true,
+        }),
+        defineField({
+            name: 'costPerPerson',
+            title: 'Cost Per Person',
+            type: 'number',
+            description: 'Total cost divided by number of people fed',
+            readOnly: true,
+        }),
+        defineField({
             name: 'completedAt',
             title: 'Completed At',
             type: 'datetime',
