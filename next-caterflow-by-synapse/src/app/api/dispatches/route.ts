@@ -51,6 +51,8 @@ export async function GET() {
             evidenceStatus,
             peopleFed,
             notes,
+            totalCost,
+            costPerPerson,
             "dispatchType": dispatchType->{
                 _id,
                 name,
@@ -80,6 +82,7 @@ export async function GET() {
             "dispatchedItems": coalesce(dispatchedItems[]{
                 _key,
                 dispatchedQuantity,
+                unitPrice,
                 totalCost,
                 notes,
                 "stockItem": stockItem->{
@@ -88,7 +91,6 @@ export async function GET() {
                     sku,
                     unitOfMeasure,
                     currentStock,
-                    unitPrice,
                     "category": category->{
                         _id,
                         title
@@ -106,6 +108,7 @@ export async function GET() {
 
         const dispatches = await client.fetch(query);
 
+        // Filter out incomplete dispatches (missing required refs)
         const validDispatches = dispatches.filter((dispatch: any) =>
             dispatch.sourceBin !== null &&
             dispatch.dispatchType !== null
@@ -130,7 +133,7 @@ export async function POST(request: Request) {
         const { _id, ...createData } = body;
 
         if (!createData.dispatchType || !createData.sourceBin || !createData.dispatchDate) {
-            return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+            return NextResponse.json({ error: 'Missing required fields (dispatchType, sourceBin, dispatchDate)' }, { status: 400 });
         }
 
         // normalize references
@@ -138,17 +141,32 @@ export async function POST(request: Request) {
         const sourceBinRef = resolveRef(createData.sourceBin);
         const dispatchedByRef = resolveRef(createData.dispatchedBy) || session.user.id;
 
-        const dispatchedItems = (createData.dispatchedItems || []).map((item: any) => ({
-            _type: 'DispatchedItem',
-            _key: item._key || uuidv4(),
-            stockItem: {
-                _type: 'reference',
-                _ref: resolveRef(item.stockItem) || resolveRef(item.stockItem?._id) || null,
-            },
-            dispatchedQuantity: item.dispatchedQuantity,
-            totalCost: item.totalCost || 0,
-            notes: item.notes || '',
-        }));
+        // Process dispatched items with unit prices and total cost
+        const dispatchedItems = (createData.dispatchedItems || []).map((item: any) => {
+            // Explicitly convert to Number for safe calculation
+            const unitPrice = Number(item.unitPrice) || 0;
+            const dispatchedQuantity = Number(item.dispatchedQuantity) || 0;
+            const totalCost = unitPrice * dispatchedQuantity;
+
+            return {
+                _type: 'DispatchedItem',
+                _key: item._key || uuidv4(),
+                stockItem: {
+                    _type: 'reference',
+                    _ref: resolveRef(item.stockItem) || resolveRef(item.stockItem?._id) || null,
+                },
+                dispatchedQuantity: dispatchedQuantity,
+                unitPrice: unitPrice,
+                totalCost: totalCost,
+                notes: item.notes || '',
+            };
+        });
+
+        // Calculate grand total cost and cost per person
+        const totalCost = dispatchedItems.reduce((sum: number, item: any) => sum + (item.totalCost || 0), 0);
+        // Explicitly convert peopleFed to Number for safe calculation
+        const peopleFed = Number(createData.peopleFed) || 0;
+        const costPerPerson = peopleFed > 0 ? totalCost / peopleFed : 0;
 
         const newDoc: any = {
             ...createData,
@@ -158,7 +176,9 @@ export async function POST(request: Request) {
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
             evidenceStatus: 'pending',
-            peopleFed: createData.peopleFed || undefined,
+            peopleFed: peopleFed,
+            totalCost: totalCost, // <--- Correctly saved
+            costPerPerson: costPerPerson, // <--- Correctly saved
             dispatchType: dispatchTypeRef ? { _type: 'reference', _ref: dispatchTypeRef } : undefined,
             sourceBin: sourceBinRef ? { _type: 'reference', _ref: sourceBinRef } : undefined,
             dispatchedBy: dispatchedByRef ? { _type: 'reference', _ref: dispatchedByRef } : undefined,
@@ -169,7 +189,7 @@ export async function POST(request: Request) {
 
         await logSanityInteraction(
             'create',
-            `Created new dispatch: ${newDoc.dispatchNumber}`,
+            `Created new dispatch: ${newDoc.dispatchNumber} with total cost: $${totalCost}`,
             'DispatchLog',
             result._id,
             session.user.id,
@@ -184,8 +204,6 @@ export async function POST(request: Request) {
 }
 
 // --- PATCH update by body (legacy / optional) ---
-// This handler expects a JSON body with an _id field to identify which doc to update.
-// It will reject edits if the existing document already has evidenceStatus === 'complete'.
 export async function PATCH(request: Request) {
     try {
         const session = await getServerSession(authOptions);
@@ -236,6 +254,10 @@ export async function PATCH(request: Request) {
         if (updateData.dispatchedItems) {
             const normalizedItems = (updateData.dispatchedItems || []).map((item: any) => {
                 const stockRef = resolveRef(item.stockItem) || resolveRef(item.stockItem?._id) || resolveRef(item.stockItem?._ref);
+                const unitPrice = item.unitPrice || 0;
+                const dispatchedQuantity = item.dispatchedQuantity || 0;
+                const totalCost = unitPrice * dispatchedQuantity;
+
                 return {
                     _type: 'DispatchedItem',
                     _key: item._key || uuidv4(),
@@ -243,12 +265,21 @@ export async function PATCH(request: Request) {
                         _type: 'reference',
                         _ref: stockRef,
                     },
-                    dispatchedQuantity: item.dispatchedQuantity,
-                    totalCost: item.totalCost || 0,
+                    dispatchedQuantity: dispatchedQuantity,
+                    unitPrice: unitPrice,
+                    totalCost: totalCost,
                     notes: item.notes || '',
                 };
             });
             patch = patch.set({ dispatchedItems: normalizedItems });
+
+            // Recalculate total cost and cost per person
+            const totalCost = normalizedItems.reduce((sum: number, item: any) => sum + (item.totalCost || 0), 0);
+            const peopleFed = updateData.peopleFed || 0;
+            const costPerPerson = peopleFed > 0 ? totalCost / peopleFed : 0;
+
+            patch = patch.set({ totalCost: totalCost });
+            patch = patch.set({ costPerPerson: costPerPerson });
         }
 
         // If caller provided attachments array, set it (replace); caller should pass properly shaped refs.

@@ -34,6 +34,8 @@ interface DispatchRecord {
     evidenceStatus: 'pending' | 'partial' | 'complete';
     peopleFed?: number;
     notes?: string;
+    totalCost?: number; // ADD THIS
+    costPerPerson?: number; // ADD THIS
     dispatchType?: {
         _id: string;
         name: string;
@@ -61,6 +63,7 @@ interface DispatchRecord {
             unitOfMeasure?: string;
         };
         dispatchedQuantity: number;
+        unitPrice?: number; // ADD THIS
         totalCost?: number;
         notes?: string;
     }>;
@@ -297,12 +300,30 @@ export default function DispatchesPage() {
             }
         },
         {
+            accessorKey: 'totalCost',
+            header: 'Total Cost',
+            isSortable: true,
+            cell: (row: any) => {
+                const d: DispatchRecord = row?.original ?? row;
+                return d?.totalCost ? `$${d.totalCost.toFixed(2)}` : '$0.00';
+            },
+        },
+        {
             accessorKey: 'peopleFed',
             header: 'People Fed',
             isSortable: true,
             cell: (row: any) => {
                 const d: DispatchRecord = row?.original ?? row;
                 return d?.peopleFed ?? 'N/A';
+            },
+        },
+        {
+            accessorKey: 'costPerPerson',
+            header: 'Cost per Person',
+            isSortable: true,
+            cell: (row: any) => {
+                const d: DispatchRecord = row?.original ?? row;
+                return d?.costPerPerson ? `$${d.costPerPerson.toFixed(2)}` : 'N/A';
             },
         },
         {
@@ -342,23 +363,7 @@ export default function DispatchesPage() {
                         Dispatches
                     </Heading>
                     <HStack spacing={3} flexWrap="wrap">
-                        <InputGroup maxW={{ base: 'full', md: '300px' }}>
-                            <InputLeftElement pointerEvents="none">
-                                <FiSearch color={secondaryTextColor} />
-                            </InputLeftElement>
-                            <Input
-                                type="text"
-                                placeholder="Search dispatches..."
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                                borderColor={borderColor}
-                                bg={bgCard}
-                                _hover={{ borderColor: 'brand.500' }}
-                                _focus={{ borderColor: 'brand.500', boxShadow: '0 0 0 1px var(--chakra-colors-brand-500)' }}
-                                color={primaryTextColor}
-                                _placeholder={{ color: secondaryTextColor }}
-                            />
-                        </InputGroup>
+
                         <Button
                             leftIcon={<FiEye />}
                             colorScheme="brand"

@@ -109,20 +109,6 @@ export interface DispatchType extends SanityDocument {
     isActive: boolean;
 }
 
-export interface DispatchLog extends SanityDocument {
-    _type: 'DispatchLog';
-    dispatchNumber: string;
-    dispatchType: Reference;
-    dispatchDate: string;
-    sourceBin: Reference;
-    dispatchedBy: Reference;
-    dispatchedItems: DispatchedItem[];
-    attachments?: Reference[];
-    evidenceStatus: 'pending' | 'partial' | 'complete';
-    peopleFed?: number;
-    notes?: string;
-}
-
 export interface InternalTransfer extends SanityDocument {
     _type: 'InternalTransfer';
     transferNumber: string;
@@ -206,13 +192,32 @@ export interface ReceivedItem {
     condition: 'good' | 'damaged' | 'short-shipped' | 'over-shipped';
 }
 
+// schemas/sanityTypes.ts
 export interface DispatchedItem {
     _type: 'DispatchedItem';
     _key: string;
     stockItem: Reference;
     dispatchedQuantity: number;
+    unitPrice: number; // Add this line
     totalCost?: number;
     notes?: string;
+}
+
+export interface DispatchLog extends SanityDocument {
+    _type: 'DispatchLog';
+    dispatchNumber: string;
+    dispatchType: Reference;
+    dispatchDate: string;
+    sourceBin: Reference;
+    dispatchedBy: Reference;
+    dispatchedItems: DispatchedItem[];
+    attachments?: Reference[];
+    evidenceStatus: 'pending' | 'partial' | 'complete';
+    peopleFed?: number;
+    notes?: string;
+    // Add these fields for cost calculations
+    totalCost?: number;
+    costPerPerson?: number;
 }
 
 export interface AdjustedItem {

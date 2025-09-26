@@ -20,10 +20,17 @@ export default defineType({
             validation: (Rule) => Rule.required().min(0),
         }),
         defineField({
+            name: 'unitPrice',
+            title: 'Unit Price at Dispatch',
+            type: 'number',
+            validation: (Rule) => Rule.required().min(0),
+            description: 'Unit price at the time of dispatch (stored for historical accuracy)',
+        }),
+        defineField({
             name: 'totalCost',
             title: 'Total Cost',
             type: 'number',
-            description: 'This value is calculated automatically and cannot be edited.',
+            description: 'Calculated as unitPrice × dispatchedQuantity',
             readOnly: true,
         }),
         defineField({
@@ -39,12 +46,13 @@ export default defineType({
             title: 'stockItem.name',
             subtitle: 'dispatchedQuantity',
             unit: 'stockItem.unitOfMeasure',
+            unitPrice: 'unitPrice',
             totalCost: 'totalCost',
         },
-        prepare({ title, subtitle, unit, totalCost }) {
+        prepare({ title, subtitle, unit, unitPrice, totalCost }) {
             return {
                 title: title,
-                subtitle: `${subtitle} ${unit} | Cost: E${totalCost || 0}`,
+                subtitle: `${subtitle} ${unit} | Unit: $${unitPrice || 0} | Total: $${totalCost || 0}`,
             };
         },
     },
