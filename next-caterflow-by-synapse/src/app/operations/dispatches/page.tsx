@@ -162,7 +162,7 @@ export default function DispatchesPage() {
         onOpen();
     };
 
-    const handleViewDispatch = async (rowOrRecord: DispatchRecord) => {
+    const handleViewDispatch = useCallback(async (rowOrRecord: DispatchRecord) => {
         const record = (rowOrRecord as any)?.original ?? rowOrRecord;
         if (!record?._id) {
             toast({
@@ -195,7 +195,7 @@ export default function DispatchesPage() {
         } finally {
             setLoading(false);
         }
-    };
+    }, [onOpen, toast]);
 
     const handleSaveSuccess = () => {
         fetchDispatches();
@@ -343,10 +343,9 @@ export default function DispatchesPage() {
                     </Heading>
                     <HStack spacing={3} flexWrap="wrap">
                         <InputGroup maxW={{ base: 'full', md: '300px' }}>
-                            <InputLeftElement
-                                pointerEvents="none"
-                                children={<FiSearch color={secondaryTextColor} />}
-                            />
+                            <InputLeftElement pointerEvents="none">
+                                <FiSearch color={secondaryTextColor} />
+                            </InputLeftElement>
                             <Input
                                 type="text"
                                 placeholder="Search dispatches..."

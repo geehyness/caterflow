@@ -218,23 +218,7 @@ export default function SuppliersPage() {
 
                 <Card bg={cardBg} border="1px" borderColor={borderColor} borderRadius="md" boxShadow="md">
                     <CardBody>
-                        <InputGroup mb={4}>
-                            <InputLeftElement
-                                pointerEvents="none"
-                                children={<FiSearch color={secondaryTextColor} />}
-                            />
-                            <Input
-                                type="text"
-                                placeholder="Search suppliers..."
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                                bg={inputBg}
-                                borderColor={borderColor}
-                                _hover={{ borderColor: brand500 }}
-                                _focus={{ borderColor: brand500, boxShadow: `0 0 0 1px ${brand500}` }}
-                                color={headingColor}
-                            />
-                        </InputGroup>
+
                         <DataTable
                             columns={columns}
                             data={filteredSuppliers}

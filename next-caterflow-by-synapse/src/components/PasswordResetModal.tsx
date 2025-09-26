@@ -19,7 +19,8 @@ import {
     Alert,
     AlertIcon,
     HStack,
-    useColorModeValue, // Import useColorModeValue for theme-based colors
+    useColorModeValue,
+    ModalCloseButton, // Import useColorModeValue for theme-based colors
 } from '@chakra-ui/react';
 
 interface PasswordResetModalProps {

@@ -190,11 +190,13 @@ export default function Home() {
   const associatedSite = user?.associatedSite;
   const isAuthReady = status !== 'loading';
 
+  // Moved all useColorModeValue calls to the top level
   const pageBg = useColorModeValue('neutral.light.bg-primary', 'neutral.dark.bg-primary');
   const headingColor = useColorModeValue('neutral.light.text-primary', 'neutral.dark.text-primary');
   const secondaryTextColor = useColorModeValue('neutral.light.text-secondary', 'neutral.dark.text-secondary');
   const dividerColor = useColorModeValue('neutral.light.border-color', 'neutral.dark.border-color');
   const transactionCardBg = useColorModeValue('neutral.light.bg-card', 'neutral.dark.bg-card');
+  const spinnerColor = useColorModeValue('brand.500', 'brand.300');
 
   useEffect(() => {
     if (status === 'loading') return;
@@ -357,7 +359,8 @@ export default function Home() {
   if (!isAuthReady || isSitesLoading) {
     return (
       <Flex justifyContent="center" alignItems="center" minHeight="calc(100vh - 60px - 80px)" bg={pageBg}>
-        <Spinner size="xl" color={useColorModeValue('brand.500', 'brand.300')} />
+        {/* Using the spinnerColor variable */}
+        <Spinner size="xl" color={spinnerColor} />
       </Flex>
     );
   }
@@ -519,7 +522,8 @@ export default function Home() {
 
       {isLoading ? (
         <Flex justifyContent="center" alignItems="center" minHeight="150px">
-          <Spinner size="lg" color={useColorModeValue('brand.500', 'brand.300')} />
+          {/* Using the spinnerColor variable */}
+          <Spinner size="lg" color={spinnerColor} />
         </Flex>
       ) : transactions.length > 0 ? (
         <VStack spacing={3} align="stretch">

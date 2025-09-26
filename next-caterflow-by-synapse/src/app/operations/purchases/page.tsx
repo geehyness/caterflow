@@ -524,24 +524,7 @@ export default function PurchasesPage() {
                     Purchase Orders
                 </Heading>
                 <HStack spacing={3} flexWrap="wrap">
-                    <InputGroup maxW={{ base: 'full', md: '300px' }}>
-                        <InputLeftElement
-                            pointerEvents="none"
-                            children={<FiSearch color={secondaryTextColor} />}
-                        />
-                        <Input
-                            type="text"
-                            placeholder="Search orders..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            borderColor={borderColor}
-                            bg={bgCard}
-                            _hover={{ borderColor: 'brand.500' }}
-                            _focus={{ borderColor: 'brand.500', boxShadow: '0 0 0 1px var(--chakra-colors-brand-500)' }}
-                            color={primaryTextColor}
-                            _placeholder={{ color: secondaryTextColor }}
-                        />
-                    </InputGroup>
+
                     <Button
                         leftIcon={<FiEye />}
                         colorScheme="brand"
@@ -595,14 +578,19 @@ export default function PurchasesPage() {
                 <PurchaseOrderModal
                     isOpen={isOrderModalOpen}
                     onClose={onOrderModalClose}
-                    purchaseOrder={poDetails}
+                    poDetails={poDetails}
                     isSaving={isSaving}
                     onSave={handleSaveOrder}
                     onApproveRequest={() => handleConfirmSubmit(poDetails)}
-                    editedQuantities={editedQuantities as any} // Cast as any for now to resolve type mismatch
-                    setEditedQuantities={setEditedQuantities as any}
+                    editedPrices={editedPrices}
+                    setEditedPrices={setEditedPrices}
+                    editedQuantities={editedQuantities}
+                    setEditedQuantities={setEditedQuantities}
+                    onRemoveItem={handleRemoveItem} // This is the missing prop
                 />
             )}
+
+
 
 
             <AlertDialog

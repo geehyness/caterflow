@@ -255,24 +255,7 @@ export default function BinCountsPage() {
                         Bin Counts
                     </Heading>
                     <HStack spacing={3} flexWrap="wrap">
-                        <InputGroup maxW={{ base: 'full', md: '300px' }}>
-                            <InputLeftElement
-                                pointerEvents="none"
-                                children={<FiSearch color={secondaryTextColor} />}
-                            />
-                            <Input
-                                type="text"
-                                placeholder="Search counts..."
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                                borderColor={borderColor}
-                                bg={bgCard}
-                                _hover={{ borderColor: 'brand.500' }}
-                                _focus={{ borderColor: 'brand.500', boxShadow: '0 0 0 1px var(--chakra-colors-brand-500)' }}
-                                color={primaryTextColor}
-                                _placeholder={{ color: secondaryTextColor }}
-                            />
-                        </InputGroup>
+                        
                         <Button
                             leftIcon={<FiEye />}
                             colorScheme="brand"

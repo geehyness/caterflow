@@ -1,30 +1,32 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
     Box,
     Heading,
-    Text,
+    Button,
     Flex,
     Spinner,
+    useDisclosure,
     useToast,
+    useColorModeValue,
     Card,
     CardBody,
-    Button,
-    HStack,
+    Input,
+    InputGroup,
+    InputLeftElement,
     Badge,
-    Icon,
-    useDisclosure,
-    Modal,
-    ModalOverlay,
-    ModalContent,
-    ModalHeader,
-    ModalBody,
-    ModalFooter,
-    NumberInput,
-    NumberInputField,
-    Select,
+    Text,
+    AlertDialog,
+    AlertDialogBody,
+    AlertDialogContent,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogOverlay,
     VStack,
+    Icon,
+    HStack,
+    Select,
     Table,
     Thead,
     Tbody,
@@ -38,11 +40,23 @@ import {
     AlertIcon,
     AlertTitle,
     AlertDescription,
-    useColorModeValue,
+    NumberInput,
+    NumberInputField,
+    Modal,
+    ModalBody,
+    ModalContent,
+    ModalFooter,
+    ModalHeader,
+    ModalOverlay,
 } from '@chakra-ui/react';
-import { useSession } from 'next-auth/react';
-import { FiCheck, FiEdit, FiInfo } from 'react-icons/fi';
+import { FiPlus, FiSearch, FiEye, FiFilter, FiEdit, FiInfo, FiCheck } from 'react-icons/fi';
 import DataTable from '@/app/actions/DataTable';
+import { useSession } from 'next-auth/react';
+import CreatePurchaseOrderModal from '@/app/actions/CreatePurchaseOrderModal';
+import PurchaseOrderModal, { PurchaseOrderDetails } from '@/app/actions/PurchaseOrderModal';
+import { PendingAction } from '@/app/actions/types';
+import { StockItem, Category, Site } from '@/lib/sanityTypes';
+
 
 interface PurchaseOrder {
     _id: string;
@@ -73,12 +87,10 @@ interface Supplier {
     name: string;
 }
 
-type StockItem = PurchaseOrder['orderedItems'][0]['stockItem'];
-
-interface StockItemWithSupplier extends StockItem {
-    primarySupplier?: { _id: string; name: string } | null;
+type StockItemWithSupplier = PurchaseOrder['orderedItems'][0]['stockItem'] & {
     suppliersList?: Supplier[];
-}
+};
+
 
 export default function ProcurementPage() {
     const { data: session, status } = useSession();
@@ -96,7 +108,8 @@ export default function ProcurementPage() {
     const [editedPrices, setEditedPrices] = useState<{ [key: string]: number | undefined }>({});
     const [defaultSupplierFlags, setDefaultSupplierFlags] = useState<{ [key: string]: boolean }>({});
 
-    // Theming props
+
+    // Theming props - ALL HOOK CALLS MUST BE AT THE TOP LEVEL
     const bgPrimary = useColorModeValue('neutral.light.bg-primary', 'neutral.dark.bg-primary');
     const bgCard = useColorModeValue('neutral.light.bg-card', 'neutral.dark.bg-card');
     const borderColor = useColorModeValue('neutral.light.border-color', 'neutral.dark.border-color');
@@ -105,6 +118,10 @@ export default function ProcurementPage() {
     const accentColor = useColorModeValue('brand.500', 'brand.300');
     const errorBg = useColorModeValue('red.50', 'red.900');
     const errorTextColor = useColorModeValue('red.500', 'red.300');
+    const warningAlertBg = useColorModeValue('yellow.50', 'yellow.900');
+    const warningAlertTitleColor = useColorModeValue('yellow.800', 'yellow.100');
+    const warningAlertDescriptionColor = useColorModeValue('yellow.700', 'yellow.200');
+    const hoverColor = useColorModeValue('gray.50', 'gray.700');
 
 
     /* ---------- Fetch helpers ---------- */
@@ -315,7 +332,7 @@ export default function ProcurementPage() {
 
     /* ---------- Modal actions ---------- */
 
-    const handleEditPO = async (po: PurchaseOrder) => {
+    const handleEditPO = useCallback(async (po: PurchaseOrder) => {
         setSelectedPO(po);
 
         const initialSuppliers: { [key: string]: string | undefined } = {};
@@ -340,7 +357,7 @@ export default function ProcurementPage() {
         setEditedPrices(initialPrices);
         setDefaultSupplierFlags(initialDefaultFlags);
         onEditModalOpen();
-    };
+    }, [fetchStockItemDetails, onEditModalOpen, stockItems]);
 
     const handleSupplierChange = (itemKey: string, supplierId: string, stockItemId: string) => {
         setEditedSuppliers(prev => ({ ...prev, [itemKey]: supplierId }));
@@ -440,7 +457,7 @@ export default function ProcurementPage() {
 
     /* ---------- Columns ---------- */
 
-    const columns = [
+    const columns = useMemo(() => [
         {
             accessorKey: 'actions',
             header: 'Actions',
@@ -511,8 +528,8 @@ export default function ProcurementPage() {
             header: 'Order Date',
             cell: (row: PurchaseOrder) => <Text color={secondaryTextColor}>{new Date(row.orderDate).toLocaleDateString()}</Text>
         },
+    ], [handleEditPO, primaryTextColor, secondaryTextColor]);
 
-    ];
 
     // Add this function after handleProcessPO
     const handleSaveChanges = async () => {
@@ -710,7 +727,7 @@ export default function ProcurementPage() {
                                                 const totalPriceValue = typeof currentPrice === 'number' ? currentPrice : (item.unitPrice > 0 ? item.unitPrice * item.orderedQuantity : undefined);
 
                                                 return (
-                                                    <Tr key={item._key} bg={rowError ? errorBg : undefined} _hover={{ bg: useColorModeValue('gray.50', 'gray.700') }}>
+                                                    <Tr key={item._key} bg={rowError ? errorBg : undefined} _hover={{ bg: hoverColor }}>
                                                         <Td borderColor={borderColor}>
                                                             <VStack align="start" spacing={0}>
                                                                 <Text fontWeight="medium" color={primaryTextColor}>{item.stockItem.name}</Text>
@@ -787,10 +804,10 @@ export default function ProcurementPage() {
                                 </TableContainer>
 
                                 {!canSaveChanges() && (
-                                    <Alert status="warning" borderRadius="md" bg={useColorModeValue('yellow.50', 'yellow.900')}>
+                                    <Alert status="warning" borderRadius="md" bg={warningAlertBg}>
                                         <AlertIcon />
-                                        <AlertTitle color={useColorModeValue('yellow.800', 'yellow.100')}>Missing data</AlertTitle>
-                                        <AlertDescription color={useColorModeValue('yellow.700', 'yellow.200')}>
+                                        <AlertTitle color={warningAlertTitleColor}>Missing data</AlertTitle>
+                                        <AlertDescription color={warningAlertDescriptionColor}>
                                             Some rows are missing supplier or total price. Fix those before saving.
                                         </AlertDescription>
                                     </Alert>

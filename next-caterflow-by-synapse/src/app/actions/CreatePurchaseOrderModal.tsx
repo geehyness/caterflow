@@ -30,6 +30,7 @@ import {
     useBreakpointValue,
     FormControl,
     FormLabel,
+    CardBody,
 } from '@chakra-ui/react';
 import { FiPlus, FiX } from 'react-icons/fi';
 import { StockItem, Supplier, Site } from '@/lib/sanityTypes';

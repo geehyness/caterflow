@@ -336,7 +336,7 @@ export default function FileUploadModal({
                                                 <VStack spacing={1}>
                                                     <Box
                                                         boxSize="60px"
-                                                        bg={useColorModeValue('neutral.light.bg-primary', 'neutral.dark.bg-primary')} // Use primary background color
+                                                        bg={cardBg} // Use primary background color
                                                         display="flex"
                                                         alignItems="center"
                                                         justifyContent="center"

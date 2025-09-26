@@ -23,7 +23,7 @@ import {
 } from '@chakra-ui/react';
 import { ChevronLeftIcon, ChevronRightIcon, ChevronUpIcon, ChevronDownIcon } from '@chakra-ui/icons';
 import { FiPackage } from 'react-icons/fi';
-import { PendingAction } from './types';
+import { PendingAction } from '@/app/actions/types';
 
 // Define a flexible column type for better control over rendering
 export interface Column {

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
     Box,
     Grid,
@@ -71,7 +71,7 @@ export default function AttachmentGallery({
     const modalBg = useColorModeValue('neutral.light.bg-modal', 'neutral.dark.bg-modal');
     const iconColor = useColorModeValue('gray.500', 'gray.400'); // Consistent icon color
 
-    const fetchAttachments = async () => {
+    const fetchAttachments = useCallback(async () => {
         setLoading(true);
         try {
             const response = await fetch(`/api/sanity/attachments?relatedToId=${relatedTo}`);
@@ -92,11 +92,11 @@ export default function AttachmentGallery({
         } finally {
             setLoading(false);
         }
-    };
+    }, [relatedTo, toast]);
 
     useEffect(() => {
         fetchAttachments();
-    }, [relatedTo]);
+    }, [fetchAttachments]);
 
     const handleView = (attachment: Attachment) => {
         setViewingAttachment(attachment);
@@ -169,7 +169,7 @@ export default function AttachmentGallery({
                                         w="full"
                                         h="120px"
                                         borderRadius="md"
-                                        bg={useColorModeValue('gray.100', 'gray.700')}
+                                        bg={cardBg}
                                         display="flex"
                                         alignItems="center"
                                         justifyContent="center"
