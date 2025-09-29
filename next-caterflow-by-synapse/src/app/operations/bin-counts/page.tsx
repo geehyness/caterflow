@@ -176,6 +176,16 @@ export default function BinCountsPage() {
                 isSortable: true,
             },
             {
+                accessorKey: 'status',
+                header: 'Status',
+                isSortable: true,
+                cell: (row: any) => (
+                    <Badge colorScheme={getStatusColor(row.status)} variant="subtle">
+                        {row.status?.replace('-', ' ').toUpperCase() || 'UNKNOWN'}
+                    </Badge>
+                ),
+            },
+            {
                 accessorKey: 'bin.name',
                 header: 'Bin',
                 isSortable: true,
@@ -198,16 +208,6 @@ export default function BinCountsPage() {
                         return 'Invalid Date';
                     }
                 },
-            },
-            {
-                accessorKey: 'status',
-                header: 'Status',
-                isSortable: true,
-                cell: (row: any) => (
-                    <Badge colorScheme={getStatusColor(row.status)} variant="subtle">
-                        {row.status?.replace('-', ' ').toUpperCase() || 'UNKNOWN'}
-                    </Badge>
-                ),
             },
             {
                 accessorKey: 'totalItems',
@@ -255,7 +255,7 @@ export default function BinCountsPage() {
                         Bin Counts
                     </Heading>
                     <HStack spacing={3} flexWrap="wrap">
-                        
+
                         <Button
                             leftIcon={<FiEye />}
                             colorScheme="brand"

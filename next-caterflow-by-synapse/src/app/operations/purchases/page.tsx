@@ -463,6 +463,15 @@ export default function PurchasesPage() {
             cell: (row: any) => <Text fontWeight="bold" color={primaryTextColor}>{row.poNumber}</Text>
         },
         {
+            accessorKey: 'status',
+            header: 'Status',
+            cell: (row: any) => (
+                <Badge colorScheme={getStatusColor(row.status)} variant="subtle">
+                    {row.status.replace('-', ' ').toUpperCase()}
+                </Badge>
+            )
+        },
+        {
             accessorKey: 'supplierNames',
             header: 'Suppliers',
             cell: (row: any) => <Text color={secondaryTextColor}>{row.supplierNames}</Text>
@@ -483,15 +492,6 @@ export default function PurchasesPage() {
             accessorKey: 'siteName',
             header: 'Site',
             cell: (row: any) => <Text color={primaryTextColor}>{row.siteName}</Text>
-        },
-        {
-            accessorKey: 'status',
-            header: 'Status',
-            cell: (row: any) => (
-                <Badge colorScheme={getStatusColor(row.status)} variant="subtle">
-                    {row.status.replace('-', ' ').toUpperCase()}
-                </Badge>
-            )
         },
         {
             accessorKey: 'orderDate',

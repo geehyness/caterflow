@@ -480,6 +480,15 @@ export default function ProcurementPage() {
             )
         },
         {
+            accessorKey: 'status',
+            header: 'Status',
+            cell: (row: PurchaseOrder) => (
+                <Badge colorScheme={getStatusColor(row.status)} variant="subtle">
+                    {row.status.toUpperCase()}
+                </Badge>
+            )
+        },
+        {
             accessorKey: 'site',
             header: 'Site',
             cell: (row: PurchaseOrder) => <Text color={secondaryTextColor}>{row.site?.name || 'N/A'}</Text>
@@ -512,16 +521,7 @@ export default function ProcurementPage() {
         {
             accessorKey: 'totalAmount',
             header: 'Total Amount',
-            cell: (row: PurchaseOrder) => <Text color={primaryTextColor}>E{row.totalAmount?.toFixed(2)}</Text>
-        },
-        {
-            accessorKey: 'status',
-            header: 'Status',
-            cell: (row: PurchaseOrder) => (
-                <Badge colorScheme={getStatusColor(row.status)} variant="subtle">
-                    {row.status.toUpperCase()}
-                </Badge>
-            )
+            cell: (row: PurchaseOrder) => <Text color={primaryTextColor}>E {row.totalAmount?.toFixed(2)}</Text>
         },
         {
             accessorKey: 'orderDate',

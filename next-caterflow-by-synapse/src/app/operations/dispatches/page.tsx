@@ -244,12 +244,17 @@ export default function DispatchesPage() {
             isSortable: true,
         },
         {
-            accessorKey: 'dispatchDate',
-            header: 'Dispatch Date',
+            accessorKey: 'evidenceStatus',
+            header: 'Evidence Status',
             isSortable: true,
             cell: (row: any) => {
                 const d: DispatchRecord = row?.original ?? row;
-                return d?.dispatchDate ? new Date(d.dispatchDate).toLocaleDateString() : '-';
+                const statusStr = d?.evidenceStatus || 'pending';
+                return (
+                    <Badge colorScheme={getEvidenceStatusColor(statusStr)} variant="subtle">
+                        {statusStr.toUpperCase()}
+                    </Badge>
+                );
             },
         },
         {
@@ -324,20 +329,6 @@ export default function DispatchesPage() {
             cell: (row: any) => {
                 const d: DispatchRecord = row?.original ?? row;
                 return d?.costPerPerson ? `$${d.costPerPerson.toFixed(2)}` : 'N/A';
-            },
-        },
-        {
-            accessorKey: 'evidenceStatus',
-            header: 'Evidence Status',
-            isSortable: true,
-            cell: (row: any) => {
-                const d: DispatchRecord = row?.original ?? row;
-                const statusStr = d?.evidenceStatus || 'pending';
-                return (
-                    <Badge colorScheme={getEvidenceStatusColor(statusStr)} variant="subtle">
-                        {statusStr.toUpperCase()}
-                    </Badge>
-                );
             },
         },
     ], [handleViewDispatch, user, getEvidenceStatusColor, secondaryTextColor]);

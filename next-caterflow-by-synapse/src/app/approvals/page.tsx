@@ -653,8 +653,8 @@ export default function ApprovalsPage() {
                                                 <Tr key={item._key}>
                                                     <Td color={primaryTextColor}>{item.stockItem?.name || 'Unknown Item'}</Td>
                                                     <Td isNumeric color={primaryTextColor}>{item.orderedQuantity || 0}</Td>
-                                                    <Td isNumeric color={primaryTextColor}>${item.unitPrice?.toFixed(2) || '0.00'}</Td>
-                                                    <Td isNumeric color={primaryTextColor}>${((item.orderedQuantity || 0) * (item.unitPrice || 0)).toFixed(2)}</Td>
+                                                    <Td isNumeric color={primaryTextColor}>E {item.unitPrice?.toFixed(2) || '0.00'}</Td>
+                                                    <Td isNumeric color={primaryTextColor}>E {((item.orderedQuantity || 0) * (item.unitPrice || 0)).toFixed(2)}</Td>
                                                 </Tr>
                                             ))}
 

@@ -244,11 +244,6 @@ export default function GoodsReceiptsPage() {
             cell: (row: any) => <Text color={secondaryTextColor}>{getPopulatedData(row.purchaseOrder, 'poNumber') || 'N/A'}</Text>,
         },
         {
-            accessorKey: 'receiptDate',
-            header: 'Receipt Date',
-            cell: (row: any) => <Text color={secondaryTextColor}>{new Date(row.receiptDate).toLocaleDateString()}</Text>,
-        },
-        {
             accessorKey: 'status',
             header: 'Status',
             cell: (row: any) => (
@@ -256,6 +251,11 @@ export default function GoodsReceiptsPage() {
                     {row.status.replace('-', ' ').toUpperCase()}
                 </Badge>
             ),
+        },
+        {
+            accessorKey: 'receiptDate',
+            header: 'Receipt Date',
+            cell: (row: any) => <Text color={secondaryTextColor}>{new Date(row.receiptDate).toLocaleDateString()}</Text>,
         },
     ];
 

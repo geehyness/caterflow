@@ -25,18 +25,13 @@ import {
     NumberInputStepper,
     NumberIncrementStepper,
     NumberDecrementStepper,
-    useColorModeValue,
-    Tag,
-    useBreakpointValue,
-    FormControl,
-    FormLabel,
-    CardBody,
 } from '@chakra-ui/react';
 import { FiPlus, FiX } from 'react-icons/fi';
 import { StockItem, Supplier, Site } from '@/lib/sanityTypes';
 import { client } from '@/lib/sanity';
 import { groq } from 'next-sanity';
 
+// Define the OrderItem interface here instead of importing it
 interface OrderItem {
     stockItem: string;
     supplier: string;
@@ -45,6 +40,7 @@ interface OrderItem {
     _key?: string;
 }
 
+// In CreatePurchaseOrderModal.tsx
 interface StockItemWithExpandedCategory {
     _id: string;
     name: string;
@@ -53,7 +49,7 @@ interface StockItemWithExpandedCategory {
     unitPrice: number;
     primarySupplier?: { _id: string; name: string };
     suppliers?: { _id: string; name: string }[];
-    category?: { _id: string; title: string };
+    category?: { _id: string; title: string }; // This is the expanded category
 }
 
 interface PurchaseOrderModalProps {
@@ -62,6 +58,7 @@ interface PurchaseOrderModalProps {
     selectedItems: StockItem[];
     suppliers: Supplier[];
     onSave: (items: OrderItem[], siteId?: string) => void;
+    // New props for site selection
     selectedSiteId?: string | null;
     sites?: Site[];
 }
@@ -78,7 +75,7 @@ export default function CreatePurchaseOrderModal({
     suppliers,
     onSave,
     selectedSiteId,
-    sites = [],
+    sites = []
 }: PurchaseOrderModalProps) {
     const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
     const [isAddItemModalOpen, setIsAddItemModalOpen] = useState(false);
@@ -90,69 +87,127 @@ export default function CreatePurchaseOrderModal({
     const [selectedSite, setSelectedSite] = useState<string>(selectedSiteId || '');
     const toast = useToast();
 
-    const mainModalBg = useColorModeValue('neutral.light.bg-secondary', 'neutral.dark.bg-secondary');
-    const itemCardBg = useColorModeValue('neutral.light.bg-card', 'neutral.dark.bg-card');
-    const hoverBg = useColorModeValue('neutral.light.bg-card-hover', 'neutral.dark.bg-card-hover');
-    const borderColor = useColorModeValue('neutral.light.border-color', 'neutral.dark.border-color');
-    const searchInputBg = useColorModeValue('neutral.light.bg-input', 'neutral.dark.bg-input');
-    const searchInputColor = useColorModeValue('neutral.light.text-primary', 'neutral.dark.text-primary');
-    const secondaryTextColor = useColorModeValue('neutral.light.text-secondary', 'neutral.dark.text-secondary');
-    const modalSize = useBreakpointValue({ base: 'full', md: '5xl' });
-
     useEffect(() => {
         if (isOpen && selectedItems.length > 0) {
+            // Initialize with default suppliers
             const initialItems = selectedItems.map(item => ({
                 stockItem: item._id,
-                supplier: (item.primarySupplier as any)?._ref || ((item.suppliers as any) && (item.suppliers as any)[0]?._ref) || '',
-                orderedQuantity: 1,
-                unitPrice: item.unitPrice || 0,
-                _key: item._id, // Using _id as key here
+                supplier: (item.primarySupplier as any)?._ref ||
+                    ((item.suppliers as any) && (item.suppliers as any).length > 0 ? (item.suppliers as any)[0]._ref : ''),
+                orderedQuantity: (item as any).orderQuantity || 1,
+                unitPrice: Number(item.unitPrice) || 0,
+                _key: Math.random().toString(36).substr(2, 9)
             }));
             setOrderItems(initialItems);
-        } else if (!isOpen) {
-            setOrderItems([]);
         }
-    }, [isOpen, selectedItems]);
 
-    useEffect(() => {
-        const fetchCategoriesAndItems = async () => {
-            setLoadingItems(true);
-            try {
-                const query = groq`{
-          "categories": *[_type == "category"]{_id, title},
-          "stockItems": *[_type == "StockItem"]{
-            _id, name, sku, unitOfMeasure, unitPrice,
-            primarySupplier->{_id, name},
-            suppliers[]->{_id, name},
-            category->{_id, title}
-          }
-        }`;
-                const data = await client.fetch(query);
-                setCategories(data.categories);
-                setAvailableItems(data.stockItems);
-            } catch (error) {
-                console.error('Failed to fetch data:', error);
-                toast({
-                    title: 'Error.',
-                    description: 'Failed to load stock items and categories.',
-                    status: 'error',
-                    duration: 5000,
-                    isClosable: true,
-                });
-            } finally {
-                setLoadingItems(false);
-            }
-        };
-        if (isAddItemModalOpen) {
-            fetchCategoriesAndItems();
+        // Reset selected site when modal opens if no site was preselected
+        if (isOpen && !selectedSiteId) {
+            setSelectedSite('');
         }
-    }, [isAddItemModalOpen, toast]);
+    }, [isOpen, selectedItems, selectedSiteId]);
+
+    const fetchAvailableItems = async () => {
+        setLoadingItems(true);
+        try {
+            const query = groq`*[_type == "StockItem"] {
+                _id,
+                name,
+                sku,
+                unitOfMeasure,
+                unitPrice,
+                primarySupplier->{_id, name},
+                suppliers[]->{_id, name},
+                category->{_id, title}
+            }`;
+            const items = await client.fetch(query);
+            setAvailableItems(items);
+        } catch (error) {
+            console.error('Failed to fetch stock items:', error);
+            toast({
+                title: 'Error',
+                description: 'Failed to fetch available items',
+                status: 'error',
+                duration: 3000,
+                isClosable: true,
+            });
+        } finally {
+            setLoadingItems(false);
+        }
+    };
+
+    const fetchCategories = async () => {
+        try {
+            const query = groq`*[_type == "Category"] { _id, title }`;
+            const categories = await client.fetch(query);
+            setCategories(categories);
+        } catch (error) {
+            console.error('Failed to fetch categories:', error);
+        }
+    };
+
+    const handleOpenAddItemModal = async () => {
+        await Promise.all([fetchAvailableItems(), fetchCategories()]);
+        setIsAddItemModalOpen(true);
+    };
+
+    const handleAddItems = (items: any[]) => {
+        const newOrderItems: OrderItem[] = items.map(item => ({
+            stockItem: item.item._id,
+            supplier: item.item.primarySupplier?._ref ||
+                (item.item.suppliers && item.item.suppliers.length > 0 ? item.item.suppliers[0]._ref : ''),
+            orderedQuantity: item.quantity,
+            unitPrice: item.price,
+            _key: Math.random().toString(36).substr(2, 9)
+        }));
+
+        setOrderItems(prev => [...prev, ...newOrderItems]);
+        setIsAddItemModalOpen(false);
+    };
+
+    const updateItemSupplier = (index: number, supplierId: string) => {
+        setOrderItems(prev => prev.map((item, i) =>
+            i === index ? { ...item, supplier: supplierId } : item
+        ));
+    };
+
+    const updateItemQuantity = (index: number, quantity: number) => {
+        setOrderItems(prev => prev.map((item, i) =>
+            i === index ? { ...item, orderedQuantity: quantity } : item
+        ));
+    };
+
+    const updateItemPrice = (index: number, price: number) => {
+        setOrderItems(prev => prev.map((item, i) =>
+            i === index ? { ...item, unitPrice: price } : item
+        ));
+    };
+
+    const removeItem = (index: number) => {
+        setOrderItems(prev => prev.filter((_, i) => i !== index));
+    };
 
     const handleSave = () => {
-        if (orderItems.length === 0) {
+        console.log('Saving order items:', orderItems);
+
+        // Validate all items have suppliers
+        {/*const itemsWithoutSuppliers = orderItems.filter(item => !item.supplier);
+        if (itemsWithoutSuppliers.length > 0) {
             toast({
-                title: 'No items to order.',
-                description: 'Please add at least one item to the purchase order.',
+                title: 'Missing suppliers',
+                description: 'Please select a supplier for all items',
+                status: 'error',
+                duration: 3000,
+                isClosable: true,
+            });
+            return;
+        }*/}
+
+        // If site selection is required but not provided
+        if (!selectedSiteId && !selectedSite) {
+            toast({
+                title: 'Site required',
+                description: 'Please select a site for this purchase order',
                 status: 'error',
                 duration: 3000,
                 isClosable: true,
@@ -160,284 +215,192 @@ export default function CreatePurchaseOrderModal({
             return;
         }
 
-        const itemsWithSuppliers = orderItems.filter(item => item.supplier);
-        if (itemsWithSuppliers.length < orderItems.length) {
-            toast({
-                title: 'Missing supplier.',
-                description: 'Please select a supplier for all items before saving.',
-                status: 'error',
-                duration: 5000,
-                isClosable: true,
-            });
-            return;
-        }
-
-        onSave(orderItems, selectedSite);
-        onClose();
+        // Pass the site ID to the onSave callback
+        const siteIdToUse = selectedSiteId || selectedSite;
+        onSave(orderItems, siteIdToUse);
     };
-
-    const handleQuantityChange = (key: string, valueAsNumber: number) => {
-        if (isNaN(valueAsNumber) || valueAsNumber <= 0) return;
-        setOrderItems(orderItems.map(item =>
-            item._key === key ? { ...item, orderedQuantity: valueAsNumber } : item
-        ));
-    };
-
-    const handleUnitPriceChange = (key: string, valueAsNumber: number) => {
-        if (isNaN(valueAsNumber) || valueAsNumber <= 0) return;
-        setOrderItems(orderItems.map(item =>
-            item._key === key ? { ...item, unitPrice: valueAsNumber } : item
-        ));
-    };
-
-    const handleSupplierChange = (key: string, supplierId: string) => {
-        setOrderItems(orderItems.map(item =>
-            item._key === key ? { ...item, supplier: supplierId } : item
-        ));
-    };
-
-    const handleRemoveItem = (key: string) => {
-        setOrderItems(orderItems.filter(item => item._key !== key));
-    };
-
-    const handleAddItems = (itemsToAdd: { item: StockItemWithExpandedCategory, quantity: number, price: number }[]) => {
-        const newItems: OrderItem[] = itemsToAdd.map(({ item, quantity, price }) => ({
-            stockItem: item._id,
-            supplier: item.primarySupplier?._id || item.suppliers?.[0]?._id || '',
-            orderedQuantity: quantity,
-            unitPrice: price,
-            _key: `${item._id}-${Date.now()}`,
-        }));
-        setOrderItems(prevItems => [...prevItems, ...newItems]);
-        setIsAddItemModalOpen(false);
-    };
-
-    const filteredItems = availableItems.filter(item => {
-        const matchesSearch = searchTerm === '' ||
-            item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            item.sku?.toLowerCase().includes(searchTerm.toLowerCase());
-        const matchesCategory = selectedCategory === '' || item.category?._id === selectedCategory;
-        const isNotAlreadySelected = !orderItems.some(oi => oi.stockItem === item._id);
-        return matchesSearch && matchesCategory && isNotAlreadySelected;
-    });
-
-    const totalCost = orderItems.reduce((total, item) => total + (item.orderedQuantity * item.unitPrice), 0);
 
     return (
         <>
-            <Modal isOpen={isOpen} onClose={onClose} size={modalSize} scrollBehavior="inside">
+            <Modal isOpen={isOpen} onClose={onClose} size="xl">
                 <ModalOverlay />
-                <ModalContent
-                    bg={mainModalBg}
-                    rounded={{ base: 'none', md: 'md' }}
-                    sx={{ _dark: { boxShadow: 'dark-lg' } }}
-                >
-                    <ModalHeader borderBottomWidth="1px" borderColor={borderColor}>Create Purchase Order</ModalHeader>
+                <ModalContent>
+                    <ModalHeader>Create Purchase Order</ModalHeader>
                     <ModalCloseButton />
                     <ModalBody>
-                        <VStack spacing={4} align="stretch" py={4}>
-                            {sites.length > 1 && (
-                                <FormControl>
-                                    <FormLabel>Select Site</FormLabel>
-                                    <Select
-                                        value={selectedSite}
-                                        onChange={(e) => setSelectedSite(e.target.value)}
-                                        placeholder="Select a site"
-                                        bg={searchInputBg}
-                                    >
-                                        {sites.map(site => (
-                                            <option key={site._id} value={site._id}>{site.name}</option>
-                                        ))}
-                                    </Select>
-                                </FormControl>
-                            )}
-
-                            <Text fontSize="md" fontWeight="bold">Ordered Items</Text>
-                            <VStack spacing={3} align="stretch">
-                                {orderItems.map((item, index) => {
-                                    const stockItemDetails = selectedItems.find(si => si._id === item.stockItem);
-                                    if (!stockItemDetails) return null;
-
-                                    return (
-                                        <Card
-                                            key={item._key || index}
-                                            variant="outline"
-                                            bg={itemCardBg}
-                                            borderLeftColor="brand.500"
-                                            borderLeftWidth="4px"
-                                            boxShadow="sm"
-                                            sx={{ _dark: { boxShadow: 'dark-sm' } }}
-                                        >
-                                            <CardBody py={3} px={4}>
-                                                <HStack justifyContent="space-between" alignItems="center">
-                                                    <VStack align="flex-start" spacing={0}>
-                                                        <Text fontWeight="bold">{stockItemDetails.name}</Text>
-                                                        <Text fontSize="sm" color={secondaryTextColor}>
-                                                            {stockItemDetails.sku}
-                                                        </Text>
-                                                    </VStack>
-                                                    <IconButton
-                                                        aria-label="Remove item"
-                                                        icon={<FiX />}
-                                                        onClick={() => handleRemoveItem(item._key || index.toString())}
-                                                        size="sm"
-                                                        variant="ghost"
-                                                        colorScheme="red"
-                                                    />
-                                                </HStack>
-                                                <Flex direction={{ base: 'column', md: 'row' }} mt={2} alignItems="flex-start" gap={3}>
-                                                    <Box flex="1" width={{ base: 'full', md: 'auto' }}>
-                                                        <Text fontSize="sm" mb={1}>Supplier</Text>
-                                                        <Select
-                                                            value={item.supplier}
-                                                            onChange={(e) => handleSupplierChange(item._key || index.toString(), e.target.value)}
-                                                            bg={searchInputBg}
-                                                        >
-                                                            <option value="">Select Supplier</option>
-                                                            {suppliers.map(sup => (
-                                                                <option key={sup._id} value={sup._id}>{sup.name}</option>
-                                                            ))}
-                                                        </Select>
-                                                    </Box>
-                                                    <Box flex="1" width={{ base: 'full', md: 'auto' }}>
-                                                        <Text fontSize="sm" mb={1}>Quantity ({stockItemDetails.unitOfMeasure})</Text>
-                                                        <NumberInput
-                                                            value={item.orderedQuantity}
-                                                            min={1}
-                                                            onChange={(_, valueAsNumber) => handleQuantityChange(item._key || index.toString(), valueAsNumber)}
-                                                            bg={searchInputBg}
-                                                        >
-                                                            <NumberInputField />
-                                                            <NumberInputStepper>
-                                                                <NumberIncrementStepper />
-                                                                <NumberDecrementStepper />
-                                                            </NumberInputStepper>
-                                                        </NumberInput>
-                                                    </Box>
-                                                    <Box flex="1" width={{ base: 'full', md: 'auto' }}>
-                                                        <Text fontSize="sm" mb={1}>Unit Price</Text>
-                                                        <NumberInput
-                                                            value={item.unitPrice}
-                                                            min={0}
-                                                            onChange={(_, valueAsNumber) => handleUnitPriceChange(item._key || index.toString(), valueAsNumber)}
-                                                            bg={searchInputBg}
-                                                        >
-                                                            <NumberInputField />
-                                                            <NumberInputStepper>
-                                                                <NumberIncrementStepper />
-                                                                <NumberDecrementStepper />
-                                                            </NumberInputStepper>
-                                                        </NumberInput>
-                                                    </Box>
-                                                </Flex>
-                                            </CardBody>
-                                        </Card>
-                                    );
-                                })}
-                            </VStack>
-
-                            <HStack mt={4} justifyContent="space-between" alignItems="center" flexWrap="wrap">
-                                <Text fontSize="lg" fontWeight="bold">Total: E {totalCost.toFixed(2)}</Text>
-                                <Button
-                                    size="sm"
-                                    colorScheme="brand"
-                                    onClick={() => setIsAddItemModalOpen(true)}
-                                    leftIcon={<FiPlus />}
-                                    flexShrink={0}
+                        {/* Site Selection (only show if no preselected site) */}
+                        {!selectedSiteId && (
+                            <Box mb={4}>
+                                <Text fontWeight="medium" mb={2}>Select Site</Text>
+                                <Select
+                                    placeholder="Select a site"
+                                    value={selectedSite}
+                                    onChange={(e) => setSelectedSite(e.target.value)}
+                                    isRequired
                                 >
-                                    Add More Items
-                                </Button>
-                            </HStack>
+                                    {sites.map(site => (
+                                        <option key={site._id} value={site._id}>
+                                            {site.name}
+                                        </option>
+                                    ))}
+                                </Select>
+                            </Box>
+                        )}
+
+                        <Button
+                            leftIcon={<FiPlus />}
+                            onClick={handleOpenAddItemModal}
+                            mb={4}
+                            colorScheme="blue"
+                            variant="outline"
+                            isDisabled={!selectedSiteId && !selectedSite} // Disable if site not selected
+                        >
+                            Add More Items
+                        </Button>
+
+                        <VStack spacing={4} align="stretch">
+                            {orderItems.map((item, index) => {
+                                const stockItem = [...selectedItems, ...availableItems].find(si => si._id === item.stockItem);
+                                return (
+                                    <Card key={item._key || index} p={4} variant="outline" position="relative">
+                                        <IconButton
+                                            aria-label="Remove item"
+                                            icon={<FiX />}
+                                            size="sm"
+                                            position="absolute"
+                                            top={2}
+                                            right={2}
+                                            onClick={() => removeItem(index)}
+                                            variant="ghost"
+                                        />
+                                        <VStack align="stretch" spacing={2}>
+                                            <VStack align={"stretch"}>
+                                                <Text fontWeight="bold" fontSize="lg">{stockItem?.name}</Text>
+                                                <Text fontSize="xs" fontWeight={"bold"} color="gray.600">SKU: {stockItem?.sku}</Text>
+                                            </VStack>
+                                            <Flex direction={{ base: 'row', md: 'row' }} justify="space-between" align={{ base: 'flex-start', md: 'center' }} gap={4} flexWrap="wrap">
+                                                {/*<Box flex="1 1 60px">
+                                                    <Text fontWeight="medium" mb={1}>Supplier</Text>
+                                                    <Select
+                                                        value={item.supplier}
+                                                        onChange={(e) => updateItemSupplier(index, e.target.value)}
+                                                        size="sm"                                                    >
+                                                        <option value="">Select Supplier</option>
+                                                        {suppliers.map(supplier => (
+                                                            <option key={supplier._id} value={supplier._id}>
+                                                                {supplier.name}
+                                                            </option>
+                                                        ))}
+                                                    </Select>
+                                                </Box>*/}
+                                                <Box flex="1 1 60px">
+                                                    <Text fontWeight="medium" mb={1}>Quantity ({stockItem?.unitOfMeasure})</Text>
+                                                    <NumberInput
+                                                        value={item.orderedQuantity}
+                                                        onChange={(value) => updateItemQuantity(index, parseInt(value) || 1)}
+                                                        min={1}
+                                                        size="sm"
+                                                    >
+                                                        <NumberInputField />
+                                                        <NumberInputStepper>
+                                                            <NumberIncrementStepper />
+                                                            <NumberDecrementStepper />
+                                                        </NumberInputStepper>
+                                                    </NumberInput>
+                                                </Box>
+                                            </Flex>
+                                        </VStack>
+                                    </Card>
+                                );
+                            })}
                         </VStack>
                     </ModalBody>
-                    <ModalFooter borderTopWidth="1px" borderColor={borderColor}>
+                    <ModalFooter>
                         <Button variant="ghost" mr={3} onClick={onClose}>
                             Cancel
                         </Button>
-                        <Button colorScheme="brand" onClick={handleSave}>
-                            Create PO
+                        <Button
+                            onClick={handleSave}
+                            colorScheme="blue"
+                            isDisabled={!selectedSiteId && !selectedSite} // Disable if site not selected
+                        >
+                            Create Purchase Order
                         </Button>
                     </ModalFooter>
                 </ModalContent>
             </Modal>
 
             {/* Add Item Modal */}
-            <Modal isOpen={isAddItemModalOpen} onClose={() => setIsAddItemModalOpen(false)} size={{ base: 'full', md: 'lg' }} scrollBehavior="inside">
+            <Modal isOpen={isAddItemModalOpen} onClose={() => setIsAddItemModalOpen(false)} size="4xl">
                 <ModalOverlay />
-                <ModalContent
-                    bg={mainModalBg}
-                    rounded={{ base: 'none', md: 'md' }}
-                    sx={{ _dark: { boxShadow: 'dark-lg' } }}
-                >
-                    <ModalHeader borderBottomWidth="1px" borderColor={borderColor}>Add Stock Items</ModalHeader>
+                <ModalContent>
+                    <ModalHeader>Add Items to Purchase Order</ModalHeader>
                     <ModalCloseButton />
                     <ModalBody>
                         <VStack spacing={4} align="stretch">
-                            <Input
-                                placeholder="Search by name or SKU"
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                                bg={searchInputBg}
-                                color={searchInputColor}
-                                borderColor={borderColor}
-                                _hover={{ borderColor: useColorModeValue('gray.300', 'gray.600') }}
-                                _focus={{ borderColor: 'brand.500', boxShadow: '0 0 0 1px token(colors.brand.500)' }}
-                            />
-                            <Select
-                                placeholder="Filter by category"
-                                onChange={(e) => setSelectedCategory(e.target.value)}
-                                bg={searchInputBg}
-                                color={searchInputColor}
-                                borderColor={borderColor}
-                            >
-                                {categories.map(cat => (
-                                    <option key={cat._id} value={cat._id}>{cat.title}</option>
-                                ))}
-                            </Select>
+                            <HStack>
+                                <Input
+                                    placeholder="Search by name or SKU"
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                />
+                                <Select
+                                    placeholder="Filter by Category"
+                                    value={selectedCategory}
+                                    onChange={(e) => setSelectedCategory(e.target.value)}
+                                >
+                                    {categories.map(category => (
+                                        <option key={category._id} value={category.title}>
+                                            {category.title}
+                                        </option>
+                                    ))}
+                                </Select>
+                            </HStack>
 
                             {loadingItems ? (
-                                <Flex justify="center" align="center" py={10}>
-                                    <Spinner size="lg" />
+                                <Flex justifyContent="center" alignItems="center" h="200px">
+                                    <Spinner />
                                 </Flex>
+                            ) : availableItems.length === 0 ? (
+                                <Text>No items to display.</Text>
                             ) : (
-                                <Box borderTopWidth="1px" pt={4} borderColor={borderColor}>
-                                    <VStack spacing={3} align="stretch" maxH="400px" overflowY="auto" pr={2}>
-                                        {filteredItems.length === 0 ? (
-                                            <Text textAlign="center" color={secondaryTextColor}>No items found.</Text>
-                                        ) : filteredItems.map(item => (
-                                            <Flex
-                                                key={item._id}
-                                                borderWidth="1px"
-                                                p={3}
-                                                rounded="md"
-                                                bg={itemCardBg}
-                                                alignItems="center"
-                                                justifyContent="space-between"
-                                                _hover={{
-                                                    bg: hoverBg,
-                                                    cursor: 'pointer'
-                                                }}
-                                                onClick={() => handleAddItems([{ item, quantity: 1, price: item.unitPrice || 0 }])}
-                                                direction={{ base: 'column', sm: 'row' }}
-                                                textAlign={{ base: 'center', sm: 'left' }}
-                                            >
-                                                <Box flex="1" mb={{ base: 2, sm: 0 }} mr={{ base: 0, sm: 2 }}>
-                                                    <Text fontWeight="bold">{item.name}</Text>
-                                                    <HStack spacing={2} fontSize="sm" color={secondaryTextColor} justifyContent={{ base: 'center', sm: 'flex-start' }}>
-                                                        <Text>SKU: {item.sku}</Text>
-                                                        {item.category?.title && <Tag size="sm" colorScheme="gray" flexShrink={0}>{item.category.title}</Tag>}
-                                                    </HStack>
-                                                </Box>
-                                                <Button size="sm" colorScheme="brand" flexShrink={0}>Add</Button>
-                                            </Flex>
-                                        ))}
+                                <Box overflowY="auto" maxH="300px">
+                                    <VStack spacing={2} align="stretch">
+                                        {availableItems
+                                            .filter(item => {
+                                                const matchesSearch = searchTerm === '' ||
+                                                    item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                                                    item.sku.toLowerCase().includes(searchTerm.toLowerCase());
+                                                const matchesCategory = selectedCategory === '' ||
+                                                    (item.category && item.category.title === selectedCategory);
+                                                const isAlreadyInOrder = orderItems.some(orderItem => orderItem.stockItem === item._id);
+
+                                                return matchesSearch && matchesCategory && !isAlreadyInOrder;
+                                            })
+                                            .map(item => (
+                                                <Flex
+                                                    key={item._id}
+                                                    alignItems="center"
+                                                    justifyContent="space-between"
+                                                    p={2}
+                                                    _hover={{ bg: 'gray.100' }}
+                                                    cursor="pointer"
+                                                    onClick={() => handleAddItems([{ item, quantity: 1, price: item.unitPrice || 0 }])}
+                                                >
+                                                    <Box>
+                                                        <Text fontWeight="bold">{item.name}</Text>
+                                                        <Text fontSize="sm">SKU: {item.sku}</Text>
+                                                    </Box>
+                                                    <Button size="sm" colorScheme="blue">Add</Button>
+                                                </Flex>
+                                            ))}
                                     </VStack>
                                 </Box>
                             )}
                         </VStack>
                     </ModalBody>
-                    <ModalFooter borderTopWidth="1px" borderColor={borderColor}>
-                        <Button variant="ghost" mr={3} onClick={() => setIsAddItemModalOpen(false)}>
+                    <ModalFooter>
+                        <Button variant="ghost" ml={3} onClick={() => setIsAddItemModalOpen(false)}>
                             Close
                         </Button>
                     </ModalFooter>

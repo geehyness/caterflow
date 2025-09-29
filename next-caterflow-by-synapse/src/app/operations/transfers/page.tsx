@@ -224,18 +224,6 @@ export default function TransfersPage() {
             },
         },
         {
-            header: 'Status',
-            accessorKey: 'status',
-            cell: (row: any) => {
-                if (!row) return null;
-                return (
-                    <Badge colorScheme={badgeColorScheme(row.status)} variant="subtle">
-                        {row.status.replace('-', ' ').toUpperCase()}
-                    </Badge>
-                );
-            },
-        },
-        {
             header: 'Transfer #',
             accessorKey: 'transferNumber',
             cell: (row: any) => {
@@ -244,6 +232,18 @@ export default function TransfersPage() {
                     <Text fontWeight="bold" color={primaryTextColor} _hover={{ color: accentColor, cursor: 'pointer' }} onClick={() => handleEditTransfer(row)}>
                         {row.transferNumber}
                     </Text>
+                );
+            },
+        },
+        {
+            header: 'Status',
+            accessorKey: 'status',
+            cell: (row: any) => {
+                if (!row) return null;
+                return (
+                    <Badge colorScheme={badgeColorScheme(row.status)} variant="subtle">
+                        {row.status.replace('-', ' ').toUpperCase()}
+                    </Badge>
                 );
             },
         },
