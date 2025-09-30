@@ -4,23 +4,27 @@ import { groq } from 'next-sanity';
 
 export async function GET() {
     try {
-        const today = new Date().toISOString().slice(0, 10);
-        const query = groq`*[_type == "DispatchLog" && _createdAt >= "${today}T00:00:00Z" && _createdAt < "${today}T23:59:59Z"] | order(_createdAt desc)[0] {
-            dispatchNumber
-        }`;
+        // Get all dispatch numbers and find the maximum
+        const query = groq`*[_type == "DispatchLog" && defined(dispatchNumber)].dispatchNumber`;
+        const allDispatchNumbers = await client.fetch(query);
 
-        const lastLog = await client.fetch(query);
-        let nextNumber = 1;
+        let maxNumber = 0;
 
-        if (lastLog && lastLog.dispatchNumber) {
-            const lastNumber = parseInt(lastLog.dispatchNumber.split('-').pop() || '0');
-            if (!isNaN(lastNumber)) {
-                nextNumber = lastNumber + 1;
-            }
+        if (allDispatchNumbers && allDispatchNumbers.length > 0) {
+            allDispatchNumbers.forEach((dispatchNumber: string) => {
+                if (dispatchNumber && dispatchNumber.startsWith('DL-')) {
+                    const numberPart = dispatchNumber.split('-')[1];
+                    const currentNumber = parseInt(numberPart);
+                    if (!isNaN(currentNumber) && currentNumber > maxNumber) {
+                        maxNumber = currentNumber;
+                    }
+                }
+            });
         }
 
-        const paddedNumber = String(nextNumber).padStart(3, '0');
-        const dispatchNumber = `DL-${today}-${paddedNumber}`;
+        // Generate the next number
+        const nextNumber = maxNumber + 1;
+        const dispatchNumber = `DL-${String(nextNumber).padStart(5, '0')}`;
 
         return NextResponse.json({ dispatchNumber });
     } catch (error) {

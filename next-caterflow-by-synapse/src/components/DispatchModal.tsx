@@ -38,7 +38,7 @@ import {
     Th,
     Td,
     TableContainer,
-    useColorModeValue // Import useColorModeValue for theme-based colors
+    useColorModeValue
 } from '@chakra-ui/react';
 import { FiPlus, FiTrash2 } from 'react-icons/fi';
 import StockItemSelectorModal from './StockItemSelectorModal';
@@ -57,7 +57,7 @@ interface DispatchedItem {
         unitPrice?: number;
     };
     dispatchedQuantity: number;
-    unitPrice?: number; // ADD THIS
+    unitPrice?: number;
     totalCost?: number;
     notes?: string;
 }
@@ -137,15 +137,28 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
     const userSite = user?.associatedSite;
     const userRole = user?.role;
 
-    // Get colors and other theme values at the top level, outside of any conditionals
     const tableHeaderColor = useColorModeValue('neutral.light.text-primary', 'neutral.dark.text-primary');
     const tableBorderColor = useColorModeValue('neutral.light.border-color', 'neutral.dark.border-color');
     const tableBg = useColorModeValue('neutral.light.bg-card', 'neutral.dark.bg-card');
     const textSecondaryColor = useColorModeValue('neutral.light.text-secondary', 'neutral.dark.text-secondary');
     const tableBoxShadow = useColorModeValue('md', 'dark-md');
 
-
     const existingItemIds = dispatchedItems.filter(item => item.stockItem).map(item => item.stockItem._id);
+
+    // Safe number conversion helper function
+    const safeNumber = (value: string | number): number => {
+        if (typeof value === 'number') return isNaN(value) ? 0 : value;
+        const num = parseFloat(value);
+        return isNaN(num) ? 0 : num;
+    };
+
+    // Safe number input handler
+    const handleNumberInput = (value: string): number => {
+        // Allow empty string, but convert to 0 for calculations
+        if (value === '' || value === '-') return 0;
+        const num = parseFloat(value);
+        return isNaN(num) ? 0 : num;
+    };
 
     // load dispatch types and bins when modal opens
     useEffect(() => {
@@ -212,7 +225,6 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
         const controller = new AbortController();
 
         const fetchDefaultBin = async () => {
-            // Only attempt on new dispatches when authenticated and have a site id
             if (!dispatch && sessionStatus === 'authenticated' && user?.associatedSite?._id) {
                 setLoading(true);
                 try {
@@ -223,22 +235,13 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
                     if (!binRes.ok) throw new Error('Failed to fetch main bin');
                     const mainBin = await binRes.json();
 
-                    // only update state if component still mounted
                     if (mounted) {
                         setSourceBin(mainBin);
                     }
                 } catch (error: any) {
-                    // don't show error when aborting
                     if (error.name === 'AbortError') return;
                     console.log('Error fetching main bin:', error);
                     if (mounted) {
-                        {/*toast({
-                            title: 'Error setting default bin.',
-                            description: 'Please select a bin manually.',
-                            status: 'warning',
-                            duration: 5000,
-                            isClosable: true,
-                        });*/}
                         console.log('Error Setting Default Bin - ', error);
                     }
                 } finally {
@@ -256,36 +259,103 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
     }, [dispatch, sessionStatus, user?.associatedSite?._id, toast]);
 
     const isNew = !dispatch || dispatch._id?.startsWith?.('temp-');
-
-    // Determine editability based on evidenceStatus or status
     const isEditable = !(dispatch?.evidenceStatus === 'complete' || dispatch?.status === 'completed');
 
-    // Add this function after handleQuantityChange
-    const handleUnitPriceChange = (key: string, _valueAsString: string, valueAsNumber: number) => {
-        setDispatchedItems(prevItems =>
-            prevItems.map(item => {
-                if (item._key === key) {
-                    const unitPrice = isNaN(valueAsNumber) ? 0 : valueAsNumber;
-                    const totalCost = unitPrice * item.dispatchedQuantity;
-                    return {
-                        ...item,
-                        unitPrice,
-                        totalCost
-                    };
-                }
-                return item;
-            })
-        );
+    // Update the handler functions:
+    const handleUnitPriceChange = (key: string, value: string) => {
+        // If current value is 0 and user starts typing, replace the 0
+        const currentItem = dispatchedItems.find(item => item._key === key);
+        const currentValue = currentItem?.unitPrice || 0;
+
+        // If current value is 0 and user types a new digit, replace the 0
+        if (currentValue === 0 && value !== '0' && value !== '' && !value.includes('.')) {
+            // User is typing a new number, use the new value directly
+            const valueAsNumber = handleNumberInput(value);
+            setDispatchedItems(prevItems =>
+                prevItems.map(item => {
+                    if (item._key === key) {
+                        const unitPrice = valueAsNumber;
+                        const totalCost = unitPrice * (item.dispatchedQuantity || 0);
+                        return {
+                            ...item,
+                            unitPrice,
+                            totalCost
+                        };
+                    }
+                    return item;
+                })
+            );
+        } else {
+            // Normal handling for other cases
+            const valueAsNumber = handleNumberInput(value);
+            setDispatchedItems(prevItems =>
+                prevItems.map(item => {
+                    if (item._key === key) {
+                        const unitPrice = valueAsNumber;
+                        const totalCost = unitPrice * (item.dispatchedQuantity || 0);
+                        return {
+                            ...item,
+                            unitPrice,
+                            totalCost
+                        };
+                    }
+                    return item;
+                })
+            );
+        }
     };
 
-    // Add this function to calculate grand total
+    const handleQuantityChange = (key: string, value: string) => {
+        const currentItem = dispatchedItems.find(item => item._key === key);
+        const currentValue = currentItem?.dispatchedQuantity || 0;
+
+        // If current value is 0 and user starts typing a new number
+        if (currentValue === 0 && value !== '0' && value !== '' && !value.includes('.')) {
+            const valueAsNumber = handleNumberInput(value);
+            setDispatchedItems(prevItems =>
+                prevItems.map(item => {
+                    if (item._key === key) {
+                        const unitPrice = item.unitPrice || 0;
+                        const totalCost = unitPrice * valueAsNumber;
+                        return {
+                            ...item,
+                            dispatchedQuantity: valueAsNumber,
+                            totalCost
+                        };
+                    }
+                    return item;
+                })
+            );
+        } else {
+            const valueAsNumber = handleNumberInput(value);
+            setDispatchedItems(prevItems =>
+                prevItems.map(item => {
+                    if (item._key === key) {
+                        const unitPrice = item.unitPrice || 0;
+                        const totalCost = unitPrice * valueAsNumber;
+                        return {
+                            ...item,
+                            dispatchedQuantity: valueAsNumber,
+                            totalCost
+                        };
+                    }
+                    return item;
+                })
+            );
+        }
+    };
+    // Updated people fed handler with decimal support and NaN protection
+    const handlePeopleFedChange = (valueAsString: string) => {
+        const valueAsNumber = handleNumberInput(valueAsString);
+        setPeopleFed(valueAsNumber);
+    };
+
     const calculateGrandTotal = (): number => {
         return dispatchedItems.reduce((total, item) => {
             return total + (item.totalCost || 0);
         }, 0);
     };
 
-    // Add this function to calculate cost per person
     const calculateCostPerPerson = (): number => {
         const grandTotal = calculateGrandTotal();
         return peopleFed && peopleFed > 0 ? grandTotal / peopleFed : 0;
@@ -293,7 +363,7 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
 
     // Stock item selection
     const handleStockItemSelect = (item: any) => {
-        const unitPrice = item.unitPrice || 0;
+        const unitPrice = safeNumber(item.unitPrice || 0);
         const newItem: DispatchedItem = {
             _key: nanoid(),
             stockItem: {
@@ -305,8 +375,8 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
                 unitPrice: unitPrice,
             },
             dispatchedQuantity: 1,
-            unitPrice: unitPrice, // Store on dispatched item
-            totalCost: unitPrice * 1, // Calculate initial total
+            unitPrice: unitPrice,
+            totalCost: unitPrice * 1,
             notes: '',
         };
 
@@ -328,23 +398,6 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
         setDispatchedItems(prevItems => prevItems.filter(item => item._key !== key));
     };
 
-    const handleQuantityChange = (key: string, _valueAsString: string, valueAsNumber: number) => {
-        setDispatchedItems(prevItems =>
-            prevItems.map(item => {
-                if (item._key === key) {
-                    const unitPrice = item.unitPrice || 0;
-                    const totalCost = unitPrice * valueAsNumber;
-                    return {
-                        ...item,
-                        dispatchedQuantity: valueAsNumber,
-                        totalCost
-                    };
-                }
-                return item;
-            })
-        );
-    };
-
     const handleNotesChange = (key: string, value: string) => {
         setDispatchedItems(prevItems =>
             prevItems.map(item =>
@@ -360,7 +413,7 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
 
     const isSubmitDisabled = !dispatchDate || !dispatchType || !sourceBin || dispatchedItems.length === 0 || !isEditable;
 
-    // Save dispatch (create or update) - used for both Draft save and for preparing before upload
+    // Save dispatch (create or update)
     const saveDispatch = async (status: string = 'draft') => {
         setIsSaving(true);
         try {
@@ -386,13 +439,13 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
                         _type: 'reference',
                         _ref: item.stockItem._id
                     },
-                    dispatchedQuantity: item.dispatchedQuantity,
-                    unitPrice: item.unitPrice || 0, // ✅ Ensure this is included
-                    totalCost: item.totalCost || 0, // ✅ Ensure this is included
+                    dispatchedQuantity: safeNumber(item.dispatchedQuantity),
+                    unitPrice: safeNumber(item.unitPrice || 0),
+                    totalCost: safeNumber(item.totalCost || 0),
                     notes: item.notes || '',
                 })),
                 notes,
-                peopleFed,
+                peopleFed: safeNumber(peopleFed || 0),
                 evidenceStatus: dispatch?.evidenceStatus || 'pending',
                 status,
                 dispatchedBy: { _type: 'reference', _ref: (session?.user as any)?.id || (session?.user as any)?._id || undefined }
@@ -448,7 +501,8 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
     const handleSubmit = async (event: React.FormEvent) => {
         event.preventDefault();
         try {
-            await saveDispatch('draft');
+            const result = await saveDispatch('draft');
+            setSavedDispatchId(result._id || result.id); // Ensure ID is set
             onSave();
             onClose();
         } catch {
@@ -474,7 +528,6 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
 
         try {
             setIsSaving(true);
-            // If new or not yet saved, save as draft first to obtain ID
             if (isNew || !dispatch?._id) {
                 const saved = await saveDispatch('draft');
                 const id = saved._id || saved.id;
@@ -483,7 +536,6 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
                 setSavedDispatchId(dispatch._id);
             }
 
-            // open file upload modal to get evidence uploaded
             setIsUploadModalOpen(true);
         } catch (err) {
             // errors handled in saveDispatch
@@ -492,9 +544,8 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
         }
     };
 
-    // Called by FileUploadModal when upload completes; attachmentId is expected
+    // Called by FileUploadModal when upload completes
     const handleFinalizeDispatch = async (attachmentIds: string[]) => {
-        // close upload modal
         setIsUploadModalOpen(false);
         setIsSaving(true);
 
@@ -506,7 +557,6 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
                 throw new Error('No attachments uploaded');
             }
 
-            // Patch the dispatch: set evidenceStatus to complete and add attachment references
             const body: any = {
                 evidenceStatus: 'complete',
                 status: 'completed',
@@ -533,7 +583,6 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
                 isClosable: true,
             });
 
-            // notify parent to refresh and close
             onSave();
             onClose();
         } catch (error: any) {
@@ -556,10 +605,15 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
 
     return (
         <>
-            {/* Set modal size responsively, e.g., full on mobile and 4xl on larger screens */}
             <Modal
                 isOpen={isOpen}
-                onClose={onClose}
+                onClose={() => {
+                    // Refresh if a draft was saved during this session
+                    if (savedDispatchId) {
+                        onSave();
+                    }
+                    onClose();
+                }}
                 size={{ base: 'full', md: '4xl' }}
                 closeOnOverlayClick={!isSaving && !isUploadModalOpen}
                 scrollBehavior="inside"
@@ -577,7 +631,6 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
                         <form onSubmit={handleSubmit}>
                             <ModalBody maxHeight="80vh" overflowY="auto">
                                 <VStack spacing={4} align="stretch">
-                                    {/* Use responsive grid for two-column layout on medium screens and up */}
                                     <Grid templateColumns={{ base: '1fr', md: 'repeat(2, 1fr)' }} gap={4}>
                                         <GridItem>
                                             <FormControl isRequired>
@@ -616,7 +669,6 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
                                                         </option>
                                                     ))}
                                                 </Select>
-                                                {/* Use theme-based colors for secondary text */}
                                                 {dispatch ? (
                                                     <Text fontSize="sm" color={textSecondaryColor} mt={1}>
                                                         Source bin cannot be changed for existing dispatches
@@ -662,8 +714,10 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
                                                 <NumberInput
                                                     value={peopleFed || 0}
                                                     min={0}
-                                                    onChange={(_s, n) => setPeopleFed(n)}
+                                                    onChange={handlePeopleFedChange}
                                                     isDisabled={!isEditable || loading}
+                                                    precision={2}
+                                                    step={1}
                                                 >
                                                     <NumberInputField />
                                                     <NumberInputStepper>
@@ -685,7 +739,6 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
                                         />
                                     </FormControl>
 
-                                    {/* Use theme-based Divider styling */}
                                     <Divider />
 
                                     <VStack spacing={4} align="stretch">
@@ -716,7 +769,7 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
                                                             <Th color={tableHeaderColor} borderColor={tableBorderColor}>Quantity</Th>
                                                             <Th color={tableHeaderColor} borderColor={tableBorderColor}>Total Cost</Th>
                                                             <Th color={tableHeaderColor} borderColor={tableBorderColor}>Unit</Th>
-                                                            <Th color={tableHeaderColor} borderColor={tableBorderColor}>Actions</Th>
+                                                            <Th color={tableHeaderColor} borderColor={tableBorderColor}> </Th>
                                                         </Tr>
                                                     </Thead>
                                                     <Tbody>
@@ -724,41 +777,29 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
                                                             <Tr key={item._key}>
                                                                 <Td borderColor={tableBorderColor}>{item.stockItem.name}</Td>
                                                                 <Td borderColor={tableBorderColor}>
-                                                                    <NumberInput
+                                                                    <Input
                                                                         value={item.unitPrice || 0}
-                                                                        onChange={(valueAsString, valueAsNumber) =>
-                                                                            handleUnitPriceChange(item._key, valueAsString, valueAsNumber)
-                                                                        }
-                                                                        min={0}
-                                                                        precision={2}
+                                                                        onChange={(e) => handleUnitPriceChange(item._key, e.target.value)}
+                                                                        type="number"
+                                                                        step="0.01"
+                                                                        min="0"
                                                                         size="sm"
                                                                         width="100px"
                                                                         isDisabled={!isEditable}
-                                                                    >
-                                                                        <NumberInputField />
-                                                                        <NumberInputStepper>
-                                                                            <NumberIncrementStepper />
-                                                                            <NumberDecrementStepper />
-                                                                        </NumberInputStepper>
-                                                                    </NumberInput>
+                                                                    />
                                                                 </Td>
+
                                                                 <Td borderColor={tableBorderColor}>
-                                                                    <NumberInput
+                                                                    <Input
                                                                         value={item.dispatchedQuantity}
-                                                                        min={1}
-                                                                        onChange={(valueAsString, valueAsNumber) =>
-                                                                            handleQuantityChange(item._key, valueAsString, valueAsNumber)
-                                                                        }
+                                                                        onChange={(e) => handleQuantityChange(item._key, e.target.value)}
+                                                                        type="number"
+                                                                        step="0.1"
+                                                                        min="0"
                                                                         size="sm"
                                                                         width="100px"
                                                                         isDisabled={!isEditable}
-                                                                    >
-                                                                        <NumberInputField />
-                                                                        <NumberInputStepper>
-                                                                            <NumberIncrementStepper />
-                                                                            <NumberDecrementStepper />
-                                                                        </NumberInputStepper>
-                                                                    </NumberInput>
+                                                                    />
                                                                 </Td>
                                                                 <Td borderColor={tableBorderColor}>
                                                                     <Text fontWeight="medium">
@@ -768,14 +809,6 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
                                                                 <Td borderColor={tableBorderColor}>{item.stockItem.unitOfMeasure}</Td>
                                                                 <Td borderColor={tableBorderColor}>
                                                                     <HStack>
-                                                                        <IconButton
-                                                                            aria-label="Edit item"
-                                                                            icon={<FiPlus />}
-                                                                            size="sm"
-                                                                            onClick={() => handleEditItem(index)}
-                                                                            isDisabled={!isEditable}
-                                                                            title="Edit item (replace)"
-                                                                        />
                                                                         <IconButton
                                                                             aria-label="Remove item"
                                                                             icon={<FiTrash2 />}
@@ -794,7 +827,7 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
 
                                         {/* Cost Summary Section */}
                                         {dispatchedItems.length > 0 && (
-                                            <VStack align="stretch" mt={4} p={4} bg="gray.50" borderRadius="md">
+                                            <VStack align="stretch" mt={4} p={4} borderRadius="md">
                                                 <HStack justify="space-between">
                                                     <Text fontWeight="bold">Grand Total Cost:</Text>
                                                     <Text fontWeight="bold" fontSize="lg">
@@ -883,10 +916,15 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
 
             <FileUploadModal
                 isOpen={isUploadModalOpen}
-                onClose={() => setIsUploadModalOpen(false)}
+                onClose={() => {
+                    setIsUploadModalOpen(false);
+                    // Refresh and close main modal when upload is cancelled
+                    onSave();
+                    onClose();
+                }}
                 onUploadComplete={handleFinalizeDispatch}
                 relatedToId={savedDispatchId || dispatch?._id || ''}
-                fileType="other" // Changed from "dispatch" to "other"
+                fileType="other"
                 title="Upload Dispatch Evidence"
                 description="Please upload photos or documents as evidence before completing the dispatch."
             />

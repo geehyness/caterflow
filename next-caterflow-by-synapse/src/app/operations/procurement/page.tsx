@@ -370,9 +370,9 @@ export default function ProcurementPage() {
         }
     };
 
-    const handlePriceChange = (itemKey: string, valueAsString: string) => {
-        const value = parseFloat(valueAsString);
-        setEditedPrices(prev => ({ ...prev, [itemKey]: isNaN(value) ? undefined : value }));
+    const handlePriceChange = (itemKey: string, value: string) => {
+        const valueAsNumber = parseFloat(value);
+        setEditedPrices(prev => ({ ...prev, [itemKey]: isNaN(valueAsNumber) ? undefined : valueAsNumber }));
     };
 
     const handleDefaultSupplierToggle = async (itemKey: string, stockItemId: string, checked: boolean) => {
@@ -741,6 +741,7 @@ export default function ProcurementPage() {
                                                                 value={currentSupplier || ''}
                                                                 onChange={(e) => handleSupplierChange(item._key, e.target.value, item.stockItem._id)}
                                                                 size="sm"
+                                                                minW={"120px"}
                                                                 placeholder="Select supplier"
                                                                 borderColor={borderColor}
                                                                 _focus={{ borderColor: accentColor, boxShadow: `0 0 0 1px ${accentColor}` }}
@@ -775,16 +776,16 @@ export default function ProcurementPage() {
                                                             </Tooltip>
                                                         </Td>
                                                         <Td borderColor={borderColor}>
-                                                            <NumberInput
-                                                                value={totalPriceValue !== undefined ? totalPriceValue.toFixed(2) : ''}
-                                                                onChange={(value) => handlePriceChange(item._key, value)}
-                                                                precision={2}
-                                                                step={0.01}
+                                                            <Input
+                                                                value={totalPriceValue === 0 || totalPriceValue === undefined ? '' : totalPriceValue.toFixed(2)} onChange={(e) => handlePriceChange(item._key, e.target.value)}
+                                                                type="number"
+                                                                step="0.01"
+                                                                min="0"
                                                                 size="sm"
-                                                                min={0}
-                                                            >
-                                                                <NumberInputField borderColor={borderColor} _focus={{ borderColor: accentColor }} />
-                                                            </NumberInput>
+                                                                placeholder="0.00"
+                                                                borderColor={borderColor}
+                                                                _focus={{ borderColor: accentColor }}
+                                                            />
                                                             {rowError && rowError !== 'No supplier selected' && (
                                                                 <Text fontSize="xs" color={errorTextColor}>{rowError}</Text>
                                                             )}
@@ -841,6 +842,6 @@ export default function ProcurementPage() {
                     </ModalFooter>
                 </ModalContent>
             </Modal>
-        </Box>
+        </Box >
     );
 }

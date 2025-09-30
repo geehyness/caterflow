@@ -379,9 +379,13 @@ export default function BinCountModal({ isOpen, onClose, binCount, onSave }: Bin
         }
     };
 
-    const handleCountedQuantityChange = (key: string, valueAsString: string, valueAsNumber: number) => {
+    const handleCountedQuantityChange = (key: string, value: string) => {
+        const valueAsNumber = value === '' ? 0 : parseFloat(value);
         setCountedItems(prev => prev.map(item =>
-            item._key === key ? { ...item, countedQuantity: valueAsNumber } : item
+            item._key === key ? {
+                ...item,
+                countedQuantity: isNaN(valueAsNumber) ? 0 : valueAsNumber
+            } : item
         ));
     };
 
@@ -597,24 +601,24 @@ export default function BinCountModal({ isOpen, onClose, binCount, onSave }: Bin
                                                             </Td>
                                                             <Td>{item.systemQuantityAtCountTime}</Td>
                                                             <Td>
-                                                                <NumberInput
-                                                                    value={item.countedQuantity}
-                                                                    onChange={(valStr, valNum) => handleCountedQuantityChange(item._key!, valStr, valNum)}
-                                                                    min={0}
-                                                                    isDisabled={isViewMode}
-                                                                >
-                                                                    <NumberInputField />
-                                                                    <NumberInputStepper>
-                                                                        <NumberIncrementStepper />
-                                                                        <NumberDecrementStepper />
-                                                                    </NumberInputStepper>
-                                                                </NumberInput>
+                                                                {isViewMode ? (
+                                                                    <Text>{item.countedQuantity}</Text>
+                                                                ) : (
+                                                                    <Input
+                                                                        type="number"
+                                                                        step="0.01"
+                                                                        min="0"
+                                                                        value={item.countedQuantity === 0 ? '' : item.countedQuantity}
+                                                                        onChange={(e) => handleCountedQuantityChange(item._key!, e.target.value)}
+                                                                        placeholder="0"
+                                                                    />
+                                                                )}
                                                             </Td>
                                                             <Td isNumeric>
                                                                 <Badge
                                                                     colorScheme={(item.countedQuantity - (item.systemQuantityAtCountTime || 0)) === 0 ? 'green' : 'red'}
                                                                 >
-                                                                    {item.countedQuantity - (item.systemQuantityAtCountTime || 0)}
+                                                                    {(item.countedQuantity - (item.systemQuantityAtCountTime || 0)).toFixed(2)}
                                                                 </Badge>
                                                             </Td>
                                                             {!isViewMode && (
@@ -666,18 +670,16 @@ export default function BinCountModal({ isOpen, onClose, binCount, onSave }: Bin
                                                                 <HStack justifyContent="space-between">
                                                                     <Text fontSize="sm" fontWeight="medium">Counted Qty:</Text>
                                                                     <Box w="100px">
-                                                                        <NumberInput
-                                                                            value={item.countedQuantity}
-                                                                            onChange={(valStr, valNum) => handleCountedQuantityChange(item._key!, valStr, valNum)}
-                                                                            min={0}
+                                                                        <Input
+                                                                            value={item.countedQuantity === 0 ? '' : item.countedQuantity}
+                                                                            onChange={(e) => handleCountedQuantityChange(item._key!, e.target.value)}
+                                                                            type="number"
+                                                                            step="0.1"
+                                                                            min="0"
                                                                             isDisabled={isViewMode}
-                                                                        >
-                                                                            <NumberInputField />
-                                                                            <NumberInputStepper>
-                                                                                <NumberIncrementStepper />
-                                                                                <NumberDecrementStepper />
-                                                                            </NumberInputStepper>
-                                                                        </NumberInput>
+                                                                            placeholder="0"
+                                                                            width="100px"
+                                                                        />
                                                                     </Box>
                                                                 </HStack>
                                                                 <HStack justifyContent="space-between">

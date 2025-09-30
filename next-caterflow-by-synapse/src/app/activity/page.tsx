@@ -24,6 +24,7 @@ import {
 } from '@chakra-ui/react';
 import { useSession } from 'next-auth/react'; // Keep this import
 import { FiBox, FiTruck, FiRefreshCw, FiBarChart2, FiCalendar, FiClock } from 'react-icons/fi';
+import { BsBuildingAdd, BsTruck, BsArrowRight, BsBoxSeam, BsClipboardData } from 'react-icons/bs';
 
 interface ActivityItem {
     _id: string;
@@ -76,31 +77,37 @@ export default function ActivityPage() {
         fetchActivities();
     }, [status, timeframe, fetchActivities]); // Use status instead of isAuthReady
 
+    // Update the getActivityIcon function to include InventoryCount
     const getActivityIcon = (type: string) => {
         switch (type) {
             case 'GoodsReceipt':
-                return FiBox;
+                return BsBuildingAdd;
             case 'DispatchLog':
-                return FiTruck;
+                return BsTruck;
             case 'InternalTransfer':
-                return FiRefreshCw;
+                return BsArrowRight;
             case 'StockAdjustment':
-                return FiBarChart2;
+                return BsBoxSeam;
+            case 'InventoryCount':
+                return BsClipboardData;
             default:
-                return FiBox;
+                return BsBoxSeam;
         }
     };
 
+    // Update the getActivityColor function
     const getActivityColor = (type: string) => {
         switch (type) {
             case 'GoodsReceipt':
                 return 'green';
             case 'DispatchLog':
-                return 'blue';
-            case 'InternalTransfer':
-                return 'purple';
-            case 'StockAdjustment':
                 return 'orange';
+            case 'InternalTransfer':
+                return 'blue';
+            case 'StockAdjustment':
+                return 'purple';
+            case 'InventoryCount':
+                return 'teal';
             default:
                 return 'gray';
         }
@@ -131,6 +138,23 @@ export default function ActivityPage() {
             </Flex>
         );
     }
+
+    const ActivityIcon = ({ type }: { type: string }) => {
+        switch (type) {
+            case 'GoodsReceipt':
+                return <Icon as={BsBuildingAdd} color="green.500" boxSize={4} />;
+            case 'DispatchLog':
+                return <Icon as={BsTruck} color="orange.500" boxSize={4} />;
+            case 'InternalTransfer':
+                return <Icon as={BsArrowRight} color="blue.500" boxSize={4} />;
+            case 'StockAdjustment':
+                return <Icon as={BsBoxSeam} color="purple.500" boxSize={4} />;
+            case 'InventoryCount':
+                return <Icon as={BsClipboardData} color="teal.500" boxSize={4} />;
+            default:
+                return null;
+        }
+    };
 
     return (
         <Box p={8}>
@@ -177,58 +201,48 @@ export default function ActivityPage() {
             </Button>
 
             {isLoading ? (
-                <Flex justify="center" align="center" height="200px">
+                <Flex justifyContent="center" alignItems="center" minHeight="150px">
+                    {/* Using the spinnerColor variable */}
                     <Spinner size="lg" />
                 </Flex>
             ) : activities.length > 0 ? (
-                <VStack spacing={4} align="stretch">
-                    {activities.map((activity) => (
-                        <Card key={activity._id} bg={cardBg} boxShadow="sm" border="1px" borderColor={borderColor}>
-                            <CardBody>
-                                <HStack spacing={4} align="flex-start">
-                                    <Flex
-                                        align="center"
-                                        justify="center"
-                                        w={10}
-                                        h={10}
-                                        bg={`${getActivityColor(activity._type)}.100`}
-                                        color={`${getActivityColor(activity._type)}.600`}
-                                        borderRadius="full"
+                <VStack spacing={3} align="stretch">
+                    {activities.map(activity => (
+                        <Card key={activity._id} boxShadow="sm" size="sm" borderLeft="4px" borderLeftColor={`${getActivityColor(activity._type)}.400`}>
+                            <CardBody py={3} px={4}>
+                                <Flex direction={{ base: 'column', sm: 'row' }} alignItems={{ base: 'flex-start', sm: 'center' }}>
+                                    <Box flexShrink={0} mb={{ base: 2, sm: 0 }}>
+                                        <ActivityIcon type={activity._type} />
+                                    </Box>
+                                    <Box flex="1" ml={{ base: 0, sm: 3 }}>
+                                        <Text fontWeight="medium" fontSize="sm" noOfLines={2}>
+                                            {activity.description}
+                                        </Text>
+                                        <Flex direction={{ base: 'column', sm: 'row' }} fontSize="xs" mt={1} color="gray.500">
+                                            <Text>By {activity.user}</Text>
+                                            <Text display={{ base: 'none', sm: 'block' }} mx={2}>•</Text>
+                                            <Text>{formatDate(activity.timestamp)}</Text>
+                                            <Text display={{ base: 'none', sm: 'block' }} mx={2}>•</Text>
+                                            <Text noOfLines={1}>{activity.siteName}</Text>
+                                        </Flex>
+                                    </Box>
+                                    <Badge
+                                        colorScheme={getActivityColor(activity._type)}
+                                        ml={{ base: 0, sm: 3 }}
+                                        mt={{ base: 2, sm: 0 }}
                                         flexShrink={0}
                                     >
-                                        <Icon as={getActivityIcon(activity._type)} w={5} h={5} />
-                                    </Flex>
-
-                                    <VStack align="flex-start" spacing={1} flex={1}>
-                                        <Text fontWeight="medium">{activity.description}</Text>
-                                        <HStack spacing={3}>
-                                            <Text fontSize="sm" color="gray.500">
-                                                {activity.user}
-                                            </Text>
-                                            <Text fontSize="sm" color="gray.500">•</Text>
-                                            <Text fontSize="sm" color="gray.500">
-                                                {activity.siteName}
-                                            </Text>
-                                        </HStack>
-                                    </VStack>
-
-                                    <VStack align="flex-end" spacing={1} flexShrink={0}>
-                                        <Text fontSize="sm" color="gray.500">
-                                            {formatDate(activity.timestamp)}
-                                        </Text>
-                                        <Badge colorScheme={getActivityColor(activity._type)}>
-                                            {activity._type.replace(/([A-Z])/g, ' $1').trim()}
-                                        </Badge>
-                                    </VStack>
-                                </HStack>
+                                        {activity._type.replace(/([A-Z])/g, ' $1').trim()}
+                                    </Badge>
+                                </Flex>
                             </CardBody>
                         </Card>
                     ))}
                 </VStack>
             ) : (
-                <Box textAlign="center" py={10}>
-                    <Text fontSize="lg" color="gray.500">
-                        No activities found for the selected timeframe.
+                <Box textAlign="center" py={6}>
+                    <Text fontSize="sm">
+                        No history found."
                     </Text>
                 </Box>
             )}

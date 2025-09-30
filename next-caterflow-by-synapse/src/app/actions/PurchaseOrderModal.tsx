@@ -7,6 +7,7 @@ import {
     Tr, Th, Td, TableContainer, NumberInput, NumberInputField, NumberInputStepper,
     NumberIncrementStepper, NumberDecrementStepper, Icon, Spinner, Badge,
     useColorModeValue, ModalCloseButton,
+    Input,
 } from '@chakra-ui/react';
 import { FaBoxes, FaCheck, FaSave } from 'react-icons/fa';
 import { Dispatch, SetStateAction, useMemo } from 'react';
@@ -85,11 +86,11 @@ export default function PurchaseOrderModal({
         }));
     };
 
-    const handleQuantityChange = (valueAsString: string, itemKey: string) => {
-        const value = parseInt(valueAsString, 10);
+    const handleQuantityChange = (value: string, itemKey: string) => {
+        const valueAsNumber = parseFloat(value);
         setEditedQuantities(prev => ({
             ...prev,
-            [itemKey]: isNaN(value) ? undefined : value,
+            [itemKey]: isNaN(valueAsNumber) ? undefined : valueAsNumber,
         }));
     };
 
@@ -166,14 +167,14 @@ export default function PurchaseOrderModal({
 
                                     {/* RESPONSIVE: Box allows horizontal scrolling on small screens */}
                                     <Box overflowX="auto">
-                                        <TableContainer minW="700px">
+                                        <TableContainer minW="400px">
                                             <Table variant="simple" size="sm">
                                                 <Thead>
                                                     <Tr>
                                                         <Th>Item</Th>
                                                         <Th isNumeric>Qty</Th>
-                                                        <Th isNumeric>Unit Price</Th>
-                                                        <Th isNumeric>Subtotal</Th>
+                                                        {/*<Th isNumeric>Unit Price</Th>
+                                                        <Th isNumeric>Subtotal</Th>*/}
                                                         {isEditable && <Th></Th>}
                                                     </Tr>
                                                 </Thead>
@@ -193,32 +194,29 @@ export default function PurchaseOrderModal({
                                                                     <VStack align="end">
                                                                         <HStack>
                                                                             <Text>({item.stockItem?.unitOfMeasure || 'unit'})</Text>
-                                                                            <NumberInput
+                                                                            <Input
+                                                                                value={quantity === 0 ? '' : quantity}
+                                                                                onChange={(e) => handleQuantityChange(e.target.value, item._key)}
+                                                                                type="number"
+                                                                                step="0.1"
+                                                                                min="0"
                                                                                 size="sm"
-                                                                                value={quantity}
-                                                                                onChange={(val) => handleQuantityChange(val, item._key)}
-                                                                                min={1}
+                                                                                width="100px"
                                                                                 isDisabled={!isEditable}
-                                                                                w="100px"
-                                                                            >
-                                                                                <NumberInputField />
-                                                                                <NumberInputStepper>
-                                                                                    <NumberIncrementStepper />
-                                                                                    <NumberDecrementStepper />
-                                                                                </NumberInputStepper>
-                                                                            </NumberInput>
+                                                                                placeholder="0"
+                                                                            />
                                                                         </HStack>
                                                                     </VStack>
                                                                 </Td>
 
-                                                                <Td isNumeric>
-                                                                    <NumberInput size="sm" value={price?.toFixed(2)} onChange={(val) => handlePriceChange(item._key, parseFloat(val))} min={0} precision={2} isDisabled={!isEditable} w="120px">
-                                                                        <NumberInputField />
-                                                                    </NumberInput>
+                                                                {/*<Td isNumeric>
+                                                                    < NumberInput size="sm" value={price?.toFixed(2)} onChange={(val) => handlePriceChange(item._key, parseFloat(val))} min={0} precision={2} isDisabled={!isEditable} w="120px">
+                                                                <NumberInputField />
+                                                            </NumberInput>
                                                                 </Td>
                                                                 <Td isNumeric>
-                                                                    <Text fontWeight="bold" color={primaryTextColor}>E{(quantity * price).toFixed(2)}</Text>
-                                                                </Td>
+                                                                    <Text fontWeight="bold" color={primaryTextColor}>E {(quantity * price).toFixed(2)}</Text>
+                                                                </Td>*/}
 
                                                                 {isEditable && (
                                                                     <Td>
@@ -237,7 +235,7 @@ export default function PurchaseOrderModal({
 
                                     <Flex justify="flex-end" w="full" mt={4}>
                                         <Text fontWeight="bold" fontSize="xl" color={primaryTextColor}>
-                                            Total: E{totalAmount.toFixed(2)}
+                                            Total: E {totalAmount.toFixed(2)}
                                         </Text>
                                     </Flex>
                                 </VStack>
@@ -277,8 +275,8 @@ export default function PurchaseOrderModal({
                             )}
                         </HStack>
                     </ModalFooter>
-                </ModalContent>
-            </Modal>
+                </ModalContent >
+            </Modal >
         </>
     );
 }

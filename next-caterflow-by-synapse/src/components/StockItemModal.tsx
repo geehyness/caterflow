@@ -39,7 +39,16 @@ interface StockItem {
     unitOfMeasure: string;
 }
 
-// Correct the interface name to match what the component expects
+interface Category {
+    _id: string;
+    title: string;
+}
+
+interface Supplier {
+    _id: string;
+    name: string;
+}
+
 interface StockItemModalProps {
     isOpen: boolean;
     onClose: () => void;
@@ -54,12 +63,59 @@ export default function StockItemModal({ isOpen, onClose, item, onSave }: StockI
     const [category, setCategory] = useState('');
     const [primarySupplier, setPrimarySupplier] = useState('');
     const [unitOfMeasure, setUnitOfMeasure] = useState('');
+    const [categories, setCategories] = useState<Category[]>([]);
+    const [suppliers, setSuppliers] = useState<Supplier[]>([]);
     const [loading, setLoading] = useState(false);
+    const [dataLoading, setDataLoading] = useState(false);
     const toast = useToast();
 
-    // Theme-aware colors
     const brandColorScheme = useColorModeValue('brand', 'brand');
     const neutralColorScheme = useColorModeValue('gray', 'gray');
+
+    // Fetch categories and suppliers
+    useEffect(() => {
+        const fetchData = async () => {
+            setDataLoading(true);
+            try {
+                // Fetch categories
+                const categoriesQuery = `*[_type == "Category"]{ _id, title } | order(title asc)`;
+                const categoriesData = await fetch('/api/sanity', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ query: categoriesQuery }),
+                }).then(res => res.json());
+                setCategories(categoriesData.result || []);
+
+                // Fetch suppliers
+                const suppliersQuery = `*[_type == "Supplier"]{ _id, name } | order(name asc)`;
+                const suppliersData = await fetch('/api/sanity', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ query: suppliersQuery }),
+                }).then(res => res.json());
+                setSuppliers(suppliersData.result || []);
+            } catch (error) {
+                console.error('Failed to fetch data:', error);
+                toast({
+                    title: 'Error',
+                    description: 'Failed to load form data',
+                    status: 'error',
+                    duration: 5000,
+                    isClosable: true,
+                });
+            } finally {
+                setDataLoading(false);
+            }
+        };
+
+        if (isOpen) {
+            fetchData();
+        }
+    }, [isOpen, toast]);
 
     useEffect(() => {
         if (item) {
@@ -173,13 +229,54 @@ export default function StockItemModal({ isOpen, onClose, item, onSave }: StockI
                                 </NumberInput>
                             </FormControl>
 
+                            <FormControl isRequired>
+                                <FormLabel>Category</FormLabel>
+                                <Select
+                                    value={category}
+                                    onChange={(e) => setCategory(e.target.value)}
+                                    placeholder="Select category"
+                                    isDisabled={dataLoading}
+                                >
+                                    {categories.map((cat) => (
+                                        <option key={cat._id} value={cat._id}>
+                                            {cat.title}
+                                        </option>
+                                    ))}
+                                </Select>
+                            </FormControl>
+
                             <FormControl>
+                                <FormLabel>Primary Supplier</FormLabel>
+                                <Select
+                                    value={primarySupplier}
+                                    onChange={(e) => setPrimarySupplier(e.target.value)}
+                                    placeholder="Select primary supplier"
+                                    isDisabled={dataLoading}
+                                >
+                                    {suppliers.map((supplier) => (
+                                        <option key={supplier._id} value={supplier._id}>
+                                            {supplier.name}
+                                        </option>
+                                    ))}
+                                </Select>
+                            </FormControl>
+
+                            <FormControl isRequired>
                                 <FormLabel>Unit of Measure</FormLabel>
-                                <Input
+                                <Select
                                     value={unitOfMeasure}
                                     onChange={(e) => setUnitOfMeasure(e.target.value)}
-                                    placeholder="e.g., kg, units, etc."
-                                />
+                                    placeholder="Select unit of measure"
+                                >
+                                    <option value="kg">Kilogram (kg)</option>
+                                    <option value="g">Gram (g)</option>
+                                    <option value="l">Liter (l)</option>
+                                    <option value="ml">Milliliter (ml)</option>
+                                    <option value="each">Each</option>
+                                    <option value="box">Box</option>
+                                    <option value="case">Case</option>
+                                    <option value="bag">Bag</option>
+                                </Select>
                             </FormControl>
                         </VStack>
                     </ModalBody>
@@ -188,7 +285,12 @@ export default function StockItemModal({ isOpen, onClose, item, onSave }: StockI
                         <Button colorScheme={neutralColorScheme} mr={3} onClick={onClose} isDisabled={loading} variant="ghost">
                             Cancel
                         </Button>
-                        <Button colorScheme={brandColorScheme} type="submit" isLoading={loading}>
+                        <Button
+                            colorScheme={brandColorScheme}
+                            type="submit"
+                            isLoading={loading}
+                            isDisabled={dataLoading}
+                        >
                             {item ? 'Update Item' : 'Create Item'}
                         </Button>
                     </ModalFooter>

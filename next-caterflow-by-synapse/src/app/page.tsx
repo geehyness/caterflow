@@ -559,7 +559,7 @@ export default function Home() {
 
       {transactions.length > 0 && (
         <Box textAlign="center" mt={4}>
-          <Link href="/transactions" passHref>
+          <Link href="/activity" passHref>
             <Button size="sm" variant="ghost" colorScheme="brand">
               View All Transactions
             </Button>

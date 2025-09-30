@@ -313,7 +313,7 @@ export default function ApprovalsPage() {
                     body: JSON.stringify({
                         id: selectedApproval._id,
                         type: 'PurchaseOrder',
-                        status: 'rejected',
+                        status: 'cancelled',
                         rejectedBy: user?.id,
                         rejectedAt: new Date().toISOString(),
                     }),

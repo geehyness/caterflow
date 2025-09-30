@@ -20,24 +20,43 @@ const resolveRef = (val: any): string | null => {
 
 const getNextDispatchNumber = async (): Promise<string> => {
     try {
-        const today = new Date().toISOString().slice(0, 10);
-        const query = groq`*[_type == "DispatchLog" && _createdAt >= "${today}T00:00:00Z" && _createdAt < "${today}T23:59:59Z"] | order(_createdAt desc)[0] {
-            dispatchNumber
-        }`;
+        // Get all dispatch numbers and find the maximum
+        const query = groq`*[_type == "DispatchLog" && defined(dispatchNumber)].dispatchNumber`;
+        const allDispatchNumbers = await client.fetch(query);
 
-        const lastLog = await client.fetch(query);
-        let nextNumber = 1;
+        let maxNumber = 0;
 
-        if (lastLog && lastLog.dispatchNumber) {
-            const lastNumber = parseInt(lastLog.dispatchNumber.split('-').pop() || '0');
-            if (!isNaN(lastNumber)) nextNumber = lastNumber + 1;
+        if (allDispatchNumbers && allDispatchNumbers.length > 0) {
+            allDispatchNumbers.forEach((dispatchNumber: string) => {
+                if (dispatchNumber && dispatchNumber.startsWith('DL-')) {
+                    const numberPart = dispatchNumber.split('-')[1];
+                    const currentNumber = parseInt(numberPart);
+                    if (!isNaN(currentNumber) && currentNumber > maxNumber) {
+                        maxNumber = currentNumber;
+                    }
+                }
+            });
         }
 
-        const paddedNumber = String(nextNumber).padStart(3, '0');
-        return `DL-${today}-${paddedNumber}`;
+        // Generate the next number
+        const nextNumber = maxNumber + 1;
+        const newDispatchNumber = `DL-${String(nextNumber).padStart(5, '0')}`;
+
+        // Double-check this number doesn't already exist (concurrency safety)
+        const checkQuery = groq`count(*[_type == "DispatchLog" && dispatchNumber == $newNumber])`;
+        const existingCount = await client.fetch(checkQuery, { newNumber: newDispatchNumber });
+
+        if (existingCount > 0) {
+            // If it exists, try the next number
+            return `DL-${String(nextNumber + 1).padStart(5, '0')}`;
+        }
+
+        return newDispatchNumber;
     } catch (error) {
         console.error('Error generating dispatch number:', error);
-        return `DL-${Date.now().toString().slice(-8)}`;
+        // Fallback with timestamp to ensure uniqueness
+        const timestamp = new Date().getTime();
+        return `DL-${String(timestamp).slice(-5)}`;
     }
 };
 

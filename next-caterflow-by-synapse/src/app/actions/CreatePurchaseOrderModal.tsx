@@ -171,9 +171,10 @@ export default function CreatePurchaseOrderModal({
         ));
     };
 
-    const updateItemQuantity = (index: number, quantity: number) => {
+    const updateItemQuantity = (index: number, quantity: string) => {
+        const valueAsNumber = parseFloat(quantity);
         setOrderItems(prev => prev.map((item, i) =>
-            i === index ? { ...item, orderedQuantity: quantity } : item
+            i === index ? { ...item, orderedQuantity: isNaN(valueAsNumber) ? 0 : valueAsNumber } : item
         ));
     };
 
@@ -295,18 +296,15 @@ export default function CreatePurchaseOrderModal({
                                                 </Box>*/}
                                                 <Box flex="1 1 60px">
                                                     <Text fontWeight="medium" mb={1}>Quantity ({stockItem?.unitOfMeasure})</Text>
-                                                    <NumberInput
-                                                        value={item.orderedQuantity}
-                                                        onChange={(value) => updateItemQuantity(index, parseInt(value) || 1)}
-                                                        min={1}
+                                                    <Input
+                                                        value={item.orderedQuantity === 0 ? '' : item.orderedQuantity}
+                                                        onChange={(e) => updateItemQuantity(index, e.target.value)}
+                                                        type="number"
+                                                        step="0.1"
+                                                        min="0"
                                                         size="sm"
-                                                    >
-                                                        <NumberInputField />
-                                                        <NumberInputStepper>
-                                                            <NumberIncrementStepper />
-                                                            <NumberDecrementStepper />
-                                                        </NumberInputStepper>
-                                                    </NumberInput>
+                                                        placeholder="0"
+                                                    />
                                                 </Box>
                                             </Flex>
                                         </VStack>

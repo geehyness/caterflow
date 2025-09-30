@@ -254,10 +254,13 @@ export default function GoodsReceiptModal({
     };
 
     const handleItemChange = (key: string, field: keyof ReceivedItemData, value: any) => {
+        // Convert string to number for quantity fields
+        const processedValue = field === 'receivedQuantity' ? handleNumberInput(value) : value;
+
         setFormData(prev => ({
             ...prev,
             receivedItems: (prev.receivedItems || []).map(item =>
-                item._key === key ? { ...item, [field]: value } : item
+                item._key === key ? { ...item, [field]: processedValue } : item
             ),
         }));
     };
@@ -463,6 +466,20 @@ export default function GoodsReceiptModal({
         }
     };
 
+    // Safe number conversion helper function
+    const safeNumber = (value: string | number): number => {
+        if (typeof value === 'number') return isNaN(value) ? 0 : value;
+        const num = parseFloat(value);
+        return isNaN(num) ? 0 : num;
+    };
+
+    // Safe number input handler
+    const handleNumberInput = (value: string): number => {
+        if (value === '' || value === '-') return 0;
+        const num = parseFloat(value);
+        return isNaN(num) ? 0 : num;
+    };
+
     const modalTitle = !isNewReceipt ? `Goods Receipt: ${formData.receiptNumber}` : 'New Goods Receipt';
     const isEditable = formData.status !== 'completed';
 
@@ -539,14 +556,14 @@ export default function GoodsReceiptModal({
                                                     </option>
                                                 ))}
                                             </Select>
-                                            <Button
+                                            {/*<Button
                                                 onClick={() => setIsBinSelectorOpen(true)}
                                                 isDisabled={!isEditable}
                                                 variant="outline"
                                                 colorScheme="brand"
                                             >
                                                 Browse Bins
-                                            </Button>
+                                            </Button>*/}
                                         </HStack>
                                     </FormControl>
                                 </HStack>
@@ -606,23 +623,21 @@ export default function GoodsReceiptModal({
                                                 {(formData.receivedItems || []).map(item => (
                                                     <Tr key={item._key} _hover={{ bg: tableHoverBg }}>
                                                         <Td borderColor={borderColor}>{item.stockItem?.name || 'Unknown Item'}</Td>
-                                                        <Td isNumeric borderColor={borderColor}>{item.orderedQuantity || 0}</Td>
+                                                        <Td isNumeric borderColor={borderColor}>{item.orderedQuantity || 0} ({item.stockItem.unitOfMeasure})</Td>
                                                         <Td borderColor={borderColor}>
-                                                            <NumberInput
-                                                                value={item.receivedQuantity}
-                                                                onChange={(_, valueAsNumber) =>
-                                                                    handleItemChange(item._key, 'receivedQuantity', valueAsNumber)
-                                                                }
-                                                                size="sm" min={0}
-                                                                max={item.orderedQuantity}
+                                                            <Input
+                                                                value={item.receivedQuantity === 0 ? '' : item.receivedQuantity}
+                                                                onChange={(e) => handleItemChange(item._key, 'receivedQuantity', e.target.value)}
+                                                                type="number"
+                                                                step="0.1"
+                                                                min="0"
+                                                                size="sm"
+                                                                width="100px"
                                                                 isDisabled={!isEditable}
-                                                            >
-                                                                <NumberInputField bg={inputBg} borderColor={borderColor} />
-                                                                <NumberInputStepper>
-                                                                    <NumberIncrementStepper borderColor={borderColor} />
-                                                                    <NumberDecrementStepper borderColor={borderColor} />
-                                                                </NumberInputStepper>
-                                                            </NumberInput>
+                                                                bg={inputBg}
+                                                                borderColor={borderColor}
+                                                                placeholder="0"
+                                                            />
                                                         </Td>
                                                         <Td borderColor={borderColor}>
                                                             <Select
@@ -694,7 +709,11 @@ export default function GoodsReceiptModal({
 
             <FileUploadModal
                 isOpen={isUploadModalOpen}
-                onClose={() => setIsUploadModalOpen(false)}
+                onClose={() => {
+                    setIsUploadModalOpen(false);
+                    onSave(); // Refresh parent page
+                    onClose(); // Close main modal
+                }}
                 onUploadComplete={handleFinalizeReceipt}
                 relatedToId={savedReceiptId || formData._id || ''}
                 fileType="receipt"

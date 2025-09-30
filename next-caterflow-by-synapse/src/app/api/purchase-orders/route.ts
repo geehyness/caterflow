@@ -21,6 +21,48 @@ function setNoCache(res: NextResponse) {
     return res;
 }
 
+const getNextPONumber = async (): Promise<string> => {
+    try {
+        // Get all PO numbers and find the maximum
+        const query = groq`*[_type == "PurchaseOrder" && defined(poNumber)].poNumber`;
+        const allPONumbers = await client.fetch(query);
+
+        let maxNumber = 0;
+
+        if (allPONumbers && allPONumbers.length > 0) {
+            allPONumbers.forEach((poNumber: string) => {
+                if (poNumber && poNumber.startsWith('PO-')) {
+                    const numberPart = poNumber.split('-')[1];
+                    const currentNumber = parseInt(numberPart);
+                    if (!isNaN(currentNumber) && currentNumber > maxNumber) {
+                        maxNumber = currentNumber;
+                    }
+                }
+            });
+        }
+
+        // Generate the next number
+        const nextNumber = maxNumber + 1;
+        const newPONumber = `PO-${String(nextNumber).padStart(5, '0')}`;
+
+        // Double-check this number doesn't already exist (concurrency safety)
+        const checkQuery = groq`count(*[_type == "PurchaseOrder" && poNumber == $newNumber])`;
+        const existingCount = await client.fetch(checkQuery, { newNumber: newPONumber });
+
+        if (existingCount > 0) {
+            // If it exists, try the next number
+            return `PO-${String(nextNumber + 1).padStart(5, '0')}`;
+        }
+
+        return newPONumber;
+    } catch (error) {
+        console.error('Error generating PO number:', error);
+        // Fallback with timestamp to ensure uniqueness
+        const timestamp = new Date().getTime();
+        return `PO-${String(timestamp).slice(-5)}`;
+    }
+};
+
 /**
  * GET handler to fetch all purchase orders or a specific one by query parameter
  */
@@ -192,7 +234,7 @@ export async function POST(request: Request) {
         // --- 3. Construct Sanity Document (only after all validation passes) ---
         const poDocument = {
             _type: 'PurchaseOrder',
-            poNumber: poNumber || `PO-${nanoid(8)}`,
+            poNumber: poNumber || await getNextPONumber(),
             orderDate: orderDate || new Date().toISOString(),
             orderedBy: {
                 _type: 'reference',
