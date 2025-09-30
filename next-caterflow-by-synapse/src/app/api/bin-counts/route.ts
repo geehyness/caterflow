@@ -178,7 +178,6 @@ export async function POST(request: Request) {
 
         // Process countedItems correctly
         const countedItems = newBinCount.countedItems?.map((item: any) => {
-            // Debug: log the item structure
             console.log('Processing counted item for POST:', item);
 
             return {
@@ -198,7 +197,8 @@ export async function POST(request: Request) {
             _type: 'InventoryCount',
             ...newBinCount,
             countNumber,
-            status: 'in-progress',
+            // Use the status from the request, default to 'draft' if not provided
+            status: newBinCount.status || 'draft',
             countDate: new Date().toISOString(),
             bin: {
                 _type: 'reference',

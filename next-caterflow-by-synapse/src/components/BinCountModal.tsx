@@ -467,15 +467,27 @@ export default function BinCountModal({ isOpen, onClose, binCount, onSave }: Bin
             };
         });
 
+        // FIXED: Properly set the status for new counts
+        let status;
+        if (isFinalize) {
+            status = 'completed';
+        } else {
+            // For existing counts, keep their current status when saving as draft
+            // For new counts, set to 'draft' when saving as draft
+            status = binCount?.status || 'draft';
+        }
+
         const payload = {
             countDate: new Date(countDate).toISOString(),
             bin: selectedBin._id,
             countedBy: session?.user?.id,
             notes,
             countedItems: itemsWithVariance,
-            status: isFinalize ? 'completed' : binCount?.status || 'draft',
+            status: status, // Use the properly determined status
             ...(binCount && { countNumber: binCount.countNumber }),
         };
+
+        console.log('Saving with payload:', payload); // Add this for debugging
 
         try {
             const method = binCount ? 'PUT' : 'POST';
@@ -491,6 +503,9 @@ export default function BinCountModal({ isOpen, onClose, binCount, onSave }: Bin
                 const errorData = await response.json();
                 throw new Error(errorData.error || 'Failed to save bin count');
             }
+
+            const result = await response.json();
+            console.log('Save result:', result); // Add this for debugging
 
             toast({
                 title: `Count ${isFinalize ? 'Finalized' : 'Saved'}`,

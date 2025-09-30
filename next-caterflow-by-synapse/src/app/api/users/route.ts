@@ -81,24 +81,18 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Hash password if provided
-    let hashedPassword;
-    if (userData.password) {
-      hashedPassword = await bcrypt.hash(userData.password, 10);
-    }
-
     // Create user document
     const newUser = {
       _type: 'AppUser',
       name: userData.name,
       email: userData.email,
-      password: hashedPassword,
       role: userData.role,
       isActive: userData.isActive !== undefined ? userData.isActive : true,
       associatedSite: userData.associatedSite ? {
         _type: 'reference',
         _ref: userData.associatedSite
-      } : undefined
+      } : undefined,
+      requiresPasswordSetup: true
     };
 
     const result = await writeClient.create(newUser);

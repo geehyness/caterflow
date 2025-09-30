@@ -39,7 +39,6 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({
 }) => {
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
     const [role, setRole] = useState('siteManager');
     const [isActive, setIsActive] = useState(true);
     const [selectedSiteId, setSelectedSiteId] = useState<string>('');
@@ -79,12 +78,10 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({
                 setSelectedSiteId('');
             }
 
-            setPassword(''); // Don't prefill password for existing users
         } else {
             // Reset form for new user
             setName('');
             setEmail('');
-            setPassword('');
             setRole('siteManager');
             setIsActive(true);
             setSelectedSiteId('');
@@ -98,9 +95,6 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({
         if (!email.trim()) newErrors.email = 'Email is required';
         else if (!/\S+@\S+\.\S+/.test(email)) newErrors.email = 'Email is invalid';
 
-        if (!userToEdit && !password.trim()) {
-            newErrors.password = 'Password is required for new users';
-        }
 
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
@@ -126,7 +120,6 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({
                     _id: userToEdit?._id,
                     name,
                     email,
-                    password: password || undefined,
                     role,
                     isActive,
                     associatedSite: selectedSiteId || undefined,
