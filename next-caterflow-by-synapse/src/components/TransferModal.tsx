@@ -230,7 +230,7 @@ export default function TransferModal({ isOpen, onClose, transfer, onSave }: Tra
         };
 
         fetchData();
-    }, [isOpen, transfer, toast, transferredItems]);
+    }, [isOpen, transfer, toast]);
 
     // Enhanced stock refresh when fromBin changes
     useEffect(() => {
