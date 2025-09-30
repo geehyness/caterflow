@@ -731,16 +731,18 @@ export default function TransferModal({ isOpen, onClose, transfer, onSave }: Tra
                                         >
                                             Save Draft
                                         </Button>
-                                        <Button
-                                            leftIcon={<FiSend />}
-                                            colorScheme={brandColorScheme}
-                                            onClick={() => handleSave('pending-approval')}
-                                            isLoading={isSaving}
-                                            ml={3}
-                                            isDisabled={!fromBin || !toBin || transferredItems.length === 0}
-                                        >
-                                            Submit for Approval
-                                        </Button>
+                                        {!isNew && (
+                                            <Button
+                                                leftIcon={<FiSend />}
+                                                colorScheme={brandColorScheme}
+                                                onClick={() => handleSave('pending-approval')}
+                                                isLoading={isSaving}
+                                                ml={3}
+                                                isDisabled={!fromBin || !toBin || transferredItems.length === 0}
+                                            >
+                                                Submit for Approval
+                                            </Button>
+                                        )}
                                     </>
                                 ) : isPendingApproval ? (
                                     <Text color={neutralColorScheme} fontSize="sm">
