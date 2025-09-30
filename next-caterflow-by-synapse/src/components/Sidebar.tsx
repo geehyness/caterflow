@@ -105,8 +105,8 @@ const SidebarContent = ({ onItemClick }: { onItemClick?: () => void }) => {
                 { label: 'Users', href: '/users', icon: FiUsers, roles: ['admin'] },
                 { label: 'Dispatch Types', href: '/dispatch-types', icon: FiTruck, roles: ['admin'] }, // ← Add this line
                 { label: 'Locations', href: '/locations', icon: FiMapPin, roles: ['admin'] },
-                { label: 'Suppliers', href: '/suppliers', icon: FiBriefcase, roles: ['admin'] },
-                { label: 'Notifications', href: '/notifications', icon: FiBell, roles: ['admin'] },
+                { label: 'Suppliers', href: '/suppliers', icon: FiBriefcase, roles: ['admin', 'procurement'] },
+                //{ label: 'Notifications', href: '/notifications', icon: FiBell, roles: ['admin'] },
                 //{ label: 'System Settings', href: '/settings', icon: FiSettings, roles: ['admin'] },
             ],
         },

@@ -65,7 +65,7 @@ export default function UsersPage() {
     const headingColor = useColorModeValue('neutral.light.text-primary', 'neutral.dark.text-primary');
     const cardBg = useColorModeValue('neutral.light.bg-card', 'neutral.dark.bg-card');
     const borderColor = useColorModeValue('neutral.light.border-color', 'neutral.dark.border-color');
-    const inputBg = useColorModeValue('neutral.light.bg-input', 'neutral.dark.bg-input');
+    //const inputBg = useColorModeValue('neutral.light.bg-input', 'neutral.dark.bg-input');
     const brand500 = useColorModeValue('brand.500', 'brand.300');
     const secondaryTextColor = useColorModeValue('neutral.light.text-secondary', 'neutral.dark.text-secondary');
 
@@ -319,7 +319,7 @@ export default function UsersPage() {
                         justify="space-between"
                         align={{ base: 'stretch', md: 'center' }}
                     >
-                        <InputGroup maxW={{ base: 'full', md: '300px' }}>
+                        {/*<InputGroup maxW={{ base: 'full', md: '300px' }}>
                             <InputLeftElement pointerEvents="none" color={secondaryTextColor}>
                                 <FiSearch />
                             </InputLeftElement>
@@ -327,13 +327,13 @@ export default function UsersPage() {
                                 placeholder="Search users..."
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
-                                bg={inputBg}
+                                bg={pageBg}
                                 borderColor={borderColor}
                                 _hover={{ borderColor: brand500 }}
                                 _focus={{ borderColor: brand500, boxShadow: `0 0 0 1px ${brand500}` }}
                                 color={headingColor}
                             />
-                        </InputGroup>
+                        </InputGroup>*/}
 
                         <HStack spacing={4} flexWrap="wrap">
                             <Flex align="center">
@@ -343,7 +343,7 @@ export default function UsersPage() {
                                     value={roleFilter}
                                     onChange={(e) => setRoleFilter(e.target.value)}
                                     size="sm"
-                                    bg={inputBg}
+                                    bg={pageBg}
                                     color={headingColor}
                                     borderColor={borderColor}
                                     maxW="150px"
@@ -363,7 +363,7 @@ export default function UsersPage() {
                                     value={statusFilter}
                                     onChange={(e) => setStatusFilter(e.target.value)}
                                     size="sm"
-                                    bg={inputBg}
+                                    bg={pageBg}
                                     color={headingColor}
                                     borderColor={borderColor}
                                     maxW="120px"

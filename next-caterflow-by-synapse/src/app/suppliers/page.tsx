@@ -152,21 +152,16 @@ export default function SuppliersPage() {
             header: 'Actions',
             cell: (row: Supplier) => (
                 <Flex>
-                    <IconButton
+                    <Button
                         aria-label="Edit supplier"
-                        icon={<FiEdit />}
+                        leftIcon={<FiEdit />}
                         size="sm"
                         colorScheme="blue"
                         mr={2}
                         onClick={() => handleEditSupplier(row)}
-                    />
-                    <IconButton
-                        aria-label="Delete supplier"
-                        icon={<FiTrash2 />}
-                        size="sm"
-                        colorScheme="red"
-                        onClick={() => handleDeleteSupplier(row._id)}
-                    />
+                    >
+                        Edit
+                    </Button>
                 </Flex>
             ),
         }] : []),

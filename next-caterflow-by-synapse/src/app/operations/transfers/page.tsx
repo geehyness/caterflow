@@ -206,7 +206,7 @@ export default function TransfersPage() {
             accessorKey: 'actions',
             cell: (row: any) => {
                 if (!row) return null;
-                const isEditable = row.status === 'draft' || row.status === 'pending-approval';
+                const isEditable = row.status === 'draft';// || row.status === 'pending-approval';
                 const isApproved = row.status === 'approved';
                 return (
                     <HStack spacing={2}>
@@ -357,36 +357,6 @@ export default function TransfersPage() {
                         />
                     </CardBody>
                 </Card>
-            )}
-
-            {filteredTransfers.length > 0 && (
-                <Flex justifyContent="space-between" alignItems="center" mt={4} direction={{ base: 'column', md: 'row' }}>
-                    <Text fontSize="sm" color={secondaryTextColor} mb={{ base: 2, md: 0 }}>
-                        Showing {startIndex + 1} to {Math.min(endIndex, filteredTransfers.length)} of {filteredTransfers.length} entries
-                    </Text>
-                    <HStack>
-                        <Button
-                            onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                            isDisabled={currentPage === 1}
-                            leftIcon={<FiArrowLeft />}
-                            size="sm"
-                            variant="outline"
-                            colorScheme="brand"
-                        >
-                            Previous
-                        </Button>
-                        <Button
-                            onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                            isDisabled={currentPage === totalPages}
-                            rightIcon={<FiArrowRight />}
-                            size="sm"
-                            variant="outline"
-                            colorScheme="brand"
-                        >
-                            Next
-                        </Button>
-                    </HStack>
-                </Flex>
             )}
 
             <TransferModal
