@@ -219,6 +219,7 @@ export default function DispatchesPage() {
         {
             accessorKey: 'workflowAction',
             header: 'Action',
+            isSortable: false, // Explicitly set to false for clarity
             cell: (row: any) => {
                 const d: DispatchRecord = row?.original ?? row;
                 const isComplete = d?.evidenceStatus === 'complete';
@@ -331,6 +332,24 @@ export default function DispatchesPage() {
                 return d?.costPerPerson ? `$${d.costPerPerson.toFixed(2)}` : 'N/A';
             },
         },
+        {
+            accessorKey: 'dispatchDate',
+            header: 'Dispatch Date',
+            isSortable: true,
+            cell: (row: any) => {
+                const d: DispatchRecord = row?.original ?? row;
+                return d?.dispatchDate ? new Date(d.dispatchDate).toLocaleDateString() : '-';
+            },
+        },
+        {
+            accessorKey: 'dispatchedItems.length',
+            header: 'Item Count',
+            isSortable: true,
+            cell: (row: any) => {
+                const d: DispatchRecord = row?.original ?? row;
+                return d?.dispatchedItems?.length || 0;
+            },
+        }
     ], [handleViewDispatch, user, getEvidenceStatusColor, secondaryTextColor]);
 
     if (loading || status === 'loading') {

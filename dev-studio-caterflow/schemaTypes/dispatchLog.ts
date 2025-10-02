@@ -1,6 +1,5 @@
 // schemas/dispatchLog.ts
 import { defineType, defineField, ValidationContext } from 'sanity';
-import client from '../lib/client';
 
 const isUniqueDispatchNumber = async (dispatchNumber: string | undefined, context: ValidationContext) => {
     const { document, getClient } = context;
@@ -11,9 +10,7 @@ const isUniqueDispatchNumber = async (dispatchNumber: string | undefined, contex
     const id = document?._id.replace('drafts.', '');
     const client = getClient({ apiVersion: '2025-08-20' });
 
-    const query = `
-        !defined(*[_type == "DispatchLog" && dispatchNumber == $dispatchNumber && _id != $draft && _id != $published][0]._id)
-    `;
+    const query = `*[_type == "DispatchLog" && dispatchNumber == $dispatchNumber && _id != $draft && _id != $published][0]._id`;
 
     const params = {
         draft: `drafts.${id}`,
@@ -22,7 +19,8 @@ const isUniqueDispatchNumber = async (dispatchNumber: string | undefined, contex
     };
 
     const result = await client.fetch(query, params);
-    return result;
+    // Return true if no duplicate found (result is null/undefined)
+    return !result;
 };
 
 export default defineType({
@@ -44,25 +42,38 @@ export default defineType({
                 }),
             readOnly: ({ document }) => !!document?.dispatchNumber,
             description: 'Unique Dispatch Log identifier.',
-            initialValue: async () => {
-                const today = new Date().toISOString().slice(0, 10);
-                const query = `
-                    *[_type == "DispatchLog" && _createdAt >= "${today}T00:00:00Z" && _createdAt < "${today}T23:59:59Z"] | order(_createdAt desc)[0] {
+            initialValue: async (params, context) => {
+                try {
+                    const { getClient } = context;
+                    const client = getClient({ apiVersion: '2025-08-20' });
+
+                    const today = new Date().toISOString().slice(0, 10);
+                    const query = `*[_type == "DispatchLog" && _createdAt >= "${today}T00:00:00Z" && _createdAt < "${today}T23:59:59Z"] | order(_createdAt desc)[0] {
                         dispatchNumber
-                    }
-                `;
-                const lastLog = await client.fetch(query);
+                    }`;
 
-                let nextNumber = 1;
-                if (lastLog && lastLog.dispatchNumber) {
-                    const lastNumber = parseInt(lastLog.dispatchNumber.split('-').pop());
-                    if (!isNaN(lastNumber)) {
-                        nextNumber = lastNumber + 1;
+                    const lastLog = await client.fetch(query);
+
+                    let nextNumber = 1;
+                    if (lastLog && lastLog.dispatchNumber) {
+                        const parts = lastLog.dispatchNumber.split('-');
+                        if (parts.length > 0) {
+                            const lastNumberStr = parts[parts.length - 1];
+                            const lastNumber = parseInt(lastNumberStr);
+                            if (!isNaN(lastNumber)) {
+                                nextNumber = lastNumber + 1;
+                            }
+                        }
                     }
+
+                    const paddedNumber = String(nextNumber).padStart(3, '0');
+                    return `DL-${today}-${paddedNumber}`;
+                } catch (error) {
+                    console.error('Error generating dispatch number:', error);
+                    // Fallback with timestamp
+                    const timestamp = new Date().getTime().toString().slice(-6);
+                    return `DL-${timestamp}`;
                 }
-
-                const paddedNumber = String(nextNumber).padStart(3, '0');
-                return `DL-${today}-${paddedNumber}`;
             },
         }),
         defineField({

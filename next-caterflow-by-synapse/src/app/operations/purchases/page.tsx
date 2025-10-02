@@ -445,6 +445,7 @@ export default function PurchasesPage() {
         {
             accessorKey: 'workflowAction',
             header: 'Action',
+            isSortable: false, // Actions column should not be sortable
             cell: (row: any) => (
                 <Button
                     size="sm"
@@ -460,11 +461,13 @@ export default function PurchasesPage() {
         {
             accessorKey: 'poNumber',
             header: 'PO Number',
+            isSortable: true, // Enable sorting for PO numbers
             cell: (row: any) => <Text fontWeight="bold" color={primaryTextColor}>{row.poNumber}</Text>
         },
         {
             accessorKey: 'status',
             header: 'Status',
+            isSortable: true, // Enable sorting for status
             cell: (row: any) => (
                 <Badge colorScheme={getStatusColor(row.status)} variant="subtle">
                     {row.status.replace('-', ' ').toUpperCase()}
@@ -474,11 +477,13 @@ export default function PurchasesPage() {
         {
             accessorKey: 'supplierNames',
             header: 'Suppliers',
+            isSortable: true, // Enable sorting for supplier names
             cell: (row: any) => <Text color={secondaryTextColor}>{row.supplierNames}</Text>
         },
         {
             accessorKey: 'description',
             header: 'Description',
+            isSortable: false, // Complex description field - disable sorting
             cell: (row: any) => (
                 <Box>
                     <Text>Items:</Text>
@@ -491,13 +496,27 @@ export default function PurchasesPage() {
         {
             accessorKey: 'siteName',
             header: 'Site',
+            isSortable: true, // Enable sorting for site names
             cell: (row: any) => <Text color={primaryTextColor}>{row.siteName}</Text>
         },
         {
             accessorKey: 'orderDate',
             header: 'Order Date',
+            isSortable: true, // Enable sorting for dates
             cell: (row: any) => <Text color={secondaryTextColor}>{new Date(row.orderDate).toLocaleDateString()}</Text>
         },
+        {
+            accessorKey: 'totalAmount',
+            header: 'Total Amount',
+            isSortable: true, // Enable sorting for amounts (if available)
+            cell: (row: any) => <Text color={primaryTextColor}>${(row.totalAmount || 0).toFixed(2)}</Text>
+        },
+        {
+            accessorKey: 'orderedItems.length',
+            header: 'Item Count',
+            isSortable: true, // Enable sorting for item counts
+            cell: (row: any) => <Text color={secondaryTextColor}>{row.orderedItems?.length || 0} items</Text>
+        }
     ];
 
     if (loading || status === 'loading') {

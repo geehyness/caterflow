@@ -204,9 +204,10 @@ export default function TransfersPage() {
         {
             header: 'Actions',
             accessorKey: 'actions',
+            isSortable: false, // Actions column should not be sortable
             cell: (row: any) => {
                 if (!row) return null;
-                const isEditable = row.status === 'draft';// || row.status === 'pending-approval';
+                const isEditable = row.status === 'draft';
                 const isApproved = row.status === 'approved';
                 return (
                     <HStack spacing={2}>
@@ -226,6 +227,7 @@ export default function TransfersPage() {
         {
             header: 'Transfer #',
             accessorKey: 'transferNumber',
+            isSortable: true, // Enable sorting for transfer numbers
             cell: (row: any) => {
                 if (!row) return null;
                 return (
@@ -238,6 +240,7 @@ export default function TransfersPage() {
         {
             header: 'Status',
             accessorKey: 'status',
+            isSortable: true, // Enable sorting for status
             cell: (row: any) => {
                 if (!row) return null;
                 return (
@@ -250,6 +253,7 @@ export default function TransfersPage() {
         {
             header: 'Date',
             accessorKey: 'transferDate',
+            isSortable: true, // Enable sorting for dates
             cell: (row: any) => {
                 if (!row) return null;
                 return <Text color={secondaryTextColor}>{new Date(row.transferDate).toLocaleDateString()}</Text>;
@@ -257,7 +261,8 @@ export default function TransfersPage() {
         },
         {
             header: 'From Bin',
-            accessorKey: 'fromBin',
+            accessorKey: 'fromBin.name', // Use dot notation for nested properties
+            isSortable: true, // Enable sorting for from bin names
             cell: (row: any) => {
                 if (!row || !row.fromBin) return <Text color={secondaryTextColor}>N/A</Text>;
                 if (typeof row.fromBin === 'object') {
@@ -268,7 +273,8 @@ export default function TransfersPage() {
         },
         {
             header: 'To Bin',
-            accessorKey: 'toBin',
+            accessorKey: 'toBin.name', // Use dot notation for nested properties
+            isSortable: true, // Enable sorting for to bin names
             cell: (row: any) => {
                 if (!row || !row.toBin) return <Text color={secondaryTextColor}>N/A</Text>;
                 if (typeof row.toBin === 'object') {
@@ -278,11 +284,39 @@ export default function TransfersPage() {
             },
         },
         {
+            header: 'From Site',
+            accessorKey: 'fromBin.site.name', // Use dot notation for nested site names
+            isSortable: true, // Enable sorting for from site names
+            cell: (row: any) => {
+                if (!row || !row.fromBin || !row.fromBin.site) return <Text color={secondaryTextColor}>N/A</Text>;
+                return <Text color={primaryTextColor}>{row.fromBin.site.name}</Text>;
+            },
+        },
+        {
+            header: 'To Site',
+            accessorKey: 'toBin.site.name', // Use dot notation for nested site names
+            isSortable: true, // Enable sorting for to site names
+            cell: (row: any) => {
+                if (!row || !row.toBin || !row.toBin.site) return <Text color={secondaryTextColor}>N/A</Text>;
+                return <Text color={primaryTextColor}>{row.toBin.site.name}</Text>;
+            },
+        },
+        {
             header: 'Total Items',
-            accessorKey: 'totalItems',
+            accessorKey: 'transferredItems.length', // Use dot notation for array length
+            isSortable: true, // Enable sorting for item counts
             cell: (row: any) => {
                 if (!row || !row.transferredItems) return <Text color={secondaryTextColor}>0</Text>;
                 return <Text color={secondaryTextColor}>{row.transferredItems.length}</Text>;
+            },
+        },
+        {
+            header: 'Created By',
+            accessorKey: 'transferredBy.name', // Use dot notation for nested user names
+            isSortable: true, // Enable sorting for creator names
+            cell: (row: any) => {
+                if (!row || !row.transferredBy) return <Text color={secondaryTextColor}>N/A</Text>;
+                return <Text color={primaryTextColor}>{row.transferredBy.name}</Text>;
             },
         },
     ];

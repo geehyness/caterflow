@@ -190,33 +190,55 @@ export default function DataTable({
 
     const processedData = useMemo(() => {
         // 1. Filter Data
-        const filtered = data.filter((row) =>
-            Object.values(row).some(
-                (value) =>
-                    typeof value === 'string' &&
-                    value.toLowerCase().includes(searchTerm.toLowerCase())
-            )
-        );
+        const filtered = data.filter((row) => searchAllData(row, searchTerm));
 
         // 2. Sort Data
         if (sortColumn && sortDirection) {
             filtered.sort((a, b) => {
-                const aValue = a[sortColumn];
-                const bValue = b[sortColumn];
+                // Enhanced property access to handle nested objects
+                const getNestedValue = (obj: any, path: string) => {
+                    return path.split('.').reduce((current, key) => current?.[key], obj);
+                };
+
+                const aValue = getNestedValue(a, sortColumn);
+                const bValue = getNestedValue(b, sortColumn);
 
                 // Handle null/undefined values
                 if (aValue == null) return sortDirection === 'asc' ? 1 : -1;
                 if (bValue == null) return sortDirection === 'asc' ? -1 : 1;
 
+                // Handle string comparison
                 if (typeof aValue === 'string' && typeof bValue === 'string') {
                     return sortDirection === 'asc'
                         ? aValue.localeCompare(bValue)
                         : bValue.localeCompare(aValue);
                 }
+
+                // Handle number comparison
                 if (typeof aValue === 'number' && typeof bValue === 'number') {
                     return sortDirection === 'asc' ? aValue - bValue : bValue - aValue;
                 }
-                return 0; // Don't sort if types are not comparable
+
+                // Handle date comparison
+                if (aValue instanceof Date && bValue instanceof Date) {
+                    return sortDirection === 'asc'
+                        ? aValue.getTime() - bValue.getTime()
+                        : bValue.getTime() - aValue.getTime();
+                }
+
+                // Handle string dates
+                const aDate = new Date(aValue);
+                const bDate = new Date(bValue);
+                if (!isNaN(aDate.getTime()) && !isNaN(bDate.getTime())) {
+                    return sortDirection === 'asc'
+                        ? aDate.getTime() - bDate.getTime()
+                        : bDate.getTime() - aDate.getTime();
+                }
+
+                // Fallback: convert to string and compare
+                return sortDirection === 'asc'
+                    ? String(aValue).localeCompare(String(bValue))
+                    : String(bValue).localeCompare(String(aValue));
             });
         }
         return filtered;
@@ -245,6 +267,8 @@ export default function DataTable({
             setSortColumn(column);
             setSortDirection('asc');
         }
+        // Reset to first page when sorting
+        setCurrentPage(1);
     };
 
     const renderSortIcon = (accessorKey: string) => {
@@ -345,9 +369,12 @@ export default function DataTable({
                                         key={column.accessorKey}
                                         onClick={() => handleSort(column.accessorKey, column.isSortable)}
                                         cursor={column.isSortable ? 'pointer' : 'default'}
-                                        _hover={{ bg: column.isSortable ? hoverBg : headerBg }}
+                                        _hover={{
+                                            bg: column.isSortable ? hoverBg : headerBg,
+                                        }}
                                         borderColor={borderColor}
                                         color={primaryTextColor}
+                                        userSelect="none"
                                     >
                                         <Flex alignItems="center">
                                             {column.header}
@@ -379,7 +406,15 @@ export default function DataTable({
                                                 {column.cell ? (
                                                     column.cell(row)
                                                 ) : (
-                                                    <Text>{row[column.accessorKey]}</Text>
+                                                    <Text>
+                                                        {(() => {
+                                                            // Handle nested property access
+                                                            const value = column.accessorKey.includes('.')
+                                                                ? column.accessorKey.split('.').reduce((obj, key) => obj?.[key], row)
+                                                                : row[column.accessorKey];
+                                                            return value ?? '-';
+                                                        })()}
+                                                    </Text>
                                                 )}
                                             </Td>
                                         ))}

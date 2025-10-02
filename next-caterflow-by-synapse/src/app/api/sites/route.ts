@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { writeClient } from '@/lib/sanity';
 import { groq } from 'next-sanity';
 import { logSanityInteraction } from '@/lib/sanityLogger';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
+import { getUserSiteInfo } from '@/lib/siteFiltering';
 
 interface SiteData {
     _id?: string;
@@ -13,21 +16,45 @@ interface SiteData {
     patientCount?: number;
 }
 
-// GET all sites
+// GET all sites with site-based filtering
 export async function GET() {
     try {
-        const sites = await writeClient.fetch(groq`
-      *[_type == "Site"] | order(name asc) {
-        _id,
-        name,
-        location,
-        manager->{_id, name},
-        contactNumber,
-        email,
-        patientCount
-      }
-    `);
+        const userSiteInfo = await getUserSiteInfo();
 
+        let query;
+        let params = {};
+
+        if (userSiteInfo.canAccessMultipleSites) {
+            // Admin, auditor, procurer can see all sites
+            query = groq`*[_type == "Site"] | order(name asc) {
+                _id,
+                name,
+                location,
+                manager->{_id, name},
+                contactNumber,
+                email,
+                patientCount,
+                "binCount": count(*[_type == "Bin" && site._ref == ^._id])
+            }`;
+        } else if (userSiteInfo.userSiteId) {
+            // Site-specific users can only see their assigned site
+            query = groq`*[_type == "Site" && _id == $siteId] | order(name asc) {
+                _id,
+                name,
+                location,
+                manager->{_id, name},
+                contactNumber,
+                email,
+                patientCount,
+                "binCount": count(*[_type == "Bin" && site._ref == ^._id])
+            }`;
+            params = { siteId: userSiteInfo.userSiteId };
+        } else {
+            // Users with no site association get empty results
+            return NextResponse.json([]);
+        }
+
+        const sites = await writeClient.fetch(query, params);
         return NextResponse.json(sites);
     } catch (error) {
         console.error('Error fetching sites:', error);
@@ -41,6 +68,20 @@ export async function GET() {
 // CREATE a new site
 export async function POST(req: NextRequest) {
     try {
+        const session = await getServerSession(authOptions);
+
+        if (!session?.user) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
+        // Only admin can create sites
+        if (session.user.role !== 'admin') {
+            return NextResponse.json(
+                { error: 'Insufficient permissions to create sites' },
+                { status: 403 }
+            );
+        }
+
         const siteData: SiteData = await req.json();
 
         // Validate required fields
@@ -103,7 +144,14 @@ export async function POST(req: NextRequest) {
 // UPDATE a site
 export async function PATCH(req: NextRequest) {
     try {
+        const session = await getServerSession(authOptions);
+
+        if (!session?.user) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
         const siteData: SiteData = await req.json();
+        const userSiteInfo = await getUserSiteInfo(req);
 
         if (!siteData._id) {
             return NextResponse.json(
@@ -114,7 +162,10 @@ export async function PATCH(req: NextRequest) {
 
         // Check if site exists
         const existingSite = await writeClient.fetch(
-            groq`*[_type == "Site" && _id == $id][0]`,
+            groq`*[_type == "Site" && _id == $id][0] {
+                _id,
+                name
+            }`,
             { id: siteData._id }
         );
 
@@ -122,6 +173,17 @@ export async function PATCH(req: NextRequest) {
             return NextResponse.json(
                 { error: 'Site not found' },
                 { status: 404 }
+            );
+        }
+
+        // Check permissions: only admin or site manager of this site can update
+        const canUpdate = session.user.role === 'admin' ||
+            (session.user.role === 'siteManager' && siteData._id === userSiteInfo.userSiteId);
+
+        if (!canUpdate) {
+            return NextResponse.json(
+                { error: 'Insufficient permissions to update this site' },
+                { status: 403 }
             );
         }
 
@@ -149,13 +211,13 @@ export async function PATCH(req: NextRequest) {
             patientCount: siteData.patientCount || null
         };
 
-        // Handle manager reference
-        if (siteData.manager) {
+        // Only admin can change manager
+        if (siteData.manager && session.user.role === 'admin') {
             updateData.manager = {
                 _type: 'reference',
                 _ref: siteData.manager
             };
-        } else if (siteData.manager === null) {
+        } else if (siteData.manager === null && session.user.role === 'admin') {
             updateData.manager = null;
         }
 
@@ -188,6 +250,20 @@ export async function PATCH(req: NextRequest) {
 // DELETE a site
 export async function DELETE(req: NextRequest) {
     try {
+        const session = await getServerSession(authOptions);
+
+        if (!session?.user) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
+        // Only admin can delete sites
+        if (session.user.role !== 'admin') {
+            return NextResponse.json(
+                { error: 'Insufficient permissions to delete sites' },
+                { status: 403 }
+            );
+        }
+
         const { searchParams } = new URL(req.url);
         const id = searchParams.get('id');
 
@@ -208,6 +284,19 @@ export async function DELETE(req: NextRequest) {
             return NextResponse.json(
                 { error: 'Site not found' },
                 { status: 404 }
+            );
+        }
+
+        // Check if site has any bins
+        const binCount = await writeClient.fetch(
+            groq`count(*[_type == "Bin" && site._ref == $siteId])`,
+            { siteId: id }
+        );
+
+        if (binCount > 0) {
+            return NextResponse.json(
+                { error: 'Cannot delete site that has bins. Please delete or reassign bins first.' },
+                { status: 409 }
             );
         }
 

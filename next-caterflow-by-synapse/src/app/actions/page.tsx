@@ -1,7 +1,7 @@
 // src/app/actions/page.tsx
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
     Box,
     Heading,
@@ -17,204 +17,280 @@ import {
     useDisclosure,
     Button,
     TabPanel,
-    Accordion,
-    AccordionItem,
-    AccordionButton,
-    AccordionPanel,
-    AccordionIcon,
     HStack,
     Badge,
     VStack,
-    Modal,
-    ModalOverlay,
-    ModalContent,
-    ModalHeader,
-    ModalBody,
-    ModalFooter,
-    Table,
-    TableContainer,
-    Thead,
-    Tbody,
-    Tr,
-    Th,
-    Td,
-    AlertDialog,
-    AlertDialogBody,
-    AlertDialogContent,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogOverlay,
-    Card,
-    CardBody,
-    Input,
-    InputGroup,
-    InputLeftElement,
     useColorModeValue,
+    Card,
 } from '@chakra-ui/react';
 import { useSession } from 'next-auth/react'
-import { FaBoxes } from 'react-icons/fa';
-import { FiPackage, FiFilter, FiEye, FiSearch, FiPlus } from 'react-icons/fi';
+import { FiPackage, FiEdit, FiEye, FiCheckCircle, FiTruck, FiClipboard, FiRepeat } from 'react-icons/fi';
 import PurchaseOrderModal, { PurchaseOrderDetails } from './PurchaseOrderModal';
-import FileUploadModal from '@/components/FileUploadModal';
-
-import {
-    PendingAction,
-    ActionStep,
-    generateWorkflow,
-    actionTypeTitles,
-
-} from './types';
 import DataTable from './DataTable';
 import GoodsReceiptModal from '@/app/actions/GoodsReceiptModal';
-import { Category, Reference, Site, StockItem } from '@/lib/sanityTypes';
-import CreatePurchaseOrderModal from './CreatePurchaseOrderModal';
+import TransferModal from '@/components/TransferModal';
+import BinCountModal from '@/components/BinCountModal';
+import DispatchModal from '@/components/DispatchModal';
 
-// Interface for items selected in the modal
-interface SelectedItemData {
-    item: StockItem;
-    quantity: number;
-    price: number;
-}
-
-// Interface for items to be saved in a new PO
-interface OrderItem {
-    stockItem: string;
-    supplier: string;
-    orderedQuantity: number;
-    unitPrice: number;
-}
-
-
-export interface OrderedItem {
-    _key: string;
-    stockItem: {
-        _id?: string;
-        name: string;
-    };
-    orderedQuantity: number;
-    unitPrice: number;
-    supplier?: { // Change from | null to optional (| undefined)
-        _id?: string;
-        name: string;
-    };
-}
-
+// Interfaces matching the individual operation pages
 interface PurchaseOrder {
     _id: string;
-    _type: string;
-    _createdAt: string;
     poNumber: string;
-    status: string;
-    site: {
-        _id: string;
-        name: string;
-    };
-    supplier: {
-        _id: string;
-        name: string;
-    };
-    orderedItems: OrderedItem[];
-    orderedBy: string;
-    totalAmount: number;
     orderDate: string;
+    status: string;
+    site: { _id: string; name: string };
+    orderedItems: Array<{
+        _key: string;
+        orderedQuantity: number;
+        unitPrice: number;
+        stockItem: {
+            _id: string;
+            name: string;
+            sku?: string;
+            unitOfMeasure: string;
+        };
+        supplier?: { _id: string; name: string } | null;
+    }>;
+    totalAmount: number;
+    supplierNames?: string;
+    description?: string;
+    siteName?: string;
+    createdAt?: string;
 }
 
 interface GoodsReceipt {
     _id: string;
-    purchaseOrder?: {
-        _ref: string;
-    };
+    receiptNumber: string;
+    receiptDate: string;
+    status: 'draft' | 'partially-received' | 'completed';
+    purchaseOrder?: any;
+    receivedItems?: any[];
 }
+
+interface Transfer {
+    _id: string;
+    transferNumber: string;
+    transferDate: string;
+    status: 'draft' | 'pending-approval' | 'approved' | 'completed' | 'cancelled';
+    fromBin: any;
+    toBin: any;
+    transferredItems: any[];
+}
+
+interface BinCount {
+    _id: string;
+    countNumber: string;
+    countDate: string;
+    status: 'draft' | 'in-progress' | 'completed' | 'adjusted';
+    bin: any;
+    countedItems: any[];
+}
+
+// Use the exact same Dispatch interface structure as DispatchModal
+interface Site {
+    _id: string;
+    name: string;
+}
+
+interface Bin {
+    _id: string;
+    name: string;
+    site: Site;
+}
+
+interface User {
+    _id: string;
+    name: string;
+    email: string;
+    role: string;
+    associatedSite?: Site;
+}
+
+interface DispatchedItem {
+    _key: string;
+    stockItem: {
+        _id: string;
+        name: string;
+        sku?: string;
+        unitOfMeasure?: string;
+        currentStock?: number;
+        unitPrice?: number;
+    };
+    dispatchedQuantity: number;
+    unitPrice?: number;
+    totalCost?: number;
+    notes?: string;
+}
+
+// This matches the Dispatch interface from DispatchModal exactly
+interface Dispatch {
+    _id: string;
+    dispatchNumber: string;
+    dispatchDate: string;
+    notes?: string;
+    dispatchType: {
+        _id: string;
+        name: string;
+    };
+    dispatchedItems: DispatchedItem[];
+    sourceBin: Bin;
+    dispatchedBy: User;
+    peopleFed?: number;
+    evidenceStatus?: 'pending' | 'partial' | 'complete';
+    status?: string;
+    attachments?: { _id: string; url?: string; name?: string }[];
+}
+
+// Operation types and their required roles
+const OPERATION_TYPES = {
+    PurchaseOrder: {
+        title: 'Purchase Orders',
+        roles: ['admin', 'siteManager', 'stockController', 'auditor'],
+        statusFilter: ['draft'],
+        icon: FiEdit,
+        actionLabel: 'Edit',
+        apiEndpoint: '/api/purchase-orders',
+        detailEndpoint: (id: string) => `/api/purchase-orders?id=${id}`,
+    },
+    GoodsReceipt: {
+        title: 'Goods Receipts',
+        roles: ['admin', 'siteManager', 'stockController', 'auditor'],
+        statusFilter: ['draft', 'partially-received'],
+        icon: FiPackage,
+        actionLabel: 'Receive',
+        apiEndpoint: '/api/goods-receipts',
+        detailEndpoint: (id: string) => `/api/goods-receipts/${id}`,
+    },
+    InternalTransfer: {
+        title: 'Transfers',
+        roles: ['admin', 'siteManager', 'stockController', 'auditor', 'procurer'],
+        statusFilter: ['draft', 'pending-approval'],
+        icon: FiRepeat,
+        actionLabel: 'Edit',
+        apiEndpoint: '/api/transfers',
+        detailEndpoint: (id: string) => `/api/operations/transfers/${id}`,
+    },
+    BinCount: {
+        title: 'Bin Counts',
+        roles: ['admin', 'siteManager', 'stockController', 'auditor'],
+        statusFilter: ['draft', 'in-progress'],
+        icon: FiClipboard,
+        actionLabel: 'Edit',
+        apiEndpoint: '/api/bin-counts',
+        detailEndpoint: (id: string) => `/api/bin-counts/${id}`,
+    },
+    Dispatch: {
+        title: 'Dispatches',
+        roles: ['admin', 'siteManager', 'stockController', 'auditor'],
+        statusFilter: ['draft'],
+        icon: FiTruck,
+        actionLabel: 'Edit',
+        apiEndpoint: '/api/dispatches',
+        detailEndpoint: (id: string) => `/api/dispatches/${id}`,
+    }
+};
 
 export default function ActionsPage() {
     const { data: session, status } = useSession();
-    const [actions, setActions] = useState<PendingAction[]>([]);
+    const [actions, setActions] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState(0);
+    const [refreshTriggers, setRefreshTriggers] = useState<{ [key: string]: number }>({});
     const toast = useToast();
-    const { isOpen: isModalOpen, onOpen: onModalOpen, onClose: onModalClose } = useDisclosure();
-    const { isOpen: isUploadModalOpen, onOpen: onUploadModalOpen, onClose: onUploadModalClose } = useDisclosure();
-    const { isOpen: isOrderModalOpen, onOpen: onOrderModalOpen, onClose: onOrderModalClose } = useDisclosure();
-    const { isOpen: isAddItemModalOpen, onOpen: onAddItemModalOpen, onClose: onAddItemModalClose } = useDisclosure();
-    const { isOpen: isApprovalModalOpen, onOpen: onApprovalModalOpen, onClose: onApprovalModalClose } = useDisclosure();
-    const { isOpen: isGoodsReceiptModalOpen, onOpen: onGoodsReceiptModalOpen, onClose: onGoodsReceiptModalClose } = useDisclosure();
-    const { isOpen: isPOSelectionModalOpen, onOpen: onPOSelectionModalOpen, onClose: onPOSelectionModalClose } = useDisclosure();
-    const { isOpen: isCreatePOModalOpen, onOpen: onCreatePOModalOpen, onClose: onCreatePOModalClose } = useDisclosure();
 
-    const [selectedAction, setSelectedAction] = useState<PendingAction | null>(null);
-    const [selectedApproval, setSelectedApproval] = useState<PendingAction | null>(null);
+    const scrollbarThumbColor = useColorModeValue('gray.300', 'gray.600');
+    const scrollbarThumbHoverColor = useColorModeValue('gray.400', 'gray.500');
+
+
+    // Modal states for different operation types
+    const { isOpen: isOrderModalOpen, onOpen: onOrderModalOpen, onClose: onOrderModalClose } = useDisclosure();
+    const { isOpen: isGoodsReceiptModalOpen, onOpen: onGoodsReceiptModalOpen, onClose: onGoodsReceiptModalClose } = useDisclosure();
+    const { isOpen: isTransferModalOpen, onOpen: onTransferModalOpen, onClose: onTransferModalClose } = useDisclosure();
+    const { isOpen: isBinCountModalOpen, onOpen: onBinCountModalOpen, onClose: onBinCountModalClose } = useDisclosure();
+    const { isOpen: isDispatchModalOpen, onOpen: onDispatchModalOpen, onClose: onDispatchModalClose } = useDisclosure();
+
+    const [selectedPO, setSelectedPO] = useState<PurchaseOrder | null>(null);
+    const [selectedGoodsReceipt, setSelectedGoodsReceipt] = useState<any>(null);
+    const [selectedTransfer, setSelectedTransfer] = useState<Transfer | null>(null);
+    const [selectedBinCount, setSelectedBinCount] = useState<BinCount | null>(null);
+    const [selectedDispatch, setSelectedDispatch] = useState<Dispatch | null>(null);
+
     const [poDetails, setPoDetails] = useState<PurchaseOrderDetails | null>(null);
     const [editedPrices, setEditedPrices] = useState<{ [key: string]: number | undefined }>({});
     const [editedQuantities, setEditedQuantities] = useState<{ [key: string]: number | undefined }>({});
     const [isSaving, setIsSaving] = useState(false);
-    const [availableItems, setAvailableItems] = useState<StockItem[]>([]);
-    const [categories, setCategories] = useState<Category[]>([]);
-    const [searchTerm, setSearchTerm] = useState('');
-    const [selectedCategory, setSelectedCategory] = useState<string>('');
-    const [loadingItems, setLoadingItems] = useState(false);
-    const [preSelectedPO, setPreSelectedPO] = useState<string | null>(null);
-    const [selectedActions, setSelectedActions] = useState<PendingAction[]>([]);
-    const [selectedGoodsReceipt, setSelectedGoodsReceipt] = useState<any>(null);
-    const [viewMode, setViewMode] = useState<'actionRequired' | 'all'>('actionRequired');
-
-    // State for purchase orders and receipts
-    const [allPurchaseOrders, setAllPurchaseOrders] = useState<PurchaseOrder[]>([]);
-    const [goodsReceipts, setGoodsReceipts] = useState<GoodsReceipt[]>([]);
-    const [loadingPOs, setLoadingPOs] = useState(false);
-    const [loadingReceipts, setLoadingReceipts] = useState(false);
-
-    // State for creating new POs
-    const [suppliers, setSuppliers] = useState<any[]>([]);
-    const [sites, setSites] = useState<Site[]>([]);
-    const [selectedItems, setSelectedItems] = useState<any[]>([]); // For CreatePurchaseOrderModal, initially empty
-
-
-    const [isConfirmDialogOpen, setIsConfirmDialogOpen] = useState(false);
-    const [isZeroPriceDialogOpen, setIsZeroPriceDialogOpen] = useState(false);
-    const [hasZeroPriceItems, setHasZeroPriceItems] = useState<string[]>([]);
-
-    const cancelRef = useRef<HTMLButtonElement>(null);
-
-    // Add this state to track which data needs refreshing
-    const [refreshFlags, setRefreshFlags] = useState({
-        actions: false,
-        purchaseOrders: false,
-        goodsReceipts: false
-    });
 
     // Extract user data from session
-    const user = session?.user as any; // Temporary any type
+    const user = session?.user as any;
     const isAuthenticated = status === 'authenticated';
     const isAuthReady = status !== 'loading';
 
-    // Theme-based colors
+    // Theme-based colors - ALL HOOKS AT TOP LEVEL
     const primaryBgColor = useColorModeValue('neutral.light.bg-primary', 'neutral.dark.bg-primary');
     const primaryTextColor = useColorModeValue('neutral.light.text-primary', 'neutral.dark.text-primary');
+    const cardBg = useColorModeValue('white', 'gray.700');
+    const noActionTextColor = useColorModeValue('gray.600', 'gray.300');
+    const tabBg = useColorModeValue('gray.50', 'gray.600');
+    const tabSelectedBg = useColorModeValue('white', 'gray.700');
 
-    const fetchActions = useCallback(async () => {
+    // Filter operation types based on user role
+    const availableOperations = useMemo(() => {
+        if (!user?.role) return [];
+
+        return Object.entries(OPERATION_TYPES)
+            .filter(([_, config]) => config.roles.includes(user.role))
+            .map(([type, config]) => ({ type, ...config }));
+    }, [user?.role]);
+
+    // Fetch data for each operation type separately, following the pattern of individual pages
+    const fetchActions = useCallback(async (specificType?: string) => {
         setLoading(true);
         setError(null);
-        try {
-            // Update the API call to use the correct user data structure
-            const response = await fetch(`/api/actions?userId=${user?.id}&userRole=${user?.role}&userSite=${user?.associatedSite?._id}`);
-            const data = await response.json();
 
-            if (!response.ok) {
-                throw new Error(data.error || data.details || `Failed to fetch actions: ${response.status} ${response.statusText}`);
+        try {
+            const operationsToFetch = specificType
+                ? availableOperations.filter(op => op.type === specificType)
+                : availableOperations;
+
+            const fetchPromises = operationsToFetch.map(async (operation) => {
+                try {
+                    const response = await fetch(operation.apiEndpoint);
+                    if (!response.ok) {
+                        throw new Error(`Failed to fetch ${operation.title}: ${response.status}`);
+                    }
+                    const data = await response.json();
+
+                    // Filter for actions requiring attention and add type information
+                    return data
+                        .filter((item: any) => operation.statusFilter.includes(item.status))
+                        .map((item: any) => ({
+                            ...item,
+                            _type: operation.type,
+                            actionType: operation.type,
+                            siteName: item.site?.name || item.bin?.site?.name || item.sourceBin?.site?.name || 'N/A',
+                            description: item.description || `Operation ${item.poNumber || item.receiptNumber || item.transferNumber || item.countNumber || item.dispatchNumber}`,
+                            createdAt: item.orderDate || item.receiptDate || item.transferDate || item.countDate || item.dispatchDate || item.createdAt,
+                        }));
+                } catch (err) {
+                    console.error(`Error fetching ${operation.title}:`, err);
+                    return [];
+                }
+            });
+
+            const results = await Promise.all(fetchPromises);
+            const allActions = results.flat();
+
+            if (specificType) {
+                // Only update actions for the specific type
+                setActions(prev => [
+                    ...prev.filter(action => action._type !== specificType),
+                    ...allActions
+                ]);
+            } else {
+                setActions(allActions);
             }
 
-            const fetchedActions: PendingAction[] = data.map((action: PendingAction) => {
-                const workflow = generateWorkflow(action._type, action.status, action.completedSteps || 0);
-                return {
-                    ...action,
-                    actionType: action._type,
-                    workflow: workflow,
-                    completedSteps: action.completedSteps || 0,
-                    evidenceStatus: action.evidenceStatus || 'pending',
-                };
-            });
-            setActions(fetchedActions);
         } catch (err: any) {
             setError(err.message);
             toast({
@@ -227,225 +303,51 @@ export default function ActionsPage() {
         } finally {
             setLoading(false);
         }
-    }, [user, toast]); // Keep user in dependencies
+    }, [availableOperations, toast]);
 
-    const fetchCategories = async () => {
-        try {
-            const response = await fetch('/api/categories');
-            if (response.ok) {
-                const data = await response.json();
-                setCategories(data);
-            }
-        } catch (error) {
-            console.error('Failed to fetch categories:', error);
+    // Create a function to refresh the current tab's data
+    const refreshCurrentTab = useCallback(() => {
+        const currentOperationType = availableOperations[activeTab]?.type;
+        if (currentOperationType) {
+            setRefreshTriggers(prev => ({
+                ...prev,
+                [currentOperationType]: (prev[currentOperationType] || 0) + 1
+            }));
         }
+        // Also refresh the main actions to update badge counts
+        fetchActions();
+    }, [activeTab, availableOperations, fetchActions]);
+
+
+
+    // Get actions that require action for each operation type
+    const getActionRequiredActions = (operationType: string) => {
+        return actions.filter(action => action._type === operationType);
     };
 
-    const fetchAvailableItems = async () => {
-        try {
-            const response = await fetch('/api/stock-items');
-            if (response.ok) {
-                const data = await response.json();
-                setAvailableItems(data);
-            }
-        } catch (error) {
-            console.error('Failed to fetch stock items:', error);
-        }
+    // Get count of actions requiring attention for each operation type
+    const getActionCounts = () => {
+        const counts: { [key: string]: number } = {};
+
+        availableOperations.forEach(({ type }) => {
+            counts[type] = getActionRequiredActions(type).length;
+        });
+
+        return counts;
     };
 
-    const fetchAllPurchaseOrders = useCallback(async () => {
+    const actionCounts = getActionCounts();
+
+    // Handler for Purchase Order actions - follows the same pattern as PurchasesPage
+    const handleEditPO = async (action: any) => {
         try {
-            setLoadingPOs(true);
-            const response = await fetch('/api/purchase-orders');
-            if (response.ok) {
-                const data = await response.json();
-                setAllPurchaseOrders(Array.isArray(data) ? data : []);
-            } else {
-                setAllPurchaseOrders([]);
-                console.error('Failed to fetch purchase orders:', response.status);
-            }
-        } catch (error) {
-            console.error('Failed to fetch purchase orders:', error);
-            setAllPurchaseOrders([]);
-        } finally {
-            setLoadingPOs(false);
-        }
-    }, []);
-
-    const fetchGoodsReceipts = useCallback(async () => {
-        try {
-            setLoadingReceipts(true);
-            const response = await fetch('/api/goods-receipts');
-            if (response.ok) {
-                const data = await response.json();
-                setGoodsReceipts(Array.isArray(data) ? data : []);
-            } else {
-                setGoodsReceipts([]);
-                console.error('Failed to fetch goods receipts:', response.status);
-            }
-        } catch (error) {
-            console.error('Failed to fetch goods receipts:', error);
-            setGoodsReceipts([]);
-        } finally {
-            setLoadingReceipts(false);
-        }
-    }, []);
-
-    // Fetch suppliers and sites for PO creation
-    useEffect(() => {
-        const fetchSuppliers = async () => {
-            try {
-                const response = await fetch('/api/suppliers');
-                if (response.ok) {
-                    const data = await response.json();
-                    setSuppliers(data);
-                }
-            } catch (error) {
-                console.error('Failed to fetch suppliers:', error);
-            }
-        };
-
-        const fetchSites = async () => {
-            try {
-                const response = await fetch('/api/sites');
-                if (response.ok) {
-                    const data = await response.json();
-                    setSites(data);
-                }
-            } catch (error) {
-                console.error('Failed to fetch sites:', error);
-            }
-        };
-
-        fetchSuppliers();
-        fetchSites();
-    }, []);
-
-    // Modify the refresh functions to use flags instead of full refreshes
-    const refreshActions = useCallback(async () => {
-        setRefreshFlags(prev => ({ ...prev, actions: true }));
-        try {
-            await fetchActions();
-        } finally {
-            setRefreshFlags(prev => ({ ...prev, actions: false }));
-        }
-    }, [fetchActions]);
-
-    const refreshPOsAndReceipts = useCallback(async () => {
-        setRefreshFlags(prev => ({ ...prev, purchaseOrders: true, goodsReceipts: true }));
-        try {
-            await Promise.all([fetchAllPurchaseOrders(), fetchGoodsReceipts()]);
-        } finally {
-            setRefreshFlags(prev => ({ ...prev, purchaseOrders: false, goodsReceipts: false }));
-        }
-    }, [fetchAllPurchaseOrders, fetchGoodsReceipts]);
-
-
-    // Filter approved POs without receipts
-    const getApprovedPOsWithoutReceipts = (): PurchaseOrder[] => {
-        // Get all PO IDs that have receipts
-        const poIdsWithReceipts = new Set(
-            goodsReceipts
-                .filter(receipt => receipt.purchaseOrder?._ref)
-                .map(receipt => receipt.purchaseOrder!._ref)
-        );
-
-        // Filter approved POs that don't have receipts and map to the correct structure
-        const approvedPOs = allPurchaseOrders
-            .filter(po => po.status === 'approved' && !poIdsWithReceipts.has(po._id))
-            .map(po => ({
-                _id: po._id,
-                _type: 'purchaseOrder',
-                _createdAt: po.orderDate || new Date().toISOString(),
-                poNumber: po.poNumber || '',
-                status: po.status || 'approved',
-                site: {
-                    _id: po.site?._id || '',
-                    name: po.site?.name || ''
-                },
-                supplier: {
-                    _id: po.supplier?._id || '',
-                    name: po.supplier?.name || ''
-                },
-                orderedItems: po.orderedItems || [],
-                orderedBy: po.orderedBy || '',
-                totalAmount: po.totalAmount || 0
-            } as PurchaseOrder));
-
-        return approvedPOs;
-    };
-
-    const approvedPOsWithoutReceipts = getApprovedPOsWithoutReceipts();
-
-    const handleReceiveGoods = async (action: PendingAction) => {
-        if (action.actionType === 'PurchaseOrder') {
-            // Handle PO receiving
-            setPreSelectedPO(action._id);
-            setSelectedGoodsReceipt(null);
-            onGoodsReceiptModalOpen();
-        } else if (action.actionType === 'GoodsReceipt') {
-            // Handle pending GoodsReceipt action
-            try {
-                // Fetch the full goods receipt details
-                const response = await fetch(`/api/goods-receipts/${action._id}`);
-                if (!response.ok) {
-                    throw new Error('Failed to fetch goods receipt details');
-                }
-                const goodsReceipt = await response.json();
-
-                // Open the modal with the existing goods receipt data
-                setSelectedGoodsReceipt(goodsReceipt);
-                setPreSelectedPO(null);
-                onGoodsReceiptModalOpen();
-            } catch (err: any) {
-                toast({
-                    title: 'Error',
-                    description: 'Failed to fetch goods receipt details. Please try again.',
-                    status: 'error',
-                    duration: 5000,
-                    isClosable: true,
-                });
-            }
-        }
-    };
-
-    const handleSelectionChange = (selectedItems: PendingAction[]) => {
-        setSelectedActions(selectedItems);
-    };
-
-    // Refactored useEffects to be more specific
-    useEffect(() => {
-        if (isAuthReady && isAuthenticated && user) {
-            refreshActions();
-        }
-    }, [isAuthReady, isAuthenticated, user, refreshActions]);
-
-    useEffect(() => {
-        if (isAddItemModalOpen) {
-            setLoadingItems(true);
-            const fetchAllData = async () => {
-                await Promise.all([fetchCategories(), fetchAvailableItems()]);
-                setLoadingItems(false);
-            };
-            fetchAllData();
-        }
-    }, [isAddItemModalOpen]);
-
-    useEffect(() => {
-        if (activeTab === 1) { // Goods Receipt tab
-            refreshPOsAndReceipts();
-        }
-    }, [activeTab, refreshPOsAndReceipts]);
-
-    const handleOpenEditPO = async (action: PendingAction) => {
-        try {
-            const response = await fetch(`/api/purchase-orders?id=${action._id}`);
+            const config = OPERATION_TYPES.PurchaseOrder;
+            const response = await fetch(config.detailEndpoint(action._id));
             if (!response.ok) {
                 throw new Error('Failed to fetch purchase order details');
             }
             const data = await response.json();
 
-            // Transform the data to match PurchaseOrderDetails interface
             const transformedData: PurchaseOrderDetails = {
                 _id: data._id,
                 _type: data._type || 'purchaseOrder',
@@ -469,7 +371,6 @@ export default function ActionsPage() {
                 })) || [],
                 supplierNames: data.supplierNames || data.supplierName || '',
                 totalAmount: data.totalAmount || 0,
-                // Add the missing required properties
                 title: data.title || `Purchase Order ${data.poNumber || ''}`,
                 description: data.description || `Order from ${data.supplierNames || data.supplierName || 'Unknown Supplier'}`,
                 createdAt: data.createdAt || data.orderDate || new Date().toISOString(),
@@ -494,70 +395,171 @@ export default function ActionsPage() {
         }
     };
 
-    const handleOpenApprovalDetails = (action: PendingAction) => {
-        setSelectedApproval(action);
-        onApprovalModalOpen();
+    // Handler for Goods Receipt actions - follows GoodsReceiptsPage pattern
+    const handleReceiveGoods = async (action: any) => {
+        try {
+            const config = OPERATION_TYPES.GoodsReceipt;
+            const response = await fetch(config.detailEndpoint(action._id));
+            if (!response.ok) {
+                throw new Error('Failed to fetch goods receipt details');
+            }
+            const goodsReceipt = await response.json();
+            setSelectedGoodsReceipt(goodsReceipt);
+            onGoodsReceiptModalOpen();
+        } catch (err: any) {
+            toast({
+                title: 'Error',
+                description: 'Failed to fetch goods receipt details. Please try again.',
+                status: 'error',
+                duration: 5000,
+                isClosable: true,
+            });
+        }
     };
 
-    const handleCompleteStep = async (stepIndex: number) => {
-        // Only handle non-PO actions
-        if (selectedAction && selectedAction.actionType !== 'PurchaseOrder') {
-            const newCompletedSteps = stepIndex + 1;
-            const newWorkflow = selectedAction.workflow?.map((step: any, index: number) => ({
-                ...step,
-                completed: index < newCompletedSteps,
-            }));
+    // Handler for Transfer actions - follows TransfersPage pattern
+    const handleEditTransfer = async (action: any) => {
+        try {
+            const config = OPERATION_TYPES.InternalTransfer;
+            const response = await fetch(config.detailEndpoint(action._id));
+            if (!response.ok) {
+                throw new Error('Failed to fetch transfer details');
+            }
+            const transfer = await response.json();
 
-            try {
-                const response = await fetch('/api/actions/update', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        id: selectedAction._id,
-                        completedSteps: newCompletedSteps,
-                    }),
-                });
+            // Ensure transferredItems have valid stockItem objects
+            const safeTransfer = {
+                ...transfer,
+                transferredItems: transfer.transferredItems?.map((item: any) => ({
+                    ...item,
+                    stockItem: item.stockItem || { _id: '', name: 'Unknown Item' }
+                })) || []
+            };
 
-                if (!response.ok) {
-                    throw new Error('Failed to update action');
-                }
+            setSelectedTransfer(safeTransfer);
+            onTransferModalOpen();
+        } catch (err: any) {
+            toast({
+                title: 'Error',
+                description: 'Failed to fetch transfer details. Please try again.',
+                status: 'error',
+                duration: 5000,
+                isClosable: true,
+            });
+        }
+    };
 
-                // Update local state
-                const updatedAction = {
-                    ...selectedAction,
-                    workflow: newWorkflow,
-                    completedSteps: newCompletedSteps,
-                };
-                setActions(prevActions =>
-                    prevActions.map(action =>
-                        action._id === updatedAction._id ? updatedAction : action
-                    )
-                );
-                setSelectedAction(updatedAction);
+    // Handler for Bin Count actions - follows BinCountsPage pattern
+    const handleEditBinCount = async (action: any) => {
+        try {
+            const config = OPERATION_TYPES.BinCount;
+            const response = await fetch(config.detailEndpoint(action._id));
+            if (!response.ok) {
+                throw new Error('Failed to fetch bin count details');
+            }
+            const binCount = await response.json();
 
-                toast({
-                    title: 'Step Completed',
-                    description: `Workflow step "${selectedAction.workflow?.[stepIndex].title}" has been marked as complete.`,
-                    status: 'success',
-                    duration: 3000,
-                    isClosable: true,
-                });
+            // Ensure countedItems have valid stockItem objects
+            const safeBinCount = {
+                ...binCount,
+                countedItems: binCount.countedItems?.map((item: any) => ({
+                    ...item,
+                    stockItem: item.stockItem || { _id: '', name: 'Unknown Item', sku: 'N/A' }
+                })) || []
+            };
 
-                const isEvidenceComplete = !selectedAction.evidenceRequired || selectedAction.evidenceStatus === 'complete';
-                const allRequiredStepsCompleted = newWorkflow?.every((step: { required: any; completed: any; }, index: any) => !step.required || step.completed);
+            setSelectedBinCount(safeBinCount);
+            onBinCountModalOpen();
+        } catch (err: any) {
+            toast({
+                title: 'Error',
+                description: 'Failed to fetch bin count details. Please try again.',
+                status: 'error',
+                duration: 5000,
+                isClosable: true,
+            });
+        }
+    };
 
-                if (isEvidenceComplete && allRequiredStepsCompleted) {
-                    await onCompleteAction(selectedAction);
-                }
-            } catch (error: any) {
+    // Handler for Dispatch actions - follows DispatchesPage pattern
+    const handleEditDispatch = async (action: any) => {
+        try {
+            const config = OPERATION_TYPES.Dispatch;
+            const response = await fetch(config.detailEndpoint(action._id));
+            if (!response.ok) {
+                throw new Error('Failed to fetch dispatch details');
+            }
+            const dispatch = await response.json();
+
+            // Transform the API response to match the exact Dispatch interface structure
+            const safeDispatch: Dispatch = {
+                _id: dispatch._id,
+                dispatchNumber: dispatch.dispatchNumber,
+                dispatchDate: dispatch.dispatchDate,
+                notes: dispatch.notes || '',
+                dispatchType: dispatch.dispatchType || { _id: '', name: '' },
+                dispatchedItems: (dispatch.dispatchedItems || []).map((item: any) => ({
+                    _key: item._key || Math.random().toString(36).substr(2, 9),
+                    stockItem: {
+                        _id: item.stockItem?._id || '',
+                        name: item.stockItem?.name || 'Unknown Item',
+                        sku: item.stockItem?.sku,
+                        unitOfMeasure: item.stockItem?.unitOfMeasure,
+                        currentStock: item.stockItem?.currentStock,
+                        unitPrice: item.stockItem?.unitPrice
+                    },
+                    dispatchedQuantity: item.dispatchedQuantity || 0,
+                    unitPrice: item.unitPrice || 0,
+                    totalCost: item.totalCost || 0,
+                    notes: item.notes || ''
+                })),
+                sourceBin: dispatch.sourceBin || { _id: '', name: '', site: { _id: '', name: '' } },
+                dispatchedBy: dispatch.dispatchedBy || { _id: '', name: '', email: '', role: '' },
+                peopleFed: dispatch.peopleFed,
+                evidenceStatus: dispatch.evidenceStatus || 'pending',
+                status: dispatch.status || 'draft',
+                attachments: dispatch.attachments || []
+            };
+
+            setSelectedDispatch(safeDispatch);
+            onDispatchModalOpen();
+        } catch (err: any) {
+            toast({
+                title: 'Error',
+                description: 'Failed to fetch dispatch details. Please try again.',
+                status: 'error',
+                duration: 5000,
+                isClosable: true,
+            });
+        }
+    };
+
+    // Generic action handler that routes to the appropriate modal
+    const handleActionClick = (action: any) => {
+        switch (action._type) {
+            case 'PurchaseOrder':
+                handleEditPO(action);
+                break;
+            case 'GoodsReceipt':
+                handleReceiveGoods(action);
+                break;
+            case 'InternalTransfer':
+                handleEditTransfer(action);
+                break;
+            case 'BinCount':
+                handleEditBinCount(action);
+                break;
+            case 'Dispatch':
+                handleEditDispatch(action);
+                break;
+            default:
                 toast({
                     title: 'Error',
-                    description: 'Failed to update action. Please try again.',
+                    description: 'Unknown action type',
                     status: 'error',
                     duration: 3000,
                     isClosable: true,
                 });
-            }
         }
     };
 
@@ -591,8 +593,7 @@ export default function ActionsPage() {
                 isClosable: true,
             });
             onOrderModalClose();
-            // Refresh only the actions list after saving
-            refreshActions();
+            refreshCurrentTab();
         } catch (error) {
             toast({
                 title: 'Save Failed',
@@ -605,41 +606,7 @@ export default function ActionsPage() {
         }
     };
 
-    const handleConfirmOrderUpdate = () => {
-        if (!poDetails) return;
-
-        const zeroPriceItems = poDetails.orderedItems?.filter(item => {
-            const price = editedPrices[item._key] ?? item.unitPrice;
-            return price === 0;
-        }).map(item => item.stockItem?.name || 'Unknown Item') || [];
-
-        if (zeroPriceItems.length > 0) {
-            setHasZeroPriceItems(zeroPriceItems);
-            setIsZeroPriceDialogOpen(true);
-        } else {
-            setIsConfirmDialogOpen(true);
-        }
-    };
-
-    const proceedWithOrderUpdate = async () => {
-        setIsConfirmDialogOpen(false);
-        setIsZeroPriceDialogOpen(false);
-        setIsSaving(true);
-        try {
-            await handleSaveOrder();
-            if (poDetails) {
-                await handleApprovePO(poDetails);
-            }
-        } catch (error) {
-            // Errors are handled in the specific functions
-        } finally {
-            setIsSaving(false);
-            onOrderModalClose();
-            refreshActions();
-        }
-    };
-
-    const handleApprovePO = async (action: PurchaseOrderDetails | PendingAction) => {
+    const handleApprovePO = async (action: PurchaseOrderDetails | any) => {
         try {
             const response = await fetch('/api/actions/update', {
                 method: 'POST',
@@ -662,6 +629,8 @@ export default function ActionsPage() {
                 duration: 5000,
                 isClosable: true,
             });
+            onOrderModalClose();
+            refreshCurrentTab();
 
         } catch (error: any) {
             toast({
@@ -674,222 +643,12 @@ export default function ActionsPage() {
         }
     };
 
-    const onCompleteAction = async (action: PendingAction) => {
-        try {
-            const response = await fetch('/api/actions/update', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    id: action._id,
-                    status: 'completed',
-                }),
-            });
-            if (!response.ok) {
-                throw new Error('Failed to complete action');
-            }
-            toast({
-                title: 'Action Completed',
-                description: `The action "${action.title}" has been successfully completed.`,
-                status: 'success',
-                duration: 5000,
-                isClosable: true,
-            });
-            await refreshActions();
-            onModalClose();
-        } catch (error: any) {
-            toast({
-                title: 'Error',
-                description: 'Failed to complete action. Please try again.',
-                status: 'error',
-                duration: 5000,
-                isClosable: true,
-            });
+    // Effect to fetch data when component mounts or refresh triggers change
+    useEffect(() => {
+        if (isAuthReady && isAuthenticated && user) {
+            fetchActions();
         }
-    };
-
-    const onUploadSuccess = async () => {
-        onUploadModalClose();
-        toast({
-            title: 'Evidence Uploaded',
-            description: 'Your file has been uploaded successfully.',
-            status: 'success',
-            duration: 5000,
-            isClosable: true,
-        });
-        await fetchActions();
-    };
-
-    const handleAddReceipt = () => {
-        onPOSelectionModalOpen();
-    };
-
-    const handleCreateReceiptFromPO = (po: any) => {
-        setPreSelectedPO(po._id);
-        setSelectedGoodsReceipt(null); // Ensure we're creating a new one
-        onPOSelectionModalClose(); // Close the selection modal
-        onGoodsReceiptModalOpen(); // Open the main receipt modal
-    };
-
-    const handleAddOrder = () => onCreatePOModalOpen();
-
-    const handleCreateOrders = async (items: OrderItem[], siteId?: string) => {
-        try {
-            const totalAmount = items.reduce((sum, item) => sum + (item.orderedQuantity * item.unitPrice), 0);
-
-            const response = await fetch('/api/purchase-orders', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    poNumber: `PO-${Date.now()}`,
-                    orderDate: new Date().toISOString(),
-                    orderedBy: user?.id,
-                    orderedItems: items,
-                    totalAmount,
-                    status: 'draft',
-                    site: siteId,
-                }),
-            });
-
-            if (response.ok) {
-                toast({
-                    title: 'Purchase order created',
-                    status: 'success',
-                    duration: 5000,
-                    isClosable: true,
-                });
-                onCreatePOModalClose();
-                refreshActions(); // Refresh the actions list
-            } else {
-                const errorData = await response.json();
-                throw new Error(errorData.error || 'Failed to create purchase order');
-            }
-        } catch (error: any) {
-            console.error('Error creating purchase order:', error);
-            toast({
-                title: 'Error creating purchase order',
-                description: error.message || 'An unexpected error occurred.',
-                status: 'error',
-                duration: 5000,
-                isClosable: true,
-            });
-        }
-    };
-
-    // Add this helper function
-    const fetchLatestPOData = async (poId: string | undefined) => {
-        try {
-            const response = await fetch(`/api/purchase-orders?id=${poId}`);
-            if (response.ok) {
-                const data = await response.json();
-                setPoDetails({
-                    _id: data._id,
-                    _type: data._type || 'purchaseOrder',
-                    poNumber: data.poNumber || '',
-                    site: data.site || { name: '', _id: '' },
-                    orderedBy: data.orderedBy || { name: '' },
-                    orderDate: data.orderDate || '',
-                    status: data.status || 'draft',
-                    orderedItems: data.orderedItems?.map((item: any) => ({
-                        _key: item._key || Math.random().toString(36).substr(2, 9),
-                        stockItem: {
-                            name: item.stockItem?.name || 'Unknown Item',
-                            _id: item.stockItem?._id || ''
-                        },
-                        orderedQuantity: item.orderedQuantity || 0,
-                        unitPrice: item.unitPrice || 0,
-                        supplier: item.supplier || {
-                            name: data.supplierNames || data.supplierName || 'Unknown Supplier',
-                            _id: item.supplier?._id || ''
-                        }
-                    })) || [],
-                    supplierNames: data.supplierNames || data.supplierName || '',
-                    totalAmount: data.totalAmount || 0,
-                    // Add the missing required properties
-                    title: data.title || `Purchase Order ${data.poNumber || ''}`,
-                    description: data.description || `Order from ${data.supplierNames || data.supplierName || 'Unknown Supplier'}`,
-                    createdAt: data.createdAt || data.orderDate || new Date().toISOString(),
-                    priority: data.priority || 'medium',
-                    siteName: data.siteName || data.site?.name || '',
-                    actionType: data.actionType || 'PurchaseOrder',
-                    evidenceRequired: data.evidenceRequired || false,
-                });
-            }
-        } catch (error) {
-            console.error('Failed to fetch latest PO data:', error);
-        }
-    };
-
-    const handleRemoveItemFromPO = (itemKey: string) => {
-        if (!poDetails) return;
-        setPoDetails({
-            ...poDetails,
-            orderedItems: poDetails.orderedItems?.filter((item: { _key: string; }) => item._key !== itemKey) || [],
-        });
-    };
-
-    const actionTypes = ['PurchaseOrder', 'GoodsReceipt', 'InternalTransfer', 'StockAdjustment'];
-
-    // Filter actions for each tab - FIXED FILTERING
-    const filteredActions = actions.filter(action => {
-        const type = actionTypes[activeTab];
-        // Only show actions that match the current tab AND are not completed/pending-approval
-        return action.actionType === type &&
-            action.status !== 'completed' &&
-            action.status !== 'pending-approval';
-    });
-
-    // Filter pending approval actions for each tab - FIXED FILTERING
-    const pendingApprovalActions = actions.filter(action => {
-        const type = actionTypes[activeTab];
-        // Only show pending approval actions that match the current tab
-        return action.actionType === type &&
-            action.status === 'pending-approval';
-    });
-
-    const completedActions = actions.filter(action => action.status === 'completed');
-
-    // Get actions that require action for the current tab
-    const getActionRequiredActions = (tabIndex: number) => {
-        const type = actionTypes[tabIndex];
-
-        switch (type) {
-            case 'PurchaseOrder':
-                return actions.filter(action =>
-                    action.actionType === 'PurchaseOrder' &&
-                    action.status === 'draft'
-                );
-            case 'GoodsReceipt':
-                return actions.filter(action =>
-                    action.actionType === 'GoodsReceipt' &&
-                    (action.status === 'draft' || action.status === 'partial')
-                );
-            case 'InternalTransfer':
-                return actions.filter(action =>
-                    action.actionType === 'InternalTransfer' &&
-                    action.status === 'draft'
-                );
-            case 'StockAdjustment':
-                return actions.filter(action =>
-                    action.actionType === 'StockAdjustment' &&
-                    action.status === 'draft'
-                );
-            default:
-                return [];
-        }
-    };
-
-    // Get all actions for the current tab
-    const getAllActions = (tabIndex: number) => {
-        const type = actionTypes[tabIndex];
-        return actions.filter(action => action.actionType === type);
-    };
-
-    // Get actions to display based on view mode
-    const getActionsToDisplay = (tabIndex: number) => {
-        return viewMode === 'actionRequired'
-            ? getActionRequiredActions(tabIndex)
-            : getAllActions(tabIndex);
-    };
+    }, [isAuthReady, isAuthenticated, user, fetchActions, refreshTriggers]);
 
     if (status === 'loading' || loading) {
         return (
@@ -905,7 +664,7 @@ export default function ActionsPage() {
                 <Text fontSize="xl" color="red.500">
                     {error}
                 </Text>
-                <Button onClick={fetchActions} mt={4} colorScheme="brand">
+                <Button onClick={() => fetchActions()} mt={4} colorScheme="brand">
                     Try Again
                 </Button>
             </Flex>
@@ -913,450 +672,270 @@ export default function ActionsPage() {
     }
 
     return (
-        <Box p={{ base: 4, md: 8 }} bg={primaryBgColor} minH="calc(100vh - 60px)">
-            <Heading as="h1" size={{ base: 'lg', md: 'xl' }} mb={6} color={primaryTextColor}>
-                Pending Actions
+        <Box p={{ base: 2, md: 6, lg: 8 }} bg={primaryBgColor} minH="calc(100vh - 60px)">
+            <Heading as="h1" size={{ base: 'lg', md: 'xl' }} mb={4} color={primaryTextColor} px={{ base: 2, md: 0 }}>
+                Action Required
             </Heading>
 
-            <Tabs variant="enclosed" onChange={(index) => setActiveTab(index)} colorScheme="brand">
-                <TabList overflowX="auto" whiteSpace="nowrap">
-                    {actionTypes.map((type, index) => (
-                        <Tab key={type}>{actionTypeTitles[type as keyof typeof actionTypeTitles]}</Tab>
+            <Tabs
+                variant="enclosed"
+                onChange={(index) => setActiveTab(index)}
+                colorScheme="brand"
+                isLazy
+            >
+                <TabList
+                    overflowX="auto"
+                    whiteSpace="nowrap"
+                    py={1}
+                    sx={{
+                        // Custom scrollbar that works with your theme
+                        '&::-webkit-scrollbar': {
+                            height: '4px',
+                        },
+                        '&::-webkit-scrollbar-track': {
+                            bg: 'transparent',
+                            borderRadius: '2px',
+                        },
+                        '&::-webkit-scrollbar-thumb': {
+                            bg: scrollbarThumbColor,
+                            borderRadius: '2px',
+                        },
+                        '&::-webkit-scrollbar-thumb:hover': {
+                            bg: scrollbarThumbHoverColor,
+                        },
+                        // Ensure smooth scrolling on all devices
+                        WebkitOverflowScrolling: 'touch',
+                        scrollBehavior: 'smooth',
+                        // Hide scrollbar when not scrolling (optional)
+                        '&:not(:hover)::-webkit-scrollbar-thumb': {
+                            bg: 'transparent',
+                        },
+                    }}
+                >
+                    {availableOperations.map((operation, index) => (
+                        <Tab
+                            key={operation.type}
+                            _selected={{
+                                bg: tabSelectedBg,
+                                borderColor: 'inherit',
+                                borderBottomColor: tabSelectedBg,
+                                fontWeight: 'semibold'
+                            }}
+                            bg={tabBg}
+                            flexShrink={0}
+                            minW="max-content"
+                            px={{ base: 3, md: 4 }}
+                            py={3}
+                            mx={1}
+                            borderRadius="md"
+                            fontSize={{ base: 'sm', md: 'md' }}
+                        >
+                            <HStack spacing={2}>
+                                <Icon as={operation.icon} fontSize={{ base: 'sm', md: 'md' }} />
+                                <Text display={{ base: 'none', sm: 'block' }}>{operation.title}</Text>
+                                {actionCounts[operation.type] > 0 && (
+                                    <Badge
+                                        colorScheme="red"
+                                        variant="solid"
+                                        borderRadius="full"
+                                        fontSize="xs"
+                                        minW="5"
+                                    >
+                                        {actionCounts[operation.type]}
+                                    </Badge>
+                                )}
+                            </HStack>
+                        </Tab>
                     ))}
                 </TabList>
                 <TabPanels>
-                    {actionTypes.map((type, index) => (
-                        <TabPanel key={type}>
-                            <Flex
-                                direction={{ base: 'column', sm: 'row' }}
-                                justifyContent="space-between"
-                                alignItems="center"
-                                mb={4}
-                                gap={3}
-                            >
-                                {/* New Order button for PurchaseOrder tab */}
-                                {type === 'PurchaseOrder' && (
-                                    <Button
-                                        leftIcon={<FiPlus />}
-                                        colorScheme="brand"
-                                        onClick={handleAddOrder}
-                                        w={{ base: '100%', sm: 'auto' }}
-                                    >
-                                        New Order
-                                    </Button>
-                                )}
-                                <HStack
-                                    justifyContent={{ base: 'flex-start', sm: 'flex-end' }}
-                                    flex="1"
-                                    w={{ base: '100%', sm: 'auto' }}
-                                >
-                                    <Button
-                                        leftIcon={<FiFilter />}
-                                        colorScheme={viewMode === 'actionRequired' ? 'brand' : 'gray'}
-                                        onClick={() => setViewMode('actionRequired')}
-                                        size="sm"
-                                    >
-                                        Action Required
-                                    </Button>
-                                    <Button
-                                        leftIcon={<FiEye />}
-                                        colorScheme={viewMode === 'all' ? 'brand' : 'gray'}
-                                        onClick={() => setViewMode('all')}
-                                        size="sm"
-                                    >
-                                        View All
-                                    </Button>
-                                </HStack>
-                            </Flex>
+                    {availableOperations.map((operation, index) => {
+                        const actionRequiredActions = getActionRequiredActions(operation.type);
 
-                            {/* Pending Approvals Section */}
-                            {pendingApprovalActions.length > 0 && (
-                                <Accordion defaultIndex={[]} allowToggle mb={6}>
-                                    <AccordionItem>
-                                        <h2>
-                                            <AccordionButton>
-                                                <Box flex="1" textAlign="left">
-                                                    <HStack>
-                                                        <Text fontWeight="bold">Pending Approvals</Text>
-                                                        <Badge colorScheme="yellow" ml={2}>
-                                                            {pendingApprovalActions.length}
-                                                        </Badge>
-                                                    </HStack>
-                                                </Box>
-                                                <AccordionIcon />
-                                            </AccordionButton>
-                                        </h2>
-                                        <AccordionPanel pb={4}>
-                                            <DataTable
-                                                columns={[
-                                                    {
-                                                        accessorKey: 'approvalAction',
-                                                        header: 'Action',
-                                                        isSortable: false,
-                                                        cell: (row: any) => (
-                                                            <Button
-                                                                size="sm"
-                                                                colorScheme="brand"
-                                                                variant="outline"
-                                                                onClick={() => handleOpenApprovalDetails(row)}
-                                                            >
-                                                                View
-                                                            </Button>
-                                                        )
-                                                    },
-                                                    { accessorKey: 'title', header: 'Title', isSortable: true },
-                                                    {
-                                                        accessorKey: 'description',
-                                                        header: 'Description',
-                                                        isSortable: true,
-                                                        cell: (row: any) => {
-                                                            if (row.actionType === 'PurchaseOrder' && row.orderedItems && row.orderedItems.length > 0) {
-                                                                return (
-                                                                    <Box>
-                                                                        <Text>{row.description}</Text>
-                                                                        <Text fontSize="sm" color="neutral.light.text-secondary">
-                                                                            Items: {row.orderedItems.map((item: any) =>
-                                                                                `${item.stockItem.name} (${item.orderedQuantity})`
-                                                                            ).join(', ')}
-                                                                        </Text>
-                                                                    </Box>
-                                                                );
-                                                            }
-                                                            return <Text>{row.description}</Text>;
-                                                        }
-                                                    },
-                                                    { accessorKey: 'siteName', header: 'Site', isSortable: true },
-                                                    { accessorKey: 'priority', header: 'Priority', isSortable: true },
-                                                    {
-                                                        accessorKey: 'createdAt',
-                                                        header: 'Created At',
-                                                        isSortable: true,
-                                                        cell: (row: any) => new Date(row.createdAt).toLocaleDateString()
-                                                    },
-                                                ]}
-                                                data={pendingApprovalActions}
-                                                loading={refreshFlags.actions}
-                                                onActionClick={handleOpenApprovalDetails}
-                                                onSelectionChange={handleSelectionChange}
-                                            />
-                                        </AccordionPanel>
-                                    </AccordionItem>
-                                </Accordion>
-                            )}
-
-                            {type === 'GoodsReceipt' && (
-                                <>
-                                    <Flex
-                                        direction={{ base: 'column', sm: 'row' }}
-                                        justifyContent="space-between"
-                                        alignItems="center"
-                                        mb={4}
-                                        gap={3}
-                                    >
-                                        <Heading as="h3" size="md" color={primaryTextColor} w={{ base: '100%', sm: 'auto' }}>
-                                            Pending Goods Receipts
-                                        </Heading>
-                                        <Button
-                                            leftIcon={<Icon as={FiPlus} />}
-                                            colorScheme="brand"
-                                            onClick={handleAddReceipt}
-                                            w={{ base: '100%', sm: 'auto' }}
-                                        >
-                                            New Receipt
-                                        </Button>
-                                    </Flex>
-
-                                    {getActionsToDisplay(index).filter(action =>
-                                        action.actionType === 'GoodsReceipt' &&
-                                        (action.status === 'draft' || action.status === 'partial')
-                                    ).length === 0 ? (
-                                        <Text fontSize="lg" color="neutral.light.text-secondary">
-                                            No pending goods receipts at this time.
+                        return (
+                            <TabPanel key={operation.type} px={{ base: 0, md: 2 }} py={4}>
+                                {actionRequiredActions.length === 0 ? (
+                                    <Card bg={cardBg} p={6} textAlign="center" mx={{ base: 2, md: 0 }}>
+                                        <Text fontSize="lg" color={noActionTextColor}>
+                                            No {operation.title.toLowerCase()} requiring action at this time.
                                         </Text>
-                                    ) : (
-                                        <DataTable
-                                            columns={[
-                                                {
-                                                    accessorKey: 'receiveAction',
-                                                    header: 'Action',
-                                                    cell: (row: any) => (
-                                                        <Button
-                                                            size="sm"
-                                                            colorScheme="green"
-                                                            onClick={() => handleReceiveGoods(row)}
-                                                            leftIcon={<FiPackage />}
-                                                        >
-                                                            {row.status === 'draft' ? 'Receive' : 'Continue Receiving'}
-                                                        </Button>
-                                                    )
-                                                },
-                                                { accessorKey: 'title', header: 'Title', isSortable: true },
-                                                { accessorKey: 'description', header: 'Description', isSortable: true },
-                                                { accessorKey: 'siteName', header: 'Site', isSortable: true },
-                                                { accessorKey: 'priority', header: 'Priority', isSortable: true },
-                                                {
-                                                    accessorKey: 'createdAt',
-                                                    header: 'Created At',
-                                                    isSortable: true,
-                                                    cell: (row: any) => new Date(row.createdAt).toLocaleDateString()
-                                                },
-                                            ]}
-                                            data={getActionsToDisplay(index).filter(action =>
-                                                action.actionType === 'GoodsReceipt' &&
-                                                (action.status === 'draft' || action.status === 'partial')
-                                            )}
-                                            loading={refreshFlags.goodsReceipts}
-                                            onActionClick={handleReceiveGoods}
-                                            onSelectionChange={handleSelectionChange}
-                                        />
-                                    )}
-                                </>
-                            )}
-
-                            {type !== 'GoodsReceipt' && (
-                                <>
-                                    {getActionsToDisplay(index).length === 0 ? (
-                                        <Text fontSize="lg" color="neutral.light.text-secondary">
-                                            {viewMode === 'actionRequired'
-                                                ? `No ${actionTypeTitles[type as keyof typeof actionTypeTitles].toLowerCase()} actions requiring attention at this time.`
-                                                : `No ${actionTypeTitles[type as keyof typeof actionTypeTitles].toLowerCase()} actions found.`
-                                            }
-                                        </Text>
-                                    ) : (
+                                    </Card>
+                                ) : (
+                                    <Box
+                                        overflowX="auto"
+                                        sx={{
+                                            '&::-webkit-scrollbar': {
+                                                height: '6px',
+                                            },
+                                            '&::-webkit-scrollbar-track': {
+                                                bg: 'gray.100',
+                                                borderRadius: '3px',
+                                            },
+                                            '&::-webkit-scrollbar-thumb': {
+                                                bg: 'gray.300',
+                                                borderRadius: '3px',
+                                            },
+                                            '&::-webkit-scrollbar-thumb:hover': {
+                                                bg: 'gray.400',
+                                            },
+                                        }}
+                                    >
                                         <DataTable
                                             columns={[
                                                 {
                                                     accessorKey: 'action',
                                                     header: 'Action',
                                                     cell: (row: any) => (
-                                                        <VStack spacing={2} align="start">
-                                                            {row.actionType === 'PurchaseOrder' && row.status === 'draft' && (
-                                                                <Button
-                                                                    size="sm"
-                                                                    colorScheme="blue"
-                                                                    onClick={() => handleOpenEditPO(row)}
-                                                                >
-                                                                    Edit
-                                                                </Button>
-                                                            )}
-                                                        </VStack>
+                                                        <Button
+                                                            size="sm"
+                                                            colorScheme="brand"
+                                                            onClick={() => handleActionClick(row)}
+                                                            leftIcon={<Icon as={operation.icon} />}
+                                                            width={{ base: 'full', sm: 'auto' }}
+                                                        >
+                                                            <Text display={{ base: 'none', sm: 'block' }}>
+                                                                {operation.actionLabel}
+                                                            </Text>
+                                                            <Text display={{ base: 'block', sm: 'none' }}>
+                                                                {operation.actionLabel === 'Edit' ? 'Edit' : 'View'}
+                                                            </Text>
+                                                        </Button>
                                                     )
                                                 },
-                                                { accessorKey: 'title', header: 'Title', isSortable: true },
-                                                { accessorKey: 'description', header: 'Description', isSortable: true },
-                                                { accessorKey: 'siteName', header: 'Site', isSortable: true },
-                                                { accessorKey: 'priority', header: 'Priority', isSortable: true },
+                                                {
+                                                    accessorKey: 'poNumber',
+                                                    header: 'Reference',
+                                                    cell: (row: any) => (
+                                                        <Text fontWeight="medium" fontSize={{ base: 'sm', md: 'md' }}>
+                                                            {row.poNumber || row.receiptNumber || row.transferNumber || row.countNumber || row.dispatchNumber || 'N/A'}
+                                                        </Text>
+                                                    )
+                                                },
+                                                {
+                                                    accessorKey: 'description',
+                                                    header: 'Description',
+                                                    cell: (row: any) => (
+                                                        <Text noOfLines={2} fontSize={{ base: 'sm', md: 'md' }}>
+                                                            {row.description || 'No description'}
+                                                        </Text>
+                                                    )
+                                                },
+                                                {
+                                                    accessorKey: 'siteName',
+                                                    header: 'Site',
+                                                    cell: (row: any) => (
+                                                        <Text fontSize={{ base: 'sm', md: 'md' }}>
+                                                            {row.siteName || row.site?.name || 'N/A'}
+                                                        </Text>
+                                                    )
+                                                },
+                                                {
+                                                    accessorKey: 'status',
+                                                    header: 'Status',
+                                                    cell: (row: any) => (
+                                                        <Badge
+                                                            colorScheme={
+                                                                row.status === 'draft' ? 'gray' :
+                                                                    row.status === 'partially-received' ? 'orange' :
+                                                                        row.status === 'in-progress' ? 'blue' :
+                                                                            row.status === 'pending-approval' ? 'yellow' : 'gray'
+                                                            }
+                                                            variant="subtle"
+                                                            fontSize={{ base: 'xs', md: 'sm' }}
+                                                        >
+                                                            {row.status?.replace('-', ' ').toUpperCase() || 'UNKNOWN'}
+                                                        </Badge>
+                                                    )
+                                                },
                                                 {
                                                     accessorKey: 'createdAt',
-                                                    header: 'Created At',
-                                                    isSortable: true,
-                                                    cell: (row: any) => new Date(row.createdAt).toLocaleDateString()
+                                                    header: 'Created',
+                                                    cell: (row: any) => (
+                                                        <Text fontSize={{ base: 'sm', md: 'md' }}>
+                                                            {new Date(row.createdAt || row.orderDate || row.receiptDate || row.transferDate || row.countDate || row.dispatchDate).toLocaleDateString()}
+                                                        </Text>
+                                                    )
                                                 },
                                             ]}
-                                            data={getActionsToDisplay(index)}
-                                            loading={refreshFlags.actions}
-                                            //onActionClick={handleOpenWorkflow}
-                                            onSelectionChange={handleSelectionChange}
+                                            data={actionRequiredActions}
+                                            loading={loading}
                                         />
-                                    )}
-                                </>
-                            )}
-                        </TabPanel>
-                    ))}
+                                    </Box>
+                                )}
+                            </TabPanel>
+                        );
+                    })}
                 </TabPanels>
             </Tabs>
 
-            {/* Modals */}
+            {/* Modals for different operation types */}
             {poDetails && (
                 <PurchaseOrderModal
                     isOpen={isOrderModalOpen}
-                    onClose={onOrderModalClose}
+                    onClose={() => {
+                        onOrderModalClose();
+                        refreshCurrentTab();
+                    }}
                     poDetails={poDetails}
                     editedPrices={editedPrices}
                     setEditedPrices={setEditedPrices}
                     editedQuantities={editedQuantities}
                     setEditedQuantities={setEditedQuantities}
                     isSaving={isSaving}
-                    onSave={handleSaveOrder}
-                    onApproveRequest={handleConfirmOrderUpdate}
-                    onRemoveItem={handleRemoveItemFromPO}
-                />
-            )}
-
-            {selectedAction && (
-                <FileUploadModal
-                    isOpen={isUploadModalOpen}
-                    onClose={onUploadModalClose}
-                    onUploadComplete={onUploadSuccess}
-                    relatedToId={selectedAction._id}
-                    fileType="photo" // Changed from "evidence" to an allowed value
-                    title={`Upload Evidence for ${selectedAction.title}`}
-                    description="Please upload supporting documents or photos as evidence."
+                    onSave={() => {
+                        handleSaveOrder();
+                        refreshCurrentTab();
+                    }}
+                    onApproveRequest={() => {
+                        if (poDetails) {
+                            handleApprovePO(poDetails);
+                            refreshCurrentTab();
+                        }
+                    }}
+                    onRemoveItem={() => { }}
                 />
             )}
 
             <GoodsReceiptModal
                 isOpen={isGoodsReceiptModalOpen}
-                onClose={onGoodsReceiptModalClose}
-                receipt={selectedGoodsReceipt}
-                onSave={() => {
+                onClose={() => {
                     onGoodsReceiptModalClose();
-                    refreshActions();
-                    refreshPOsAndReceipts();
+                    refreshCurrentTab();
                 }}
-                approvedPurchaseOrders={approvedPOsWithoutReceipts}
-                preSelectedPO={preSelectedPO}
+                receipt={selectedGoodsReceipt}
+                onSave={refreshCurrentTab}
+                approvedPurchaseOrders={[]}
             />
 
-            <Modal isOpen={isPOSelectionModalOpen} onClose={onPOSelectionModalClose} size="4xl" scrollBehavior="inside">
-                <ModalOverlay />
-                <ModalContent>
-                    <ModalHeader>Select Purchase Order for Receiving</ModalHeader>
-                    <ModalBody>
-                        <Heading as="h3" size="md" mb={4}>
-                            Approved Purchase Orders Ready for Receiving
-                        </Heading>
-                        {refreshFlags.purchaseOrders ? (
-                            <Flex justifyContent="center" alignItems="center" py={10}>
-                                <Spinner size="xl" />
-                            </Flex>
-                        ) : approvedPOsWithoutReceipts.length === 0 ? (
-                            <Text fontSize="lg" color="neutral.light.text-secondary">
-                                No approved purchase orders available for receiving.
-                            </Text>
-                        ) : (
-                            <DataTable
-                                columns={[
-                                    {
-                                        accessorKey: 'receiveAction',
-                                        header: 'Action',
-                                        cell: (row: any) => (
-                                            <Button
-                                                size="sm"
-                                                colorScheme="green"
-                                                onClick={() => handleCreateReceiptFromPO(row)}
-                                                leftIcon={<FiPackage />}
-                                            >
-                                                Receive
-                                            </Button>
-                                        )
-                                    },
-                                    { accessorKey: 'poNumber', header: 'PO Number', isSortable: true },
-                                    { accessorKey: 'supplierName', header: 'Supplier', isSortable: true, cell: (row: any) => <Text>{row.supplier?.name || 'N/A'}</Text> },
-                                    { accessorKey: 'siteName', header: 'Site', isSortable: true, cell: (row: any) => <Text>{row.site?.name || 'N/A'}</Text> },
-                                    {
-                                        accessorKey: 'orderedItems',
-                                        header: 'Items',
-                                        isSortable: false,
-                                        cell: (row: any) => (
-                                            <Box>
-                                                {row.orderedItems?.slice(0, 2).map((item: any, index: number) => (
-                                                    <Text key={index} fontSize="sm">
-                                                        {item.stockItem?.name || 'Unknown Item'} (x{item.orderedQuantity || 0})
-                                                    </Text>
-                                                ))}
-                                                {row.orderedItems?.length > 2 && (
-                                                    <Text fontSize="sm" color="neutral.light.text-secondary">
-                                                        +{row.orderedItems.length - 2} more items
-                                                    </Text>
-                                                )}
-                                                {(!row.orderedItems || row.orderedItems.length === 0) && (
-                                                    <Text fontSize="sm" color="neutral.light.text-secondary">No items</Text>
-                                                )}
-                                            </Box>
-                                        )
-                                    }
-                                ]}
-                                data={approvedPOsWithoutReceipts.map(po => ({
-                                    _id: po._id,
-                                    poNumber: po.poNumber || '',
-                                    supplier: po.supplier || { name: '' },
-                                    site: po.site || { name: '' },
-                                    orderedItems: po.orderedItems || []
-                                }))}
-                                loading={refreshFlags.purchaseOrders}
-                                onActionClick={() => { }}
-                                hideStatusColumn={true}
-                                onSelectionChange={() => { }}
-                            />
-                        )}
-                    </ModalBody>
-                    <ModalFooter>
-                        <Button variant="ghost" onClick={onPOSelectionModalClose}>
-                            Cancel
-                        </Button>
-                    </ModalFooter>
-                </ModalContent>
-            </Modal>
-
-            <CreatePurchaseOrderModal
-                isOpen={isCreatePOModalOpen}
-                onClose={onCreatePOModalClose}
-                onSave={handleCreateOrders}
-                selectedItems={selectedItems}
-                suppliers={suppliers}
-                sites={sites}
+            <TransferModal
+                isOpen={isTransferModalOpen}
+                onClose={() => {
+                    onTransferModalClose();
+                    refreshCurrentTab();
+                }}
+                transfer={selectedTransfer}
+                onSave={refreshCurrentTab}
             />
 
+            <BinCountModal
+                isOpen={isBinCountModalOpen}
+                onClose={() => {
+                    onBinCountModalClose();
+                    refreshCurrentTab();
+                }}
+                binCount={selectedBinCount}
+                onSave={refreshCurrentTab}
+            />
 
-            {/* Confirmation Dialogs */}
-            <AlertDialog
-                isOpen={isConfirmDialogOpen}
-                leastDestructiveRef={cancelRef}
-                onClose={() => setIsConfirmDialogOpen(false)}
-            >
-                <AlertDialogOverlay>
-                    <AlertDialogContent>
-                        <AlertDialogHeader fontSize="lg" fontWeight="bold">
-                            Confirm Submission
-                        </AlertDialogHeader>
-                        <AlertDialogBody>
-                            Are you sure you want to submit this purchase order for approval?
-                        </AlertDialogBody>
-                        <AlertDialogFooter>
-                            <Button ref={cancelRef} onClick={() => setIsConfirmDialogOpen(false)}>
-                                Cancel
-                            </Button>
-                            <Button colorScheme="brand" onClick={proceedWithOrderUpdate} ml={3}>
-                                Confirm
-                            </Button>
-                        </AlertDialogFooter>
-                    </AlertDialogContent>
-                </AlertDialogOverlay>
-            </AlertDialog>
-
-            <AlertDialog
-                isOpen={isZeroPriceDialogOpen}
-                leastDestructiveRef={cancelRef}
-                onClose={() => setIsZeroPriceDialogOpen(false)}
-            >
-                <AlertDialogOverlay>
-                    <AlertDialogContent>
-                        <AlertDialogHeader fontSize="lg" fontWeight="bold">
-                            Zero Price Items Detected
-                        </AlertDialogHeader>
-                        <AlertDialogBody>
-                            <Text mb={3}>The following items have a price of £0.00:</Text>
-                            <VStack align="start" spacing={1}>
-                                {hasZeroPriceItems.map((item, index) => (
-                                    <Text key={index} fontSize="sm" color="orange.500">
-                                        • {item}
-                                    </Text>
-                                ))}
-                            </VStack>
-                            <Text mt={3}>Are you sure you want to proceed with submission?</Text>
-                        </AlertDialogBody>
-                        <AlertDialogFooter>
-                            <Button ref={cancelRef} onClick={() => setIsZeroPriceDialogOpen(false)}>
-                                Cancel
-                            </Button>
-                            <Button colorScheme="orange" onClick={proceedWithOrderUpdate} ml={3}>
-                                Proceed Anyway
-                            </Button>
-                        </AlertDialogFooter>
-                    </AlertDialogContent>
-                </AlertDialogOverlay>
-            </AlertDialog>
+            <DispatchModal
+                isOpen={isDispatchModalOpen}
+                onClose={() => {
+                    onDispatchModalClose();
+                    refreshCurrentTab();
+                }}
+                dispatch={selectedDispatch}
+                onSave={refreshCurrentTab}
+            />
         </Box>
     );
 }

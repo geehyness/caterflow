@@ -6,6 +6,7 @@ import { logSanityInteraction } from '@/lib/sanityLogger';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { v4 as uuidv4 } from 'uuid';
+import { getUserSiteInfo, buildTransactionSiteFilter } from '@/lib/siteFiltering';
 
 // normalize refs to string ids
 const resolveRef = (val: any): string | null => {
@@ -63,7 +64,10 @@ const getNextDispatchNumber = async (): Promise<string> => {
 // --- GET all dispatches ---
 export async function GET() {
     try {
-        const query = groq`*[_type == "DispatchLog"] | order(dispatchDate desc) {
+        const userSiteInfo = await getUserSiteInfo();
+        const siteFilter = buildTransactionSiteFilter(userSiteInfo);
+
+        const query = groq`*[_type == "DispatchLog" ${siteFilter}] | order(dispatchDate desc) {
             _id,
             dispatchNumber,
             dispatchDate,
@@ -142,30 +146,65 @@ export async function GET() {
 
 // --- POST create dispatch ---
 export async function POST(request: Request) {
+    console.log('🚀 POST /api/dispatches - Starting dispatch creation');
+
     try {
         const session = await getServerSession(authOptions);
+        console.log('🔐 Session check:', session ? `User ${session.user.email} authenticated` : 'No session');
+
         if (!session || !session.user) {
+            console.log('❌ User not authenticated');
             return NextResponse.json({ error: 'User not authenticated' }, { status: 401 });
         }
 
         const body = await request.json();
+        console.log('📦 Request body received:', {
+            hasDispatchType: !!body.dispatchType,
+            hasSourceBin: !!body.sourceBin,
+            hasDispatchDate: !!body.dispatchDate,
+            dispatchedItemsCount: body.dispatchedItems?.length || 0,
+            peopleFed: body.peopleFed
+        });
+
         const { _id, ...createData } = body;
 
         if (!createData.dispatchType || !createData.sourceBin || !createData.dispatchDate) {
+            console.log('❌ Missing required fields:', {
+                dispatchType: !!createData.dispatchType,
+                sourceBin: !!createData.sourceBin,
+                dispatchDate: !!createData.dispatchDate
+            });
             return NextResponse.json({ error: 'Missing required fields (dispatchType, sourceBin, dispatchDate)' }, { status: 400 });
         }
+
+        console.log('✅ Required fields present');
 
         // normalize references
         const dispatchTypeRef = resolveRef(createData.dispatchType);
         const sourceBinRef = resolveRef(createData.sourceBin);
         const dispatchedByRef = resolveRef(createData.dispatchedBy) || session.user.id;
 
+        console.log('🔗 Normalized references:', {
+            dispatchTypeRef,
+            sourceBinRef,
+            dispatchedByRef,
+            userId: session.user.id
+        });
+
         // Process dispatched items with unit prices and total cost
-        const dispatchedItems = (createData.dispatchedItems || []).map((item: any) => {
+        console.log('📋 Processing dispatched items...');
+        const dispatchedItems = (createData.dispatchedItems || []).map((item: any, index: number) => {
             // Explicitly convert to Number for safe calculation
             const unitPrice = Number(item.unitPrice) || 0;
             const dispatchedQuantity = Number(item.dispatchedQuantity) || 0;
             const totalCost = unitPrice * dispatchedQuantity;
+
+            console.log(`   Item ${index + 1}:`, {
+                stockItem: resolveRef(item.stockItem),
+                quantity: dispatchedQuantity,
+                unitPrice,
+                totalCost
+            });
 
             return {
                 _type: 'DispatchedItem',
@@ -187,25 +226,52 @@ export async function POST(request: Request) {
         const peopleFed = Number(createData.peopleFed) || 0;
         const costPerPerson = peopleFed > 0 ? totalCost / peopleFed : 0;
 
+        console.log('💰 Cost calculations:', {
+            totalCost,
+            peopleFed,
+            costPerPerson,
+            itemsCount: dispatchedItems.length
+        });
+
+        // Generate dispatch number
+        console.log('🔢 Generating dispatch number...');
+        const dispatchNumber = await getNextDispatchNumber();
+        console.log('✅ Dispatch number generated:', dispatchNumber);
+
         const newDoc: any = {
             ...createData,
             _type: 'DispatchLog',
-            dispatchNumber: await getNextDispatchNumber(),
+            dispatchNumber,
             _id: uuidv4(),
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
             evidenceStatus: 'pending',
             peopleFed: peopleFed,
-            totalCost: totalCost, // <--- Correctly saved
-            costPerPerson: costPerPerson, // <--- Correctly saved
+            totalCost: totalCost,
+            costPerPerson: costPerPerson,
             dispatchType: dispatchTypeRef ? { _type: 'reference', _ref: dispatchTypeRef } : undefined,
             sourceBin: sourceBinRef ? { _type: 'reference', _ref: sourceBinRef } : undefined,
             dispatchedBy: dispatchedByRef ? { _type: 'reference', _ref: dispatchedByRef } : undefined,
             dispatchedItems,
         };
 
-        const result = await writeClient.create(newDoc);
+        console.log('📄 Document to create:', {
+            _id: newDoc._id,
+            dispatchNumber: newDoc.dispatchNumber,
+            evidenceStatus: newDoc.evidenceStatus,
+            hasDispatchType: !!newDoc.dispatchType,
+            hasSourceBin: !!newDoc.sourceBin,
+            hasDispatchedBy: !!newDoc.dispatchedBy
+        });
 
+        console.log('💾 Creating document in Sanity...');
+        const result = await writeClient.create(newDoc);
+        console.log('✅ Document created successfully:', {
+            _id: result._id,
+            dispatchNumber: result.dispatchNumber
+        });
+
+        console.log('📝 Logging interaction...');
         await logSanityInteraction(
             'create',
             `Created new dispatch: ${newDoc.dispatchNumber} with total cost: $${totalCost}`,
@@ -214,10 +280,32 @@ export async function POST(request: Request) {
             session.user.id,
             true
         );
+        console.log('✅ Interaction logged');
 
+        console.log('🎉 Dispatch creation completed successfully');
         return NextResponse.json(result);
+
     } catch (error) {
-        console.error('Failed to create dispatch:', error);
+        console.error('❌ Failed to create dispatch:', error);
+
+        // Log additional error details
+        if (error instanceof Error) {
+            console.error('📛 Error details:', {
+                name: error.name,
+                message: error.message,
+                stack: error.stack
+            });
+        }
+
+        // Check if it's a Sanity-specific error
+        if (error && typeof error === 'object') {
+            const sanityError = error as any;
+            console.error('🏥 Sanity API error:', {
+                statusCode: sanityError.statusCode,
+                message: sanityError.message,
+                details: sanityError.details
+            });
+        }
         return NextResponse.json({ error: 'Failed to create dispatch' }, { status: 500 });
     }
 }
@@ -237,12 +325,22 @@ export async function PATCH(request: Request) {
             return NextResponse.json({ error: 'Dispatch ID is required' }, { status: 400 });
         }
 
+        // REMOVED: Site permission check for PATCH
+
         // Fetch existing doc to check evidenceStatus
-        const existing = await client.fetch(
-            `*[_type=="DispatchLog" && _id == $id][0]{ evidenceStatus }`,
+        const existingDispatch = await client.fetch(
+            groq`*[_type == "DispatchLog" && _id == $id][0] { 
+                evidenceStatus 
+            }`,
             { id: _id }
         );
-        if (existing?.evidenceStatus === 'complete') {
+
+        if (!existingDispatch) {
+            return NextResponse.json({ error: 'Dispatch not found' }, { status: 404 });
+        }
+
+        // Check evidenceStatus for editability
+        if (existingDispatch?.evidenceStatus === 'complete') {
             return NextResponse.json({ error: 'Dispatch is completed and cannot be edited' }, { status: 400 });
         }
 
@@ -351,9 +449,22 @@ export async function DELETE(request: Request) {
             return NextResponse.json({ error: 'Dispatch ID is required' }, { status: 400 });
         }
 
+        // REMOVED: Site permission check for DELETE
+
+        // Fetch existing doc to check evidenceStatus
+        const existingDispatch = await client.fetch(
+            groq`*[_type == "DispatchLog" && _id == $id][0] { 
+                evidenceStatus 
+            }`,
+            { id }
+        );
+
+        if (!existingDispatch) {
+            return NextResponse.json({ error: 'Dispatch not found' }, { status: 404 });
+        }
+
         // prevent deletion of completed dispatches
-        const existing = await client.fetch(`*[_type=="DispatchLog" && _id == $id][0]{ evidenceStatus }`, { id });
-        if (existing?.evidenceStatus === 'complete') {
+        if (existingDispatch?.evidenceStatus === 'complete') {
             return NextResponse.json({ error: 'Completed dispatch cannot be deleted' }, { status: 400 });
         }
 

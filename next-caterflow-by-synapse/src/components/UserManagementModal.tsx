@@ -195,7 +195,7 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({
                                     <option value="admin">Admin</option>
                                     <option value="siteManager">Site Manager</option>
                                     <option value="stockController">Stock Controller</option>
-                                    <option value="dispatchStaff">Dispatch Staff</option>
+                                    <option value="procurer">Procurer</option>
                                     <option value="auditor">Auditor</option>
                                 </Select>
                             </FormControl>

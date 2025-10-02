@@ -158,6 +158,7 @@ export default function BinCountsPage() {
             {
                 accessorKey: 'workflowAction',
                 header: 'Action',
+                isSortable: false, // Explicitly set to false for clarity
                 cell: (row: any) => (
                     <Button
                         size="sm"
@@ -228,8 +229,43 @@ export default function BinCountsPage() {
                     );
                 },
             },
+            {
+                accessorKey: 'countedBy.name',
+                header: 'Counted By',
+                isSortable: true,
+                cell: (row: any) => row.countedBy?.name || 'N/A'
+            },
+            {
+                accessorKey: 'adjustedBy.name',
+                header: 'Adjusted By',
+                isSortable: true,
+                cell: (row: any) => row.adjustedBy?.name || 'N/A'
+            },
+            {
+                accessorKey: 'adjustedAt',
+                header: 'Adjusted At',
+                isSortable: true,
+                cell: (row: any) => {
+                    if (!row.adjustedAt) return 'N/A';
+                    try {
+                        return new Date(row.adjustedAt).toLocaleDateString();
+                    } catch {
+                        return 'Invalid Date';
+                    }
+                },
+            },
+            {
+                accessorKey: 'notes',
+                header: 'Notes',
+                isSortable: false, // Text content - disable sorting
+                cell: (row: any) => (
+                    <Text fontSize="sm" color={secondaryTextColor} noOfLines={2}>
+                        {row.notes || 'No notes'}
+                    </Text>
+                )
+            }
         ],
-        [handleViewOrEdit, getStatusColor]
+        [handleViewOrEdit, getStatusColor, secondaryTextColor]
     );
 
     if (loading || status === 'loading') {

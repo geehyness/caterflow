@@ -71,9 +71,9 @@ const SidebarContent = ({ onItemClick }: { onItemClick?: () => void }) => {
             heading: 'Overview',
             icon: FiHome,
             items: [
-                { label: 'Dashboard', href: '/', icon: FiBarChart2, roles: ['admin', 'siteManager', 'stockController', 'dispatchStaff', 'auditor', 'procurer'] },
+                { label: 'Dashboard', href: '/', icon: FiBarChart2, roles: ['admin', 'siteManager', 'stockController', 'auditor', 'procurer'] },
                 { label: 'Activity', href: '/activity', icon: FiActivity, roles: ['admin', 'siteManager', 'stockController', 'auditor'] },
-                { label: 'Actions', href: '/actions', icon: FiAlertTriangle, roles: ['admin', 'siteManager', 'stockController', 'dispatchStaff'] },
+                { label: 'Actions', href: '/actions', icon: FiAlertTriangle, roles: ['admin', 'siteManager', 'stockController', 'procurer'] },
             ],
         },
         {
@@ -82,7 +82,7 @@ const SidebarContent = ({ onItemClick }: { onItemClick?: () => void }) => {
             items: [
                 { label: 'Current Stock', href: '/current', icon: FiDatabase, roles: ['admin', 'siteManager', 'stockController', 'auditor', 'procurer'] },
                 { label: 'Stock Items', href: '/stock-items', icon: FiList, roles: ['admin', 'siteManager', 'stockController', 'procurer'] },
-                { label: 'Low Stock', href: '/low-stock', icon: FiAlertCircle, roles: ['admin', 'siteManager', 'stockController', 'auditor', 'procurer'] },
+                { label: 'Low Stock', href: '/low-stock', icon: FiAlertCircle, roles: ['admin', 'siteManager', 'stockController', 'auditor'] },
             ],
         },
         {
@@ -90,11 +90,11 @@ const SidebarContent = ({ onItemClick }: { onItemClick?: () => void }) => {
             icon: FiSettings,
             items: [
                 { label: 'Approvals', href: '/approvals', icon: FiCheckCircle, roles: ['admin', 'siteManager'] },
-                { label: 'Purchases', href: '/operations/purchases', icon: FiShoppingCart, roles: ['admin', 'siteManager', 'auditor'] },
-                { label: 'Receipts', href: '/operations/receipts', icon: FiFileText, roles: ['admin', 'siteManager', 'auditor'] },
-                { label: 'Dispatches', href: '/operations/dispatches', icon: FiTruck, roles: ['admin', 'siteManager', 'dispatchStaff', 'auditor'] },
+                { label: 'Purchases', href: '/operations/purchases', icon: FiShoppingCart, roles: ['admin', 'siteManager', 'stockController', 'auditor'] },
+                { label: 'Receipts', href: '/operations/receipts', icon: FiFileText, roles: ['admin', 'siteManager', 'stockController', 'auditor'] },
+                { label: 'Dispatches', href: '/operations/dispatches', icon: FiTruck, roles: ['admin', 'siteManager', 'stockController', 'auditor'] },
                 { label: 'Counts', href: '/operations/bin-counts', icon: FiClipboard, roles: ['admin', 'siteManager', 'stockController', 'auditor'] },
-                { label: 'Transfers', href: '/operations/transfers', icon: FiRepeat, roles: ['admin', 'siteManager', 'stockController', 'dispatchStaff', 'auditor', 'procurer'] },
+                { label: 'Transfers', href: '/operations/transfers', icon: FiRepeat, roles: ['admin', 'siteManager', 'stockController', 'auditor', 'procurer'] },
                 { label: 'Procurement', href: '/operations/procurement', icon: FiShoppingBag, roles: ['admin', 'procurer'] },
             ],
         },
@@ -105,7 +105,7 @@ const SidebarContent = ({ onItemClick }: { onItemClick?: () => void }) => {
                 { label: 'Users', href: '/users', icon: FiUsers, roles: ['admin'] },
                 { label: 'Dispatch Types', href: '/dispatch-types', icon: FiTruck, roles: ['admin'] }, // ← Add this line
                 { label: 'Locations', href: '/locations', icon: FiMapPin, roles: ['admin'] },
-                { label: 'Suppliers', href: '/suppliers', icon: FiBriefcase, roles: ['admin', 'procurement'] },
+                { label: 'Suppliers', href: '/suppliers', icon: FiBriefcase, roles: ['admin', 'procurer'] },
                 //{ label: 'Notifications', href: '/notifications', icon: FiBell, roles: ['admin'] },
                 //{ label: 'System Settings', href: '/settings', icon: FiSettings, roles: ['admin'] },
             ],
@@ -317,7 +317,7 @@ export function Sidebar({ appName = 'Caterflow' }: SidebarProps) {
                 <DrawerOverlay />
                 <DrawerContent
                     bg={sidebarBg}
-                    maxW={{ base: '75%', sm: '320px' }}
+                    maxW={{ base: '60%', sm: '300px' }}
                 >
                     <DrawerCloseButton />
                     <DrawerBody p={0}>

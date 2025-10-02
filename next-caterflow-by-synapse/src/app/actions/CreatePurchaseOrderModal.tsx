@@ -85,6 +85,8 @@ export default function CreatePurchaseOrderModal({
     const [selectedCategory, setSelectedCategory] = useState('');
     const [loadingItems, setLoadingItems] = useState(false);
     const [selectedSite, setSelectedSite] = useState<string>(selectedSiteId || '');
+    const [isCreatingOrder, setIsCreatingOrder] = useState(false);
+    const [isAddingItems, setIsAddingItems] = useState(false);
     const toast = useToast();
 
     useEffect(() => {
@@ -99,6 +101,8 @@ export default function CreatePurchaseOrderModal({
                 _key: Math.random().toString(36).substr(2, 9)
             }));
             setOrderItems(initialItems);
+        } else if (isOpen) {
+            setOrderItems([]);
         }
 
         // Reset selected site when modal opens if no site was preselected
@@ -147,12 +151,35 @@ export default function CreatePurchaseOrderModal({
     };
 
     const handleOpenAddItemModal = async () => {
-        await Promise.all([fetchAvailableItems(), fetchCategories()]);
-        setIsAddItemModalOpen(true);
+        setIsAddingItems(true);
+        try {
+            await Promise.all([fetchAvailableItems(), fetchCategories()]);
+            setIsAddItemModalOpen(true);
+        } catch (error) {
+            console.error('Failed to open add item modal:', error);
+        } finally {
+            setIsAddingItems(false);
+        }
     };
 
     const handleAddItems = (items: any[]) => {
-        const newOrderItems: OrderItem[] = items.map(item => ({
+        // Prevent duplicates by checking if item already exists in orderItems
+        const newItems = items.filter(newItem =>
+            !orderItems.some(existingItem => existingItem.stockItem === newItem.item._id)
+        );
+
+        if (newItems.length === 0) {
+            toast({
+                title: 'Item already added',
+                description: 'This item is already in the purchase order',
+                status: 'warning',
+                duration: 3000,
+                isClosable: true,
+            });
+            return;
+        }
+
+        const newOrderItems: OrderItem[] = newItems.map(item => ({
             stockItem: item.item._id,
             supplier: item.item.primarySupplier?._ref ||
                 (item.item.suppliers && item.item.suppliers.length > 0 ? item.item.suppliers[0]._ref : ''),
@@ -162,6 +189,25 @@ export default function CreatePurchaseOrderModal({
         }));
 
         setOrderItems(prev => [...prev, ...newOrderItems]);
+
+        if (newItems.length < items.length) {
+            toast({
+                title: 'Some items skipped',
+                description: `${items.length - newItems.length} items were already in the order`,
+                status: 'info',
+                duration: 3000,
+                isClosable: true,
+            });
+        } else {
+            toast({
+                title: 'Items added',
+                description: `${newItems.length} items added to purchase order`,
+                status: 'success',
+                duration: 2000,
+                isClosable: true,
+            });
+        }
+
         setIsAddItemModalOpen(false);
     };
 
@@ -188,21 +234,35 @@ export default function CreatePurchaseOrderModal({
         setOrderItems(prev => prev.filter((_, i) => i !== index));
     };
 
-    const handleSave = () => {
+    const handleSave = async () => {
+        if (isCreatingOrder) return; // Prevent multiple clicks
+
         console.log('Saving order items:', orderItems);
 
-        // Validate all items have suppliers
-        {/*const itemsWithoutSuppliers = orderItems.filter(item => !item.supplier);
-        if (itemsWithoutSuppliers.length > 0) {
+        // Validate there are items to order
+        if (orderItems.length === 0) {
             toast({
-                title: 'Missing suppliers',
-                description: 'Please select a supplier for all items',
+                title: 'No items',
+                description: 'Please add items to the purchase order',
                 status: 'error',
                 duration: 3000,
                 isClosable: true,
             });
             return;
-        }*/}
+        }
+
+        // Validate all items have positive quantities
+        const itemsWithInvalidQuantities = orderItems.filter(item => item.orderedQuantity <= 0);
+        if (itemsWithInvalidQuantities.length > 0) {
+            toast({
+                title: 'Invalid quantities',
+                description: 'Please enter valid quantities for all items',
+                status: 'error',
+                duration: 3000,
+                isClosable: true,
+            });
+            return;
+        }
 
         // If site selection is required but not provided
         if (!selectedSiteId && !selectedSite) {
@@ -216,18 +276,37 @@ export default function CreatePurchaseOrderModal({
             return;
         }
 
-        // Pass the site ID to the onSave callback
-        const siteIdToUse = selectedSiteId || selectedSite;
-        onSave(orderItems, siteIdToUse);
+        setIsCreatingOrder(true);
+
+        try {
+            // Pass the site ID to the onSave callback
+            const siteIdToUse = selectedSiteId || selectedSite;
+            await onSave(orderItems, siteIdToUse);
+        } catch (error) {
+            console.error('Error in handleSave:', error);
+            // Error handling is done in the parent component
+        } finally {
+            setIsCreatingOrder(false);
+        }
+    };
+
+    const handleClose = () => {
+        if (!isCreatingOrder) {
+            onClose();
+        }
+    };
+
+    const handleCloseAddItemModal = () => {
+        setIsAddItemModalOpen(false);
     };
 
     return (
         <>
-            <Modal isOpen={isOpen} onClose={onClose} size="xl">
+            <Modal isOpen={isOpen} onClose={handleClose} size="xl">
                 <ModalOverlay />
                 <ModalContent>
                     <ModalHeader>Create Purchase Order</ModalHeader>
-                    <ModalCloseButton />
+                    <ModalCloseButton isDisabled={isCreatingOrder} />
                     <ModalBody>
                         {/* Site Selection (only show if no preselected site) */}
                         {!selectedSiteId && (
@@ -238,6 +317,7 @@ export default function CreatePurchaseOrderModal({
                                     value={selectedSite}
                                     onChange={(e) => setSelectedSite(e.target.value)}
                                     isRequired
+                                    isDisabled={isCreatingOrder}
                                 >
                                     {sites.map(site => (
                                         <option key={site._id} value={site._id}>
@@ -254,7 +334,9 @@ export default function CreatePurchaseOrderModal({
                             mb={4}
                             colorScheme="blue"
                             variant="outline"
-                            isDisabled={!selectedSiteId && !selectedSite} // Disable if site not selected
+                            isDisabled={(!selectedSiteId && !selectedSite) || isCreatingOrder}
+                            isLoading={isAddingItems}
+                            loadingText="Loading items..."
                         >
                             Add More Items
                         </Button>
@@ -273,6 +355,7 @@ export default function CreatePurchaseOrderModal({
                                             right={2}
                                             onClick={() => removeItem(index)}
                                             variant="ghost"
+                                            isDisabled={isCreatingOrder}
                                         />
                                         <VStack align="stretch" spacing={2}>
                                             <VStack align={"stretch"}>
@@ -280,20 +363,6 @@ export default function CreatePurchaseOrderModal({
                                                 <Text fontSize="xs" fontWeight={"bold"} color="gray.600">SKU: {stockItem?.sku}</Text>
                                             </VStack>
                                             <Flex direction={{ base: 'row', md: 'row' }} justify="space-between" align={{ base: 'flex-start', md: 'center' }} gap={4} flexWrap="wrap">
-                                                {/*<Box flex="1 1 60px">
-                                                    <Text fontWeight="medium" mb={1}>Supplier</Text>
-                                                    <Select
-                                                        value={item.supplier}
-                                                        onChange={(e) => updateItemSupplier(index, e.target.value)}
-                                                        size="sm"                                                    >
-                                                        <option value="">Select Supplier</option>
-                                                        {suppliers.map(supplier => (
-                                                            <option key={supplier._id} value={supplier._id}>
-                                                                {supplier.name}
-                                                            </option>
-                                                        ))}
-                                                    </Select>
-                                                </Box>*/}
                                                 <Box flex="1 1 60px">
                                                     <Text fontWeight="medium" mb={1}>Quantity ({stockItem?.unitOfMeasure})</Text>
                                                     <Input
@@ -304,6 +373,7 @@ export default function CreatePurchaseOrderModal({
                                                         min="0"
                                                         size="sm"
                                                         placeholder="0"
+                                                        isDisabled={isCreatingOrder}
                                                     />
                                                 </Box>
                                             </Flex>
@@ -312,15 +382,28 @@ export default function CreatePurchaseOrderModal({
                                 );
                             })}
                         </VStack>
+
+                        {orderItems.length === 0 && (
+                            <Text textAlign="center" color="gray.500" py={8}>
+                                No items added to purchase order
+                            </Text>
+                        )}
                     </ModalBody>
                     <ModalFooter>
-                        <Button variant="ghost" mr={3} onClick={onClose}>
+                        <Button
+                            variant="ghost"
+                            mr={3}
+                            onClick={handleClose}
+                            isDisabled={isCreatingOrder}
+                        >
                             Cancel
                         </Button>
                         <Button
                             onClick={handleSave}
                             colorScheme="blue"
-                            isDisabled={!selectedSiteId && !selectedSite} // Disable if site not selected
+                            isDisabled={(!selectedSiteId && !selectedSite) || orderItems.length === 0 || isCreatingOrder}
+                            isLoading={isCreatingOrder}
+                            loadingText="Creating Order..."
                         >
                             Create Purchase Order
                         </Button>
@@ -329,7 +412,7 @@ export default function CreatePurchaseOrderModal({
             </Modal>
 
             {/* Add Item Modal */}
-            <Modal isOpen={isAddItemModalOpen} onClose={() => setIsAddItemModalOpen(false)} size="4xl">
+            <Modal isOpen={isAddItemModalOpen} onClose={handleCloseAddItemModal} size="4xl">
                 <ModalOverlay />
                 <ModalContent>
                     <ModalHeader>Add Items to Purchase Order</ModalHeader>
@@ -381,13 +464,15 @@ export default function CreatePurchaseOrderModal({
                                                     alignItems="center"
                                                     justifyContent="space-between"
                                                     p={2}
-                                                    _hover={{ bg: 'gray.100' }}
                                                     cursor="pointer"
                                                     onClick={() => handleAddItems([{ item, quantity: 1, price: item.unitPrice || 0 }])}
                                                 >
                                                     <Box>
                                                         <Text fontWeight="bold">{item.name}</Text>
                                                         <Text fontSize="sm">SKU: {item.sku}</Text>
+                                                        <Text fontSize="sm" color="gray.600">
+                                                            Category: {item.category?.title || 'Uncategorized'}
+                                                        </Text>
                                                     </Box>
                                                     <Button size="sm" colorScheme="blue">Add</Button>
                                                 </Flex>
@@ -398,7 +483,7 @@ export default function CreatePurchaseOrderModal({
                         </VStack>
                     </ModalBody>
                     <ModalFooter>
-                        <Button variant="ghost" ml={3} onClick={() => setIsAddItemModalOpen(false)}>
+                        <Button variant="ghost" ml={3} onClick={handleCloseAddItemModal}>
                             Close
                         </Button>
                     </ModalFooter>

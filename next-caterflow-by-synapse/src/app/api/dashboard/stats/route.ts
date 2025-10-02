@@ -3,6 +3,7 @@ import { calculateBulkStock } from '@/lib/stockCalculations';
 import { client } from '@/lib/sanity';
 import { groq } from 'next-sanity';
 import Decimal from 'decimal.js';
+import { getUserSiteInfo } from '@/lib/siteFiltering';
 
 // Cache for dashboard data
 const cache = new Map();
@@ -23,6 +24,7 @@ async function calculateTotalStockCount(siteIds: string[]): Promise<number> {
 export async function POST(request: NextRequest) {
     try {
         const { siteIds } = await request.json();
+        const userSiteInfo = await getUserSiteInfo(request);
 
         if (!siteIds || !Array.isArray(siteIds)) {
             return NextResponse.json(
@@ -31,8 +33,17 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Check cache
-        const cacheKey = JSON.stringify(siteIds.sort());
+        // Filter siteIds based on user permissions
+        let filteredSiteIds = siteIds;
+        if (!userSiteInfo.canAccessMultipleSites && userSiteInfo.userSiteId) {
+            filteredSiteIds = [userSiteInfo.userSiteId];
+        } else if (!userSiteInfo.canAccessMultipleSites && !userSiteInfo.userSiteId) {
+            // User has no site association and can't access multiple sites
+            filteredSiteIds = [];
+        }
+
+        // Check cache with filtered site IDs
+        const cacheKey = JSON.stringify(filteredSiteIds.sort());
         const cachedData = cache.get(cacheKey);
 
         if (cachedData && Date.now() - cachedData.timestamp < CACHE_TTL) {
@@ -45,7 +56,7 @@ export async function POST(request: NextRequest) {
         const startOfWeek = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
         const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
 
-        // Fetch all needed data in parallel - ADD totalStockCount HERE
+        // Fetch all needed data in parallel using filtered site IDs
         const [
             transactions,
             stockItems,
@@ -57,30 +68,30 @@ export async function POST(request: NextRequest) {
             draftOrdersCount,
             weeklyActivityCount,
             todayActivityCount,
-            totalStockCount // ← Add this line
+            totalStockCount
         ] = await Promise.all([
-            fetchTransactions(siteIds),
+            fetchTransactions(filteredSiteIds),
             fetchStockItems(),
-            fetchBins(siteIds),
-            countMonthlyReceipts(siteIds, startOfMonth),
-            countMonthlyDispatches(siteIds, startOfMonth),
-            countTodaysDispatches(siteIds, startOfToday),
-            countPendingTransfers(siteIds),
-            countDraftOrders(siteIds),
-            countWeeklyActivity(siteIds, startOfWeek),
-            countTodayActivity(siteIds, startOfToday),
-            calculateTotalStockCount(siteIds) // ← Add this line
+            fetchBins(filteredSiteIds),
+            countMonthlyReceipts(filteredSiteIds, startOfMonth),
+            countMonthlyDispatches(filteredSiteIds, startOfMonth),
+            countTodaysDispatches(filteredSiteIds, startOfToday),
+            countPendingTransfers(filteredSiteIds),
+            countDraftOrders(filteredSiteIds),
+            countWeeklyActivity(filteredSiteIds, startOfWeek),
+            countTodayActivity(filteredSiteIds, startOfToday),
+            calculateTotalStockCount(filteredSiteIds)
         ]);
 
         // Calculate low stock items using the original method
-        const [lowStockItemsCount, outOfStockItemsCount] = await calculateLowStockCounts(stockItems, bins, siteIds);
+        const [lowStockItemsCount, outOfStockItemsCount] = await calculateLowStockCounts(stockItems, bins, filteredSiteIds);
 
         const result = {
             transactions,
             stats: {
                 // Card 1: Receipts This Month
                 monthlyReceiptsCount,
-                receiptsTrend: await calculateReceiptsTrend(siteIds, startOfMonth),
+                receiptsTrend: await calculateReceiptsTrend(filteredSiteIds, startOfMonth),
 
                 // Card 2: Dispatches This Month
                 monthlyDispatchesCount,
@@ -100,7 +111,7 @@ export async function POST(request: NextRequest) {
                 todayActivityCount,
 
                 // Card 6: Total Stock Count (NEW)
-                totalStockCount // ← Add this line
+                totalStockCount
             }
         };
 
@@ -120,6 +131,7 @@ export async function POST(request: NextRequest) {
         );
     }
 }
+
 // Original low stock calculation method
 async function calculateLowStockCounts(stockItems: any[], bins: any[], siteIds: string[]) {
     // Filter bins to only include those from selected sites

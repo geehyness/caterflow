@@ -55,7 +55,7 @@ export default function DataTable({
     const [searchTerm, setSearchTerm] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(10);
-    const [sortColumn, setSortColumn] = useState<keyof PendingAction | null>(null); // Use keyof PendingAction
+    const [sortColumn, setSortColumn] = useState<string | null>(null); // Use keyof PendingAction
     const [sortDirection, setSortDirection] = useState<'asc' | 'desc' | null>(null);
     const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
 
@@ -215,11 +215,15 @@ export default function DataTable({
     };
 
     // Safe property access function
-    const getPropertyValue = (obj: PendingAction, key: string): any => {
-        if (key in obj) {
-            return obj[key as keyof PendingAction];
+    const getPropertyValue = (obj: any, key: string): any => {
+        if (!obj || !key) return undefined;
+
+        // Handle nested properties with dot notation
+        if (key.includes('.')) {
+            return key.split('.').reduce((o, i) => o?.[i], obj);
         }
-        return undefined;
+
+        return obj[key];
     };
 
     const processedData = useMemo(() => {
@@ -236,15 +240,38 @@ export default function DataTable({
                 if (aValue == null) return sortDirection === 'asc' ? 1 : -1;
                 if (bValue == null) return sortDirection === 'asc' ? -1 : 1;
 
+                // Handle string comparison
                 if (typeof aValue === 'string' && typeof bValue === 'string') {
                     return sortDirection === 'asc'
                         ? aValue.localeCompare(bValue)
                         : bValue.localeCompare(aValue);
                 }
+
+                // Handle number comparison
                 if (typeof aValue === 'number' && typeof bValue === 'number') {
                     return sortDirection === 'asc' ? aValue - bValue : bValue - aValue;
                 }
-                return 0; // Don't sort if types are not comparable
+
+                // Handle date comparison
+                if (aValue instanceof Date && bValue instanceof Date) {
+                    return sortDirection === 'asc'
+                        ? aValue.getTime() - bValue.getTime()
+                        : bValue.getTime() - aValue.getTime();
+                }
+
+                // Handle string dates
+                const aDate = new Date(aValue);
+                const bDate = new Date(bValue);
+                if (!isNaN(aDate.getTime()) && !isNaN(bDate.getTime())) {
+                    return sortDirection === 'asc'
+                        ? aDate.getTime() - bDate.getTime()
+                        : bDate.getTime() - aDate.getTime();
+                }
+
+                // Fallback: convert to string and compare
+                return sortDirection === 'asc'
+                    ? String(aValue).localeCompare(String(bValue))
+                    : String(bValue).localeCompare(String(aValue));
             });
         }
         return filtered;
@@ -268,12 +295,18 @@ export default function DataTable({
 
     const handleSort = (column: string, isSortable: boolean | undefined) => {
         if (!isSortable) return;
+
         if (sortColumn === column) {
+            // Toggle direction if same column
             setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
         } else {
-            setSortColumn(column as keyof PendingAction);
+            // New column, start with ascending
+            setSortColumn(column);
             setSortDirection('asc');
         }
+
+        // Reset to first page when sorting
+        setCurrentPage(1);
     };
 
     const renderSortIcon = (accessorKey: string) => {
@@ -375,9 +408,12 @@ export default function DataTable({
                                             key={column.accessorKey}
                                             onClick={() => handleSort(column.accessorKey, column.isSortable)}
                                             cursor={column.isSortable ? 'pointer' : 'default'}
-                                            _hover={{ bg: column.isSortable ? hoverBg : headerBg }}
+                                            _hover={{
+                                                bg: column.isSortable ? hoverBg : headerBg,
+                                            }}
                                             borderColor={borderColor}
                                             color={primaryTextColor}
+                                            userSelect="none"
                                         >
                                             <Flex alignItems="center">
                                                 {column.header}

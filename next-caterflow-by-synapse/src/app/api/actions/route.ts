@@ -4,10 +4,11 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from "next/server";
 import { unstable_noStore as noStore } from "next/cache";
 import { client } from "@/lib/sanity";
+import { getUserSiteInfo, buildTransactionSiteFilter } from '@/lib/siteFiltering';
 
 // Define separate GROQ queries for each document type
-const internalTransferQuery = `
-  *[ _type == "InternalTransfer" && (status == "pending" || status == "draft" || status == "pending-approval") ] {
+const internalTransferQuery = (siteFilter: string) => `
+  *[ _type == "InternalTransfer" && (status == "pending" || status == "draft" || status == "pending-approval") ${siteFilter} ] {
     _id,
     _type,
     _createdAt,
@@ -30,8 +31,8 @@ const internalTransferQuery = `
   }
 `;
 
-const purchaseOrderQuery = `
-  *[_type == "PurchaseOrder" && (status == "pending" || status == "draft" || status == "pending-approval") ] {
+const purchaseOrderQuery = (siteFilter: string) => `
+  *[_type == "PurchaseOrder" && (status == "pending" || status == "draft" || status == "pending-approval") ${siteFilter} ] {
     _id,
     _type,
     _createdAt,
@@ -60,8 +61,8 @@ const purchaseOrderQuery = `
   }
 `;
 
-const goodsReceiptQuery = `
-  *[ _type == "GoodsReceipt" && (status == "pending" || status == "draft" || status == "pending-approval") ] {
+const goodsReceiptQuery = (siteFilter: string) => `
+  *[ _type == "GoodsReceipt" && (status == "pending" || status == "draft" || status == "pending-approval") ${siteFilter} ] {
     _id,
     _type,
     _createdAt,
@@ -94,8 +95,8 @@ const goodsReceiptQuery = `
   }
 `;
 
-const stockAdjustmentQuery = `
-  *[ _type == "StockAdjustment" && (status == "pending" || status == "draft" || status == "pending-approval") ] {
+const stockAdjustmentQuery = (siteFilter: string) => `
+  *[ _type == "StockAdjustment" && (status == "pending" || status == "draft" || status == "pending-approval") ${siteFilter} ] {
     _id,
     _type,
     _createdAt,
@@ -130,11 +131,9 @@ const stockAdjustmentQuery = `
 `;
 
 export async function GET(request: Request) {
-  // Tell Next.js not to cache anything for this handler
   try {
     noStore();
   } catch (e) {
-    // unstable_noStore can throw in some environments; fail-safe: continue
     console.warn("noStore() call failed (non-fatal). Proceeding anyway.");
   }
 
@@ -147,21 +146,25 @@ export async function GET(request: Request) {
     console.log("➡️ /api/actions: Request received.");
     console.log("➡️ /api/actions: Fetching actions for:", { userId, userRole, userSite });
 
-    // Execute all queries concurrently (fresh fetches)
+    // Get user site info for filtering
+    const userSiteInfo = await getUserSiteInfo(request);
+    const siteFilter = buildTransactionSiteFilter(userSiteInfo);
+
+    // Execute all queries concurrently with site filtering
     const [transfers, purchaseOrders, goodsReceipts, stockAdjustments] = await Promise.all([
-      client.fetch(internalTransferQuery),
-      client.fetch(purchaseOrderQuery),
-      client.fetch(goodsReceiptQuery),
-      client.fetch(stockAdjustmentQuery),
+      client.fetch(internalTransferQuery(siteFilter)),
+      client.fetch(purchaseOrderQuery(siteFilter)),
+      client.fetch(goodsReceiptQuery(siteFilter)),
+      client.fetch(stockAdjustmentQuery(siteFilter)),
     ]);
 
     // Combine the results into a single array
     let actions = [...transfers, ...purchaseOrders, ...goodsReceipts, ...stockAdjustments];
     console.log(`✅ /api/actions: Raw actions from Sanity fetched. Count: ${actions.length}`);
 
-    // Filter actions based on user role and site
-    if (userRole === "admin") {
-      console.log("👤 User Role: Admin. No filtering applied.");
+    // Filter actions based on user role and site (additional client-side filtering if needed)
+    if (userRole === "admin" || userRole === "auditor" || userRole === "procurer") {
+      console.log("👤 User Role: Admin/Auditor/Procurer. No additional filtering applied.");
     } else if (["siteManager", "stockController", "dispatchStaff"].includes(userRole || "") && userSite) {
       actions = actions.filter((action: any) => {
         return action.site === userSite ||
@@ -169,8 +172,6 @@ export async function GET(request: Request) {
           action.toSite === userSite;
       });
       console.log(`👤 ${userRole}. Filtered actions for site ${userSite}: ${actions.length}`);
-    } else if (userRole === "auditor") {
-      console.log("👤 Auditor. No filtering applied.");
     } else {
       actions = [];
       console.log("⚠️ Unknown role or missing site. No actions returned.");

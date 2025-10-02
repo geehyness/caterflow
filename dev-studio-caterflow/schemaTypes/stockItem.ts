@@ -151,6 +151,26 @@ export default defineType({
             description: 'Suggested quantity to reorder when stock is low.',
             validation: (Rule) => Rule.min(0),
         }),
+        defineField({
+            name: 'primarySupplier',
+            title: 'Primary Supplier',
+            type: 'reference',
+            to: [{ type: 'Supplier' }],
+            description: 'The main supplier for this item.',
+            /*options: {
+                // This makes the primary supplier selection only show suppliers that are in the suppliers array
+                filter: ({ document }) => {
+                    if (!document?.suppliers) return {};
+                    
+                    return {
+                        filter: '_id in $supplierIds',
+                        params: {
+                            supplierIds: document.suppliers.map((supplier: any) => supplier._ref)
+                        }
+                    };
+                }
+            }*/
+        }),
     ],
     preview: {
         select: {

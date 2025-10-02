@@ -1,10 +1,12 @@
-import { NextRequest, NextResponse } from 'next/server';
+// src/app/api/goods-receipts/route.ts
+import { NextResponse } from 'next/server';
 import { client, writeClient } from '@/lib/sanity';
 import { groq } from 'next-sanity';
 import { logSanityInteraction } from '@/lib/sanityLogger';
 import { v4 as uuidv4 } from 'uuid';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
+import { getUserSiteInfo, buildTransactionSiteFilter } from '@/lib/siteFiltering';
 
 const getNextReceiptNumber = async (): Promise<string> => {
     try {
@@ -50,7 +52,10 @@ const getNextReceiptNumber = async (): Promise<string> => {
 
 export async function GET() {
     try {
-        const query = groq`*[_type == "GoodsReceipt"] | order(receiptDate desc) {
+        const userSiteInfo = await getUserSiteInfo();
+        const siteFilter = buildTransactionSiteFilter(userSiteInfo);
+
+        const query = groq`*[_type == "GoodsReceipt" ${siteFilter}] | order(receiptDate desc) {
             _id,
             receiptNumber,
             receiptDate,
@@ -106,7 +111,7 @@ export async function GET() {
     }
 }
 
-export async function POST(request: NextRequest) {
+export async function POST(request: Request) {
     try {
         const session = await getServerSession(authOptions);
 
@@ -119,6 +124,9 @@ export async function POST(request: NextRequest) {
 
         const payload = await request.json();
         const { _id, ...createData } = payload;
+
+        // Remove the site permission check entirely
+        // Users can now create goods receipts for any site
 
         const newDoc = {
             ...createData,

@@ -1,4 +1,3 @@
-// src/app/api/purchase-orders/route.ts
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
@@ -7,6 +6,9 @@ import { client, writeClient } from '@/lib/sanity';
 import { groq } from 'next-sanity';
 import { logSanityInteraction } from '@/lib/sanityLogger';
 import { nanoid } from 'nanoid';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
+import { getUserSiteInfo, buildSiteFilter } from '@/lib/siteFiltering';
 
 /**
  * Helper to set no-cache headers on a NextResponse
@@ -80,6 +82,10 @@ export async function GET(request: Request) {
         const id = searchParams.get('id');
         const status = searchParams.get('status');
 
+        // Get user site info for filtering
+        const userSiteInfo = await getUserSiteInfo(request);
+        const siteFilter = buildSiteFilter(userSiteInfo, 'site._ref');
+
         // GROQ query projection for purchase order details
         const purchaseOrderProjection = `{
             _id,
@@ -111,7 +117,7 @@ export async function GET(request: Request) {
 
         // If an ID is provided, fetch a specific purchase order
         if (id) {
-            const query = groq`*[_type == "PurchaseOrder" && _id == $id] ${purchaseOrderProjection}`;
+            const query = groq`*[_type == "PurchaseOrder" && _id == $id ${siteFilter}] ${purchaseOrderProjection}`;
             const purchaseOrder = await client.fetch(query, { id });
 
             if (!purchaseOrder || purchaseOrder.length === 0) {
@@ -119,10 +125,16 @@ export async function GET(request: Request) {
                 return setNoCache(res);
             }
 
+            // Check if user has permission to access this PO
+            if (!userSiteInfo.canAccessMultipleSites && purchaseOrder[0].site?._id !== userSiteInfo.userSiteId) {
+                const res = NextResponse.json({ error: 'Access denied to this purchase order' }, { status: 403 });
+                return setNoCache(res);
+            }
+
             // Manually get unique supplier names from the fetched data
             const suppliers = purchaseOrder[0].orderedItems
                 .map((item: any) => item.supplier?.name)
-                .filter((name: string | undefined) => name && name.trim() !== ''); // More robust filtering // More robust filtering
+                .filter((name: string | undefined) => name && name.trim() !== '');
 
             const uniqueSupplierNames = suppliers.length > 0
                 ? [...new Set(suppliers)].join(', ')
@@ -136,7 +148,7 @@ export async function GET(request: Request) {
         }
 
         // Build the base query - only filter by status if provided
-        let baseQuery = '*[_type == "PurchaseOrder"';
+        let baseQuery = `*[_type == "PurchaseOrder" ${siteFilter}`;
         const queryParams: any = {};
 
         // Add status filter if provided
@@ -178,11 +190,8 @@ export async function GET(request: Request) {
     }
 }
 
-
-
 /**
  * POST handler to create a new purchase order.
- * It also fetches current stock item prices and ensures suppliers are properly associated.
  */
 export async function POST(request: Request) {
     try {
@@ -191,6 +200,13 @@ export async function POST(request: Request) {
             noStore();
         } catch (e) {
             console.warn('noStore() failed (non-fatal). Continuing.');
+        }
+
+        const session = await getServerSession(authOptions);
+
+        if (!session?.user) {
+            const res = NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+            return setNoCache(res);
         }
 
         const {
@@ -203,6 +219,9 @@ export async function POST(request: Request) {
             site
         } = await request.json();
 
+        // Get user site info for permission checking
+        const userSiteInfo = await getUserSiteInfo(request);
+
         // --- 1. Basic Payload Validation ---
         if (!orderedBy || !site || !orderedItems || orderedItems.length === 0) {
             const res = NextResponse.json(
@@ -212,7 +231,16 @@ export async function POST(request: Request) {
             return setNoCache(res);
         }
 
-        // --- 2. Validate Items (supplier is now optional) ---
+        // --- 2. Check if user has permission to create PO for this site ---
+        if (!userSiteInfo.canAccessMultipleSites && site !== userSiteInfo.userSiteId) {
+            const res = NextResponse.json(
+                { error: 'Access denied to create purchase order for this site' },
+                { status: 403 }
+            );
+            return setNoCache(res);
+        }
+
+        // --- 3. Validate Items (supplier is now optional) ---
         for (const item of orderedItems) {
             // Only validate supplier if it's provided (supplier is now optional)
             if (item.supplier) {
@@ -231,7 +259,7 @@ export async function POST(request: Request) {
             }
         }
 
-        // --- 3. Construct Sanity Document (only after all validation passes) ---
+        // --- 4. Construct Sanity Document (only after all validation passes) ---
         const poDocument = {
             _type: 'PurchaseOrder',
             poNumber: poNumber || await getNextPONumber(),
@@ -265,7 +293,7 @@ export async function POST(request: Request) {
             _id: nanoid()
         };
 
-        // --- 4. Create document and return success response ---
+        // --- 5. Create document and return success response ---
         const result = await writeClient.create(poDocument);
 
         await logSanityInteraction(
@@ -273,7 +301,7 @@ export async function POST(request: Request) {
             `Created purchase order: ${poDocument.poNumber}`,
             'PurchaseOrder',
             result._id,
-            'system',
+            session.user.id,
             true
         );
 
@@ -305,14 +333,41 @@ export async function PATCH(request: Request) {
             console.warn('noStore() failed (non-fatal). Continuing.');
         }
 
+        const session = await getServerSession(authOptions);
+
+        if (!session?.user) {
+            const res = NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+            return setNoCache(res);
+        }
+
         const body = await request.json();
         const { _id, updateData } = body;
+        const userSiteInfo = await getUserSiteInfo(request);
 
         if (!_id || !updateData) {
             const res = NextResponse.json(
                 { error: 'Purchase order ID and update data are required' },
                 { status: 400 }
             );
+            return setNoCache(res);
+        }
+
+        // Check if PO exists and user has access
+        const existingPO = await client.fetch(
+            groq`*[_type == "PurchaseOrder" && _id == $id][0] {
+                _id,
+                site->_id
+            }`,
+            { id: _id }
+        );
+
+        if (!existingPO) {
+            const res = NextResponse.json({ error: 'Purchase order not found' }, { status: 404 });
+            return setNoCache(res);
+        }
+
+        if (!userSiteInfo.canAccessMultipleSites && existingPO.site._id !== userSiteInfo.userSiteId) {
+            const res = NextResponse.json({ error: 'Access denied to update this purchase order' }, { status: 403 });
             return setNoCache(res);
         }
 
@@ -359,7 +414,7 @@ export async function PATCH(request: Request) {
             `Updated purchase order: ${purchaseOrder.documentIds || _id}`,
             'PurchaseOrder',
             _id,
-            'system',
+            session.user.id,
             true
         );
 
@@ -387,14 +442,41 @@ export async function DELETE(request: Request) {
             console.warn('noStore() failed (non-fatal). Continuing.');
         }
 
+        const session = await getServerSession(authOptions);
+
+        if (!session?.user) {
+            const res = NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+            return setNoCache(res);
+        }
+
         const { searchParams } = new URL(request.url);
         const id = searchParams.get('id');
+        const userSiteInfo = await getUserSiteInfo(request);
 
         if (!id) {
             const res = NextResponse.json(
                 { error: 'Purchase order ID is required' },
                 { status: 400 }
             );
+            return setNoCache(res);
+        }
+
+        // Check if PO exists and user has access
+        const existingPO = await client.fetch(
+            groq`*[_type == "PurchaseOrder" && _id == $id][0] {
+                _id,
+                site->_id
+            }`,
+            { id }
+        );
+
+        if (!existingPO) {
+            const res = NextResponse.json({ error: 'Purchase order not found' }, { status: 404 });
+            return setNoCache(res);
+        }
+
+        if (!userSiteInfo.canAccessMultipleSites && existingPO.site._id !== userSiteInfo.userSiteId) {
+            const res = NextResponse.json({ error: 'Access denied to delete this purchase order' }, { status: 403 });
             return setNoCache(res);
         }
 
@@ -405,7 +487,7 @@ export async function DELETE(request: Request) {
             `Deleted purchase order: ${id}`,
             'PurchaseOrder',
             id,
-            'system',
+            session.user.id,
             true
         );
 

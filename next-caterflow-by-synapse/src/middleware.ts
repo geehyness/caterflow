@@ -10,22 +10,27 @@ export default withAuth(
     console.log(`[Middleware] Current Pathname: ${pathname}`);
     console.log(`[Middleware] Token: ${token ? 'Present' : 'Not Present'}`);
 
+    // Enhanced protected routes with expanded Stock Controller access
     const protectedRoutes = {
-      '/': ['admin', 'siteManager', 'stockController', 'dispatchStaff', 'auditor'],
-      '/actions': ['admin', 'siteManager', 'stockController', 'dispatchStaff'],
+      '/': ['admin', 'siteManager', 'stockController', 'auditor', 'procurer'],
+      '/actions': ['admin', 'siteManager', 'stockController'],
       '/approvals': ['admin', 'siteManager'],
       '/activity': ['admin', 'siteManager', 'stockController', 'auditor'],
-      '/low-stock': ['admin', 'siteManager', 'stockController', 'auditor'],
+      '/low-stock': ['admin', 'siteManager', 'stockController', 'auditor', 'procurer'],
       '/inventory': ['admin', 'siteManager', 'stockController', 'auditor'],
       '/operations/purchases': ['admin', 'siteManager', 'auditor'],
-      '/operations/receipts': ['admin', 'siteManager', 'auditor'],
-      '/operations/dispatches': ['admin', 'dispatchStaff', 'auditor'],
-      '/operations/transfers': ['admin', 'siteManager', 'dispatchStaff', 'auditor'],
+      '/operations/receipts': ['admin', 'siteManager', 'stockController', 'auditor'], // Added stockController
+      '/operations/dispatches': ['admin', 'stockController', 'auditor'], // Added stockController (view-only)
+      '/operations/transfers': ['admin', 'siteManager', 'stockController', 'auditor', 'procurer'],
       '/operations/counts': ['admin', 'siteManager', 'stockController', 'auditor'],
       '/operations/adjustments': ['admin', 'siteManager', 'stockController', 'auditor'],
+      '/operations/procurement': ['admin', 'procurer', 'stockController'], // Added stockController (view-only)
       '/reporting': ['admin', 'auditor'],
       '/admin': ['admin'],
-      '/dispatch-types': ['admin'], // ← Add this line
+      '/dispatch-types': ['admin'],
+      '/users': ['admin'],
+      '/locations': ['admin'],
+      '/suppliers': ['admin', 'procurer'],
     };
 
     const isProtectedRoute = Object.keys(protectedRoutes).some(
@@ -78,7 +83,9 @@ export const config = {
     '/operations/:path*',
     '/reporting',
     '/admin',
-    // Removed '/login' from here
-    '/dispatch-types', // ← Add this line
+    '/dispatch-types',
+    '/users',
+    '/locations',
+    '/suppliers',
   ],
 };

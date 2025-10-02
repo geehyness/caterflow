@@ -2,11 +2,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { client } from '@/lib/sanity';
 import { groq } from 'next-sanity';
+import { getUserSiteInfo, buildTransactionSiteFilter } from '@/lib/siteFiltering';
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const timeframe = searchParams.get('timeframe') || 'week';
+
+    // Get user site info for filtering
+    const userSiteInfo = await getUserSiteInfo(request);
+    const siteFilter = buildTransactionSiteFilter(userSiteInfo);
 
     // Calculate date range based on timeframe
     const now = new Date();
@@ -26,10 +31,10 @@ export async function GET(request: NextRequest) {
         startDate.setDate(now.getDate() - 7);
     }
 
-    // Enhanced query with more detailed information
+    // Enhanced query with more detailed information and site filtering
     const query = groq`
       {
-        "receipts": *[_type == "GoodsReceipt" && _createdAt >= $startDate] | order(_createdAt desc) {
+        "receipts": *[_type == "GoodsReceipt" && _createdAt >= $startDate ${siteFilter}] | order(_createdAt desc) {
           _id,
           _type,
           receiptNumber,
@@ -40,7 +45,7 @@ export async function GET(request: NextRequest) {
           "itemCount": count(receivedItems),
           "binName": receivingBin->name
         },
-        "dispatches": *[_type == "DispatchLog" && _createdAt >= $startDate] | order(_createdAt desc) {
+        "dispatches": *[_type == "DispatchLog" && _createdAt >= $startDate ${siteFilter}] | order(_createdAt desc) {
           _id,
           _type,
           dispatchNumber,
@@ -53,7 +58,7 @@ export async function GET(request: NextRequest) {
           "binName": sourceBin->name,
           "dispatchType": dispatchType->name
         },
-        "transfers": *[_type == "InternalTransfer" && _createdAt >= $startDate] | order(_createdAt desc) {
+        "transfers": *[_type == "InternalTransfer" && _createdAt >= $startDate ${siteFilter}] | order(_createdAt desc) {
           _id,
           _type,
           transferNumber,
@@ -65,7 +70,7 @@ export async function GET(request: NextRequest) {
           "fromBin": fromBin->name,
           "toBin": toBin->name
         },
-        "adjustments": *[_type == "StockAdjustment" && _createdAt >= $startDate] | order(_createdAt desc) {
+        "adjustments": *[_type == "StockAdjustment" && _createdAt >= $startDate ${siteFilter}] | order(_createdAt desc) {
           _id,
           _type,
           adjustmentNumber,
@@ -76,7 +81,7 @@ export async function GET(request: NextRequest) {
           "itemCount": count(adjustedItems),
           "binName": bin->name
         },
-        "inventoryCounts": *[_type == "InventoryCount" && _createdAt >= $startDate] | order(_createdAt desc) {
+        "inventoryCounts": *[_type == "InventoryCount" && _createdAt >= $startDate ${siteFilter}] | order(_createdAt desc) {
           _id,
           _type,
           countNumber,

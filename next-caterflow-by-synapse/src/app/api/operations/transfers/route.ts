@@ -4,6 +4,7 @@ import { groq } from 'next-sanity';
 import { logSanityInteraction } from '@/lib/sanityLogger';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
+import { getUserSiteInfo, buildTransactionSiteFilter } from '@/lib/siteFiltering';
 
 // Helper function to generate the next unique transfer number
 const getNextTransferNumber = async (): Promise<string> => {
@@ -31,25 +32,21 @@ const getNextTransferNumber = async (): Promise<string> => {
     }
 };
 
-// Helper to get current user from session
-async function getCurrentUser(request: Request) {
-    // For API routes, we need to manually get the session
-    // This is a workaround since getServerSession doesn't work directly in Next.js 13+ API routes
-    const session = await getServerSession(authOptions);
-    return session?.user;
-}
-
 export async function GET(request: Request) {
     try {
         const { searchParams } = new URL(request.url);
         const status = searchParams.get('status');
+
+        // Get user site info for filtering
+        const userSiteInfo = await getUserSiteInfo(request);
+        const siteFilter = buildTransactionSiteFilter(userSiteInfo);
 
         let statusFilter = '';
         if (status) {
             statusFilter = `&& status == "${status}"`;
         }
 
-        const query = groq`*[_type == "InternalTransfer" ${statusFilter}] | order(transferDate desc) {
+        const query = groq`*[_type == "InternalTransfer" ${statusFilter} ${siteFilter}] | order(transferDate desc) {
             _id,
             transferNumber,
             transferDate,
@@ -58,12 +55,12 @@ export async function GET(request: Request) {
             "fromBin": fromBin->{
                 _id,
                 name,
-                "site": site->{name}
+                "site": site->{name, _id}
             },
             "toBin": toBin->{
                 _id,
                 name,
-                "site": site->{name}
+                "site": site->{name, _id}
             },
             "transferredBy": transferredBy->{_id, name, email},
             "approvedBy": approvedBy->{_id, name, email},
@@ -95,10 +92,40 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const user = await getCurrentUser(request);
+        const session = await getServerSession(authOptions);
+        const userSiteInfo = await getUserSiteInfo(request);
 
-        if (!user) {
+        if (!session?.user) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
+        // Check if user has permission to create transfers for these bins
+        if (body.fromBin) {
+            const fromBin = await client.fetch(
+                groq`*[_type == "Bin" && _id == $binId][0] { "siteId": site->_id }`,
+                { binId: body.fromBin._id || body.fromBin }
+            );
+
+            if (!userSiteInfo.canAccessMultipleSites && fromBin?.siteId !== userSiteInfo.userSiteId) {
+                return NextResponse.json(
+                    { error: 'Access denied to create transfer from this bin' },
+                    { status: 403 }
+                );
+            }
+        }
+
+        if (body.toBin) {
+            const toBin = await client.fetch(
+                groq`*[_type == "Bin" && _id == $binId][0] { "siteId": site->_id }`,
+                { binId: body.toBin._id || body.toBin }
+            );
+
+            if (!userSiteInfo.canAccessMultipleSites && toBin?.siteId !== userSiteInfo.userSiteId) {
+                return NextResponse.json(
+                    { error: 'Access denied to create transfer to this bin' },
+                    { status: 403 }
+                );
+            }
         }
 
         // Generate a unique transfer number
@@ -130,7 +157,7 @@ export async function POST(request: Request) {
             },
             transferredBy: {
                 _type: 'reference',
-                _ref: user.id,
+                _ref: session.user.id,
             },
             transferredItems,
             notes: body.notes || '',
@@ -143,7 +170,7 @@ export async function POST(request: Request) {
             `Created transfer: ${transferNumber}`,
             'InternalTransfer',
             result._id,
-            user.id || 'system',
+            session.user.id,
             true
         );
 
@@ -161,9 +188,10 @@ export async function PATCH(request: Request) {
     try {
         const body = await request.json();
         const { _id, fromBin, toBin, transferredItems, items, ...updateData } = body;
-        const user = await getCurrentUser(request);
+        const session = await getServerSession(authOptions);
+        const userSiteInfo = await getUserSiteInfo(request);
 
-        if (!user) {
+        if (!session?.user) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
@@ -175,13 +203,26 @@ export async function PATCH(request: Request) {
         const currentTransfer = await client.fetch(
             groq`*[_type == "InternalTransfer" && _id == $_id][0] {
                 status,
-                transferNumber
+                transferNumber,
+                "fromSiteId": fromBin->site->_id,
+                "toSiteId": toBin->site->_id
             }`,
             { _id }
         );
 
         if (!currentTransfer) {
             return NextResponse.json({ error: 'Transfer not found' }, { status: 404 });
+        }
+
+        // Check if user has permission to update this transfer
+        const canAccessFromSite = userSiteInfo.canAccessMultipleSites || currentTransfer.fromSiteId === userSiteInfo.userSiteId;
+        const canAccessToSite = userSiteInfo.canAccessMultipleSites || currentTransfer.toSiteId === userSiteInfo.userSiteId;
+
+        if (!canAccessFromSite && !canAccessToSite) {
+            return NextResponse.json(
+                { error: 'Access denied to update this transfer' },
+                { status: 403 }
+            );
         }
 
         // Enforce workflow rules - only allow editing drafts and pending-approval
@@ -209,7 +250,7 @@ export async function PATCH(request: Request) {
         if (patchedData.status === 'approved') {
             patchedData.approvedBy = {
                 _type: 'reference',
-                _ref: user.id,
+                _ref: session.user.id,
             };
             patchedData.approvedAt = new Date().toISOString();
         }
@@ -260,7 +301,7 @@ export async function PATCH(request: Request) {
             `Updated transfer: ${currentTransfer.transferNumber || _id}`,
             'InternalTransfer',
             _id,
-            user.id || 'system',
+            session.user.id,
             true
         );
 
@@ -278,9 +319,10 @@ export async function DELETE(request: Request) {
     try {
         const { searchParams } = new URL(request.url);
         const id = searchParams.get('id');
-        const user = await getCurrentUser(request);
+        const session = await getServerSession(authOptions);
+        const userSiteInfo = await getUserSiteInfo(request);
 
-        if (!user) {
+        if (!session?.user) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
@@ -291,9 +333,14 @@ export async function DELETE(request: Request) {
             );
         }
 
-        // Check if transfer can be deleted (only drafts)
+        // Check if transfer exists and user has access
         const currentTransfer = await client.fetch(
-            groq`*[_type == "InternalTransfer" && _id == $id][0] { status, transferNumber }`,
+            groq`*[_type == "InternalTransfer" && _id == $id][0] { 
+                status, 
+                transferNumber,
+                "fromSiteId": fromBin->site->_id,
+                "toSiteId": toBin->site->_id
+            }`,
             { id }
         );
 
@@ -301,6 +348,18 @@ export async function DELETE(request: Request) {
             return NextResponse.json({ error: 'Transfer not found' }, { status: 404 });
         }
 
+        // Check if user has permission to delete this transfer
+        const canAccessFromSite = userSiteInfo.canAccessMultipleSites || currentTransfer.fromSiteId === userSiteInfo.userSiteId;
+        const canAccessToSite = userSiteInfo.canAccessMultipleSites || currentTransfer.toSiteId === userSiteInfo.userSiteId;
+
+        if (!canAccessFromSite && !canAccessToSite) {
+            return NextResponse.json(
+                { error: 'Access denied to delete this transfer' },
+                { status: 403 }
+            );
+        }
+
+        // Check if transfer can be deleted (only drafts)
         if (currentTransfer.status !== 'draft') {
             return NextResponse.json(
                 { error: 'Only draft transfers can be deleted' },
@@ -315,7 +374,7 @@ export async function DELETE(request: Request) {
             `Deleted transfer: ${currentTransfer.transferNumber || id}`,
             'InternalTransfer',
             id,
-            user.id || 'system',
+            session.user.id,
             true
         );
 

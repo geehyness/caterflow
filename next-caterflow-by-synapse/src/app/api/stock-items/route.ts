@@ -1,6 +1,6 @@
 // app/api/stock-items/route.ts
 import { NextResponse } from 'next/server';
-import { client } from '@/lib/sanity';
+import { client, writeClient } from '@/lib/sanity'; // Import writeClient
 
 export async function GET(request: Request) {
     try {
@@ -43,30 +43,54 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
     try {
         const body = await request.json();
+        console.log('Received POST data:', body);
+
         const { name, sku, minimumStockLevel, category, primarySupplier, unitOfMeasure } = body;
 
-        const document = {
+        // Validate required fields
+        if (!name || !sku || !category || !unitOfMeasure) {
+            return NextResponse.json(
+                { error: 'Missing required fields: name, sku, category, and unitOfMeasure are required' },
+                { status: 400 }
+            );
+        }
+
+        const document: any = {
             _type: 'StockItem',
-            name,
-            sku,
-            minimumStockLevel: Number(minimumStockLevel),
+            name: name.trim(),
+            sku: sku.trim(),
+            minimumStockLevel: Number(minimumStockLevel) || 0,
             unitOfMeasure,
             category: {
                 _type: 'reference',
                 _ref: category,
             },
-            primarySupplier: primarySupplier ? {
-                _type: 'reference',
-                _ref: primarySupplier,
-            } : undefined,
+            suppliers: [],
         };
 
-        const result = await client.create(document);
+        // Only add primarySupplier if provided and not empty
+        if (primarySupplier && primarySupplier.trim() !== '') {
+            document.primarySupplier = {
+                _type: 'reference',
+                _ref: primarySupplier,
+            };
+            // Also add the primary supplier to the suppliers array
+            document.suppliers = [{
+                _type: 'reference',
+                _ref: primarySupplier,
+            }];
+        }
+
+        console.log('Creating document:', document);
+        // Use writeClient instead of client for write operations
+        const result = await writeClient.create(document);
+        console.log('Creation successful:', result);
+
         return NextResponse.json(result);
     } catch (error) {
         console.error('Failed to create stock item:', error);
         return NextResponse.json(
-            { error: 'Failed to create stock item' },
+            { error: `Failed to create stock item: ${error instanceof Error ? error.message : 'Unknown error'}` },
             { status: 500 }
         );
     }
@@ -75,29 +99,62 @@ export async function POST(request: Request) {
 export async function PUT(request: Request) {
     try {
         const body = await request.json();
+        console.log('Received PUT data:', body);
+
         const { _id, name, sku, minimumStockLevel, category, primarySupplier, unitOfMeasure } = body;
 
-        const document = {
-            name,
-            sku,
-            minimumStockLevel: Number(minimumStockLevel),
+        if (!_id) {
+            return NextResponse.json(
+                { error: 'Missing _id for update' },
+                { status: 400 }
+            );
+        }
+
+        // Validate required fields
+        if (!name || !sku || !category || !unitOfMeasure) {
+            return NextResponse.json(
+                { error: 'Missing required fields: name, sku, category, and unitOfMeasure are required' },
+                { status: 400 }
+            );
+        }
+
+        const document: any = {
+            name: name.trim(),
+            sku: sku.trim(),
+            minimumStockLevel: Number(minimumStockLevel) || 0,
             unitOfMeasure,
             category: {
                 _type: 'reference',
                 _ref: category,
             },
-            primarySupplier: primarySupplier ? {
-                _type: 'reference',
-                _ref: primarySupplier,
-            } : undefined,
         };
 
-        const result = await client.patch(_id).set(document).commit();
+        // Handle primarySupplier
+        if (primarySupplier && primarySupplier.trim() !== '') {
+            document.primarySupplier = {
+                _type: 'reference',
+                _ref: primarySupplier,
+            };
+            // Ensure the primary supplier is in the suppliers array
+            document.suppliers = [{
+                _type: 'reference',
+                _ref: primarySupplier,
+            }];
+        } else {
+            // To remove the primary supplier
+            document.primarySupplier = undefined;
+        }
+
+        console.log('Updating document:', document);
+        // Use writeClient instead of client for write operations
+        const result = await writeClient.patch(_id).set(document).commit();
+        console.log('Update successful:', result);
+
         return NextResponse.json(result);
     } catch (error) {
         console.error('Failed to update stock item:', error);
         return NextResponse.json(
-            { error: 'Failed to update stock item' },
+            { error: `Failed to update stock item: ${error instanceof Error ? error.message : 'Unknown error'}` },
             { status: 500 }
         );
     }

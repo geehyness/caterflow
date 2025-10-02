@@ -3,11 +3,19 @@ import { NextResponse } from 'next/server';
 import { client, writeClient } from '@/lib/sanity';
 import { groq } from 'next-sanity';
 import { logSanityInteraction } from '@/lib/sanityLogger';
-
+import { getUserSiteInfo, buildBinSiteFilter } from '@/lib/siteFiltering';
 
 export async function GET() {
     try {
-        const query = groq`*[_type == "InventoryCount"] | order(countDate desc) {
+        console.log('🔍 Starting bin counts fetch...');
+        const userSiteInfo = await getUserSiteInfo();
+        console.log('👤 User site info:', userSiteInfo);
+
+        const siteFilter = buildBinSiteFilter(userSiteInfo);
+        console.log('🎯 Site filter:', siteFilter);
+
+        // Fixed GROQ query with proper field paths
+        const query = groq`*[_type == "InventoryCount" ${siteFilter}] | order(countDate desc) {
             _id,
             countNumber,
             countDate,
@@ -38,7 +46,9 @@ export async function GET() {
             }
         }`;
 
+        console.log('📊 Executing GROQ query...');
         const binCounts = await client.fetch(query);
+        console.log('✅ Found bin counts:', binCounts?.length || 0);
 
         const countsWithTotals = binCounts.map((count: any) => {
             const totalItems = count.countedItems?.length || 0;
@@ -50,9 +60,10 @@ export async function GET() {
             };
         });
 
+        console.log('📦 Returning counts with totals');
         return NextResponse.json(countsWithTotals);
     } catch (error) {
-        console.error('Failed to fetch bin counts:', error);
+        console.error('❌ Failed to fetch bin counts:', error);
         return NextResponse.json(
             { error: 'Failed to fetch bin counts' },
             { status: 500 }

@@ -192,20 +192,18 @@ export default function ProcurementPage() {
                 body: JSON.stringify({ itemId, supplierId }),
             });
 
-            const contentType = resp.headers.get('content-type');
-            if (!contentType || !contentType.includes('application/json')) {
-                throw new Error('Server returned non-JSON response');
+            if (!resp.ok) {
+                const errorData = await resp.json().catch(() => ({}));
+                // If supplier already exists, that's fine - we can continue
+                if (errorData.error && errorData.error.includes('already exists')) {
+                    return { success: true, message: 'Supplier already exists' };
+                }
+                throw new Error(errorData.error || 'Failed to add supplier to stock item');
             }
 
             const json = await resp.json();
 
-            if (!resp.ok) {
-                if (json?.error && json.error.includes('already exists')) {
-                    return json;
-                }
-                throw new Error(json?.error || 'Failed to add supplier to stock item');
-            }
-
+            // Update local state to reflect the change
             setStockItems(prev => {
                 const s = prev[itemId];
                 if (!s) return prev;
@@ -349,8 +347,16 @@ export default function ProcurementPage() {
             initialSuppliers[item._key] = item.supplier?._id;
             initialPrices[item._key] = item.unitPrice > 0 ? item.unitPrice * item.orderedQuantity : undefined;
 
-            const isPrimary = !!(itemDetails?.primarySupplier?._id && item.supplier?._id === itemDetails.primarySupplier._id);
+            // Check if the selected supplier is the primary supplier
+            const selectedSupplierId = item.supplier?._id;
+            const isPrimary = !!(itemDetails?.primarySupplier?._id && selectedSupplierId === itemDetails.primarySupplier._id);
             initialDefaultFlags[item._key] = isPrimary;
+
+            // If we have item details but no supplier is selected yet, pre-select the primary supplier if it exists
+            if (itemDetails?.primarySupplier && !selectedSupplierId) {
+                initialSuppliers[item._key] = itemDetails.primarySupplier._id;
+                initialDefaultFlags[item._key] = true;
+            }
         }
 
         setEditedSuppliers(initialSuppliers);
@@ -370,15 +376,37 @@ export default function ProcurementPage() {
         }
     };
 
+    // Add this function with your other helper functions
+    const formatCurrencyInput = (value: string) => {
+        if (!value) return '';
+
+        // Remove any non-numeric characters except decimal point
+        const cleaned = value.replace(/[^\d.]/g, '');
+
+        // Ensure only one decimal point
+        const parts = cleaned.split('.');
+        if (parts.length > 2) {
+            return parts[0] + '.' + parts.slice(1).join('');
+        }
+
+        // Limit to 2 decimal places
+        if (parts[1] && parts[1].length > 2) {
+            return parts[0] + '.' + parts[1].substring(0, 2);
+        }
+
+        return cleaned;
+    };
+
+    // Update your handlePriceChange function to use this formatter:
     const handlePriceChange = (itemKey: string, value: string) => {
-        const valueAsNumber = parseFloat(value);
+        const formattedValue = formatCurrencyInput(value);
+        const valueAsNumber = parseFloat(formattedValue);
         setEditedPrices(prev => ({ ...prev, [itemKey]: isNaN(valueAsNumber) ? undefined : valueAsNumber }));
     };
 
     const handleDefaultSupplierToggle = async (itemKey: string, stockItemId: string, checked: boolean) => {
-        setDefaultSupplierFlags(prev => ({ ...prev, [itemKey]: checked }));
-
         const supplierId = editedSuppliers[itemKey];
+
         if (!supplierId) {
             toast({
                 title: 'Select supplier first',
@@ -392,10 +420,14 @@ export default function ProcurementPage() {
         }
 
         try {
+            // First ensure the supplier is added to the stock item
             await addSupplierToStockItem(stockItemId, supplierId);
 
             if (checked) {
+                // Set as primary supplier
                 await setPrimarySupplierAPI(stockItemId, supplierId);
+                setDefaultSupplierFlags(prev => ({ ...prev, [itemKey]: true }));
+
                 toast({
                     title: 'Default supplier set',
                     description: 'Primary supplier updated for this item.',
@@ -404,7 +436,10 @@ export default function ProcurementPage() {
                     isClosable: true,
                 });
             } else {
+                // Unset primary supplier
                 await unsetPrimarySupplierAPI(stockItemId);
+                setDefaultSupplierFlags(prev => ({ ...prev, [itemKey]: false }));
+
                 toast({
                     title: 'Default supplier unset',
                     description: 'Primary supplier removed for this item.',
@@ -413,6 +448,10 @@ export default function ProcurementPage() {
                     isClosable: true,
                 });
             }
+
+            // Refresh the stock item data to reflect changes
+            await fetchStockItemDetails(stockItemId);
+
         } catch (err: any) {
             console.error(err);
             toast({
@@ -422,6 +461,7 @@ export default function ProcurementPage() {
                 duration: 4000,
                 isClosable: true,
             });
+            // Revert the toggle state on error
             setDefaultSupplierFlags(prev => ({ ...prev, [itemKey]: !checked }));
         }
     };
@@ -461,6 +501,7 @@ export default function ProcurementPage() {
         {
             accessorKey: 'actions',
             header: 'Actions',
+            isSortable: false, // Actions column should not be sortable
             cell: (row: PurchaseOrder) => (
                 <Button
                     size="sm"
@@ -475,6 +516,7 @@ export default function ProcurementPage() {
         {
             accessorKey: 'poNumber',
             header: 'PO Number',
+            isSortable: true, // Enable sorting for PO numbers
             cell: (row: PurchaseOrder) => (
                 <Text fontWeight="bold" color={primaryTextColor}>{row.poNumber}</Text>
             )
@@ -482,6 +524,7 @@ export default function ProcurementPage() {
         {
             accessorKey: 'status',
             header: 'Status',
+            isSortable: true, // Enable sorting for status
             cell: (row: PurchaseOrder) => (
                 <Badge colorScheme={getStatusColor(row.status)} variant="subtle">
                     {row.status.toUpperCase()}
@@ -489,13 +532,15 @@ export default function ProcurementPage() {
             )
         },
         {
-            accessorKey: 'site',
+            accessorKey: 'site.name',
             header: 'Site',
+            isSortable: true, // Enable sorting for site names
             cell: (row: PurchaseOrder) => <Text color={secondaryTextColor}>{row.site?.name || 'N/A'}</Text>
         },
         {
             accessorKey: 'items',
             header: 'Items',
+            isSortable: false, // Complex items column - disable sorting
             cell: (row: PurchaseOrder) => (
                 <VStack align="start" spacing={1}>
                     {row.orderedItems.map(item => (
@@ -521,15 +566,41 @@ export default function ProcurementPage() {
         {
             accessorKey: 'totalAmount',
             header: 'Total Amount',
+            isSortable: true, // Enable sorting for amounts
             cell: (row: PurchaseOrder) => <Text color={primaryTextColor}>E {row.totalAmount?.toFixed(2)}</Text>
         },
         {
             accessorKey: 'orderDate',
             header: 'Order Date',
+            isSortable: true, // Enable sorting for dates
             cell: (row: PurchaseOrder) => <Text color={secondaryTextColor}>{new Date(row.orderDate).toLocaleDateString()}</Text>
         },
-    ], [handleEditPO, primaryTextColor, secondaryTextColor]);
+        {
+            accessorKey: 'orderedItems.length',
+            header: 'Item Count',
+            isSortable: true, // Enable sorting for item counts
+            cell: (row: PurchaseOrder) => <Text color={secondaryTextColor}>{row.orderedItems?.length || 0} items</Text>
+        },
+        {
+            accessorKey: 'supplier.name',
+            header: 'Supplier',
+            isSortable: true, // Enable sorting for supplier names
+            cell: (row: PurchaseOrder) => {
+                // Get the primary supplier from the first item, or show multiple
+                const primarySupplier = row.orderedItems[0]?.supplier?.name;
+                const uniqueSuppliers = [...new Set(row.orderedItems.map(item => item.supplier?.name).filter(Boolean))];
 
+                if (uniqueSuppliers.length === 0) return <Text color={secondaryTextColor}>No Supplier</Text>;
+                if (uniqueSuppliers.length === 1) return <Text color={secondaryTextColor}>{primarySupplier}</Text>;
+
+                return (
+                    <Text color={secondaryTextColor}>
+                        {primarySupplier} +{uniqueSuppliers.length - 1} more
+                    </Text>
+                );
+            }
+        }
+    ], [handleEditPO, primaryTextColor, secondaryTextColor]);
 
     // Add this function after handleProcessPO
     const handleSaveChanges = async () => {
@@ -537,6 +608,23 @@ export default function ProcurementPage() {
         setSaving(true);
 
         try {
+            // First, ensure all suppliers are added to stock items
+            for (const item of selectedPO.orderedItems) {
+                const supplierId = editedSuppliers[item._key] ?? item.supplier?._id;
+
+                if (supplierId) {
+                    // Add supplier to stock item's suppliers list
+                    await addSupplierToStockItem(item.stockItem._id, supplierId);
+
+                    // Set as primary supplier if marked as default
+                    const isDefault = defaultSupplierFlags[item._key];
+                    if (isDefault) {
+                        await setPrimarySupplierAPI(item.stockItem._id, supplierId);
+                    }
+                }
+            }
+
+            // Then update purchase order items
             const updates = selectedPO.orderedItems.map(item => {
                 const supplierId = editedSuppliers[item._key] ?? item.supplier?._id;
                 const totalPrice = editedPrices[item._key];
@@ -591,7 +679,23 @@ export default function ProcurementPage() {
         setProcessing(true);
 
         try {
-            // First, save all the changes to the purchase order items
+            // First, ensure all suppliers are added to stock items and set as primary if needed
+            for (const item of selectedPO.orderedItems) {
+                const supplierId = editedSuppliers[item._key] ?? item.supplier?._id;
+
+                if (supplierId) {
+                    // Add supplier to stock item's suppliers list
+                    await addSupplierToStockItem(item.stockItem._id, supplierId);
+
+                    // Set as primary supplier if marked as default
+                    const isDefault = defaultSupplierFlags[item._key];
+                    if (isDefault) {
+                        await setPrimarySupplierAPI(item.stockItem._id, supplierId);
+                    }
+                }
+            }
+
+            // Then, update purchase order items with supplier and price information
             const updates = selectedPO.orderedItems.map(item => {
                 const supplierId = editedSuppliers[item._key] ?? item.supplier?._id;
                 const totalPrice = editedPrices[item._key];
@@ -606,7 +710,7 @@ export default function ProcurementPage() {
             // Update the purchase order items
             await updatePurchaseOrderItems(selectedPO._id, updates);
 
-            // Then update the stock items with the new prices
+            // Update stock item prices
             for (const item of selectedPO.orderedItems) {
                 const totalPrice = editedPrices[item._key];
                 if (totalPrice) {
@@ -777,14 +881,13 @@ export default function ProcurementPage() {
                                                         </Td>
                                                         <Td borderColor={borderColor}>
                                                             <Input
-                                                                value={totalPriceValue === 0 || totalPriceValue === undefined ? '' : totalPriceValue.toFixed(2)} onChange={(e) => handlePriceChange(item._key, e.target.value)}
+                                                                value={totalPriceValue === 0 || totalPriceValue === undefined ? '' : totalPriceValue.toFixed(2).toString()}
+                                                                onChange={(e) => handlePriceChange(item._key, e.target.value)}
                                                                 type="number"
-                                                                step="0.01"
+                                                                step="0.1"
                                                                 min="0"
                                                                 size="sm"
-                                                                placeholder="0.00"
-                                                                borderColor={borderColor}
-                                                                _focus={{ borderColor: accentColor }}
+                                                                width="100px"
                                                             />
                                                             {rowError && rowError !== 'No supplier selected' && (
                                                                 <Text fontSize="xs" color={errorTextColor}>{rowError}</Text>

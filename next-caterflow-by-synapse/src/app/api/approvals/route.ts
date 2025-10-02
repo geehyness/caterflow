@@ -2,10 +2,11 @@
 import { NextResponse } from 'next/server';
 import { client } from '@/lib/sanity';
 import { groq } from 'next-sanity';
+import { getUserSiteInfo, buildSiteFilter, buildTransactionSiteFilter } from '@/lib/siteFiltering';
 
 // Purchase orders pending approval
-const purchaseOrderApprovalQuery = groq`
-  *[_type == "PurchaseOrder" && status == "pending-approval"] {
+const purchaseOrderApprovalQuery = (siteFilter: string) => groq`
+  *[_type == "PurchaseOrder" && status == "pending-approval" ${siteFilter}] {
     _id,
     _type,
     _createdAt,
@@ -27,8 +28,8 @@ const purchaseOrderApprovalQuery = groq`
 `;
 
 // Internal transfers pending approval
-const internalTransferApprovalQuery = groq`
-  *[_type == "InternalTransfer" && status == "pending-approval"] {
+const internalTransferApprovalQuery = (siteFilter: string) => groq`
+  *[_type == "InternalTransfer" && status == "pending-approval" ${siteFilter}] {
     _id,
     _type,
     _createdAt,
@@ -48,9 +49,17 @@ export async function GET(request: Request) {
         const userSite = searchParams.get('userSite');
         const userRole = searchParams.get('userRole');
 
+        // Get user site info for filtering
+        const userSiteInfo = await getUserSiteInfo(request);
+
+        // For purchase orders
+        const poSiteFilter = buildSiteFilter(userSiteInfo, 'site._ref');
+        // For transfers
+        const transferSiteFilter = buildTransactionSiteFilter(userSiteInfo);
+
         const [purchaseOrders, internalTransfers] = await Promise.all([
-            client.fetch(purchaseOrderApprovalQuery),
-            client.fetch(internalTransferApprovalQuery),
+            client.fetch(purchaseOrderApprovalQuery(poSiteFilter)),
+            client.fetch(internalTransferApprovalQuery(transferSiteFilter)),
         ]);
 
         let approvals = [...purchaseOrders, ...internalTransfers];
@@ -75,9 +84,9 @@ export async function GET(request: Request) {
             return approval;
         });
 
-        // Filter by role/site
-        if (userRole === 'admin' || userRole === 'auditor') {
-            // no filter
+        // Additional client-side filtering by role/site if needed
+        if (userRole === 'admin' || userRole === 'auditor' || userRole === 'procurer') {
+            // no additional filter - already handled by GROQ query
         } else if (userRole === 'siteManager' && userSite) {
             approvals = approvals.filter((approval: any) => {
                 if (approval._type === 'PurchaseOrder') {

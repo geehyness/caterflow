@@ -218,6 +218,7 @@ export default function GoodsReceiptsPage() {
         {
             accessorKey: 'workflowAction',
             header: 'Action',
+            isSortable: false, // Actions column should not be sortable
             cell: (row: any) => {
                 const isCompleted = row.status === 'completed';
                 return (
@@ -236,16 +237,19 @@ export default function GoodsReceiptsPage() {
         {
             accessorKey: 'receiptNumber',
             header: 'Receipt Number',
+            isSortable: true, // Enable sorting for receipt numbers
             cell: (row: any) => <Text fontWeight="bold" color={primaryTextColor}>{row.receiptNumber || 'N/A'}</Text>,
         },
         {
-            accessorKey: 'poNumber',
+            accessorKey: 'purchaseOrder.poNumber',
             header: 'PO Number',
+            isSortable: true, // Enable sorting for PO numbers
             cell: (row: any) => <Text color={secondaryTextColor}>{getPopulatedData(row.purchaseOrder, 'poNumber') || 'N/A'}</Text>,
         },
         {
             accessorKey: 'status',
             header: 'Status',
+            isSortable: true, // Enable sorting for status
             cell: (row: any) => (
                 <Badge colorScheme={getStatusColor(row.status)} variant="subtle">
                     {row.status.replace('-', ' ').toUpperCase()}
@@ -255,14 +259,49 @@ export default function GoodsReceiptsPage() {
         {
             accessorKey: 'receiptDate',
             header: 'Receipt Date',
+            isSortable: true, // Enable sorting for dates
             cell: (row: any) => <Text color={secondaryTextColor}>{new Date(row.receiptDate).toLocaleDateString()}</Text>,
         },
+        {
+            accessorKey: 'supplier.name',
+            header: 'Supplier',
+            isSortable: true, // Enable sorting for supplier names
+            cell: (row: any) => {
+                const supplierName = getPopulatedData(row.purchaseOrder?.supplier, 'name');
+                return <Text color={secondaryTextColor}>{supplierName || 'N/A'}</Text>;
+            },
+        },
+        {
+            accessorKey: 'site.name',
+            header: 'Site',
+            isSortable: true, // Enable sorting for site names
+            cell: (row: any) => {
+                const siteName = getPopulatedData(row.purchaseOrder?.site, 'name');
+                return <Text color={primaryTextColor}>{siteName || 'N/A'}</Text>;
+            },
+        },
+        {
+            accessorKey: 'receivedItems.length',
+            header: 'Items Received',
+            isSortable: true, // Enable sorting for item counts
+            cell: (row: any) => {
+                const itemCount = row.receivedItems?.length || 0;
+                return <Text color={secondaryTextColor}>{itemCount} items</Text>;
+            },
+        },
+        {
+            accessorKey: 'totalAmount',
+            header: 'Total Amount',
+            isSortable: true, // Enable sorting for amounts
+            cell: (row: any) => <Text color={primaryTextColor}>E {(row.totalAmount || 0).toFixed(2)}</Text>
+        }
     ];
 
     const poSelectionColumns = [
         {
             accessorKey: 'receiveAction',
             header: 'Action',
+            isSortable: false, // Actions column should not be sortable
             cell: (row: any) => (
                 <Button
                     size="sm"
@@ -277,25 +316,37 @@ export default function GoodsReceiptsPage() {
         {
             accessorKey: 'poNumber',
             header: 'PO Number',
-            isSortable: true,
+            isSortable: true, // Enable sorting for PO numbers
             cell: (row: any) => <Text fontWeight="bold" color={primaryTextColor}>{row.poNumber || 'N/A'}</Text>
         },
         {
-            accessorKey: 'supplierName',
+            accessorKey: 'supplier.name',
             header: 'Supplier',
-            isSortable: true,
+            isSortable: true, // Enable sorting for supplier names
             cell: (row: any) => <Text color={secondaryTextColor}>{row.supplier?.name || 'N/A'}</Text>
         },
         {
-            accessorKey: 'siteName',
+            accessorKey: 'site.name',
             header: 'Site',
-            isSortable: true,
+            isSortable: true, // Enable sorting for site names
             cell: (row: any) => <Text color={primaryTextColor}>{row.site?.name || 'N/A'}</Text>
+        },
+        {
+            accessorKey: 'orderDate',
+            header: 'Order Date',
+            isSortable: true, // Enable sorting for order dates
+            cell: (row: any) => <Text color={secondaryTextColor}>{new Date(row._createdAt).toLocaleDateString()}</Text>
+        },
+        {
+            accessorKey: 'totalAmount',
+            header: 'Total Amount',
+            isSortable: true, // Enable sorting for amounts
+            cell: (row: any) => <Text color={primaryTextColor}>${(row.totalAmount || 0).toFixed(2)}</Text>
         },
         {
             accessorKey: 'orderedItems',
             header: 'Items',
-            isSortable: false,
+            isSortable: false, // Complex columns should not be sortable
             cell: (row: any) => (
                 <Box>
                     {row.orderedItems?.slice(0, 2).map((item: any, index: number) => (

@@ -77,27 +77,15 @@ export default function StockItemModal({ isOpen, onClose, item, onSave }: StockI
         const fetchData = async () => {
             setDataLoading(true);
             try {
-                // Fetch categories
-                const categoriesQuery = `*[_type == "Category"]{ _id, title } | order(title asc)`;
-                const categoriesData = await fetch('/api/sanity', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ query: categoriesQuery }),
-                }).then(res => res.json());
-                setCategories(categoriesData.result || []);
+                // Fetch categories from the correct endpoint
+                const categoriesResponse = await fetch('/api/categories');
+                const categoriesData = await categoriesResponse.json();
+                setCategories(categoriesData || []);
 
-                // Fetch suppliers
-                const suppliersQuery = `*[_type == "Supplier"]{ _id, name } | order(name asc)`;
-                const suppliersData = await fetch('/api/sanity', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ query: suppliersQuery }),
-                }).then(res => res.json());
-                setSuppliers(suppliersData.result || []);
+                // Fetch suppliers from the correct endpoint
+                const suppliersResponse = await fetch('/api/suppliers');
+                const suppliersData = await suppliersResponse.json();
+                setSuppliers(suppliersData || []);
             } catch (error) {
                 console.error('Failed to fetch data:', error);
                 toast({
