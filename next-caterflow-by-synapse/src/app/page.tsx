@@ -173,6 +173,22 @@ const StatCard = ({
   );
 };
 
+// Helper function for empty stats
+const getEmptyStats = () => ({
+  monthlyReceiptsCount: 0,
+  receiptsTrend: 0,
+  monthlyDispatchesCount: 0,
+  todaysDispatchesCount: 0,
+  pendingActionsCount: 0,
+  pendingTransfersCount: 0,
+  draftOrdersCount: 0,
+  lowStockItemsCount: 0,
+  outOfStockItemsCount: 0,
+  weeklyActivityCount: 0,
+  todayActivityCount: 0,
+  totalStockCount: 0
+});
+
 export default function Home() {
   const { data: session, status } = useSession();
   const [sites, setSites] = useState<Site[]>([]);
@@ -204,19 +220,29 @@ export default function Home() {
     const fetchSites = async () => {
       setIsSitesLoading(true);
       try {
-        let siteQuery = `*[_type == "Site"] | order(name asc) { _id, name }`;
+        let siteQuery = '';
         let siteParams = {};
 
+        // Determine which sites the user can access based on role
         if (userRole === 'siteManager') {
-          siteQuery = `*[_type == "Site" && _id == $siteId] | order(name asc) { _id, name }`;
-          siteParams = associatedSite?._id ? { siteId: associatedSite._id } : {};
+          // Site managers can only see their associated site
+          if (associatedSite?._id) {
+            siteQuery = `*[_type == "Site" && _id == $siteId] | order(name asc) { _id, name }`;
+            siteParams = { siteId: associatedSite._id };
+          } else {
+            // No associated site - can't see any sites
+            setSites([]);
+            setSelectedSiteId(null);
+            setIsSitesLoading(false);
+            return;
+          }
         } else if (userRole === 'admin' || userRole === 'auditor') {
+          // Admins and auditors can see all sites
           siteQuery = `*[_type == "Site"] | order(name asc) { _id, name }`;
         } else {
+          // Other roles with no site access
           setSites([]);
-          setTransactions([]);
-          setDashboardStats(null);
-          setIsLoading(false);
+          setSelectedSiteId(null);
           setIsSitesLoading(false);
           return;
         }
@@ -239,11 +265,13 @@ export default function Home() {
         const fetchedSites: Site[] = await response.json();
         setSites(fetchedSites);
 
-        if (userRole === 'siteManager' && fetchedSites.length > 0) {
+        // Auto-select first site if available
+        if (fetchedSites.length > 0) {
           setSelectedSiteId(fetchedSites[0]._id);
-        } else if (userRole !== 'siteManager' && fetchedSites.length > 0) {
-          setSelectedSiteId(fetchedSites[0]._id);
+        } else {
+          setSelectedSiteId(null);
         }
+
       } catch (error) {
         console.error("Failed to fetch sites:", error);
         toast({
@@ -253,6 +281,8 @@ export default function Home() {
           duration: 5000,
           isClosable: true,
         });
+        setSites([]);
+        setSelectedSiteId(null);
       } finally {
         setIsSitesLoading(false);
       }
@@ -267,16 +297,37 @@ export default function Home() {
     const fetchDashboardData = async () => {
       setIsLoading(true);
 
-      const siteIdsToQuery = selectedSiteId ? [selectedSiteId] : (userRole === 'admin' || userRole === 'auditor' ? sites.map(s => s._id) : []);
-
-      if (siteIdsToQuery.length === 0) {
-        setTransactions([]);
-        setDashboardStats(null);
-        setIsLoading(false);
-        return;
-      }
-
       try {
+        // Determine which site IDs to query based on user role and selection
+        let siteIdsToQuery: string[] = [];
+
+        if (userRole === 'siteManager') {
+          // Site managers can only query their associated site
+          if (associatedSite?._id) {
+            siteIdsToQuery = [associatedSite._id];
+          }
+        } else if (userRole === 'admin' || userRole === 'auditor') {
+          // Admins/auditors can query selected site or all sites
+          if (selectedSiteId) {
+            siteIdsToQuery = [selectedSiteId];
+          } else {
+            siteIdsToQuery = sites.map(s => s._id);
+          }
+        } else {
+          // Other roles get no data
+          setTransactions([]);
+          setDashboardStats(getEmptyStats());
+          setIsLoading(false);
+          return;
+        }
+
+        if (siteIdsToQuery.length === 0) {
+          setTransactions([]);
+          setDashboardStats(getEmptyStats());
+          setIsLoading(false);
+          return;
+        }
+
         const response = await fetch('/api/dashboard/stats', {
           method: 'POST',
           headers: {
@@ -292,20 +343,7 @@ export default function Home() {
         const data = await response.json();
 
         setTransactions(data.transactions || []);
-        setDashboardStats(data.stats || {
-          monthlyReceiptsCount: 0,
-          receiptsTrend: 0,
-          monthlyDispatchesCount: 0,
-          todaysDispatchesCount: 0,
-          pendingActionsCount: 0,
-          pendingTransfersCount: 0,
-          draftOrdersCount: 0,
-          lowStockItemsCount: 0,
-          outOfStockItemsCount: 0,
-          weeklyActivityCount: 0,
-          todayActivityCount: 0,
-          totalStockCount: 0
-        });
+        setDashboardStats(data.stats || getEmptyStats());
 
       } catch (error) {
         console.error("Failed to fetch dashboard data:", error);
@@ -316,13 +354,15 @@ export default function Home() {
           duration: 5000,
           isClosable: true,
         });
+        setTransactions([]);
+        setDashboardStats(getEmptyStats());
       } finally {
         setIsLoading(false);
       }
     };
 
     fetchDashboardData();
-  }, [isAuthReady, isSitesLoading, selectedSiteId, sites, toast, userRole]);
+  }, [isAuthReady, isSitesLoading, selectedSiteId, sites, toast, userRole, associatedSite]);
 
   const TransactionIcon = ({ type }: { type: string }) => {
     switch (type) {
@@ -359,7 +399,6 @@ export default function Home() {
   if (!isAuthReady || isSitesLoading) {
     return (
       <Flex justifyContent="center" alignItems="center" minHeight="calc(100vh - 60px - 80px)" bg={pageBg}>
-        {/* Using the spinnerColor variable */}
         <Spinner size="xl" color={spinnerColor} />
       </Flex>
     );
@@ -367,12 +406,35 @@ export default function Home() {
 
   return (
     <Box p={{ base: 3, md: 8 }} bg={pageBg} minHeight="100vh">
-      <Heading as="h1" size={{ base: 'md', md: 'xl' }} mb={4} color={headingColor}>
-        Dashboard
-      </Heading>
+      {/* User Context Header */}
+      <Flex direction="column" mb={6}>
+        <Heading as="h1" size={{ base: 'md', md: 'xl' }} mb={2} color={headingColor}>
+          Dashboard
+        </Heading>
+        <Flex align="center" wrap="wrap" gap={2}>
+          <Badge colorScheme="brand" fontSize="sm">
+            {user?.role || 'Unknown Role'}
+          </Badge>
+          {userRole === 'siteManager' && associatedSite && (
+            <Badge colorScheme="green" fontSize="sm">
+              Site: {associatedSite.name}
+            </Badge>
+          )}
+          {selectedSiteId && (userRole === 'admin' || userRole === 'auditor') && (
+            <Badge colorScheme="blue" fontSize="sm">
+              Viewing: {sites.find(s => s._id === selectedSiteId)?.name}
+            </Badge>
+          )}
+          {(!userRole || (userRole !== 'admin' && userRole !== 'auditor' && userRole !== 'siteManager')) && (
+            <Badge colorScheme="gray" fontSize="sm">
+              Limited Access
+            </Badge>
+          )}
+        </Flex>
+      </Flex>
 
-      {/* Sites Section */}
-      {(user?.role === 'admin' || user?.role === 'auditor') && sites.length > 0 && (
+      {/* Sites Section - Only show for admins/auditors with site access */}
+      {(userRole === 'admin' || userRole === 'auditor') && sites.length > 0 && (
         <VStack align="stretch" spacing={3} mb={6}>
           <Flex justify="space-between" align="center">
             <Heading as="h2" size={{ base: 'sm', md: 'md' }} color={headingColor}>Sites</Heading>
@@ -430,11 +492,16 @@ export default function Home() {
       )}
 
       {/* Stats Section */}
-      <Heading as="h2" size={{ base: 'sm', md: 'md' }} mt={user?.role === 'siteManager' || sites.length === 0 ? 0 : 6} mb={3} color={headingColor}>
+      <Heading as="h2" size={{ base: 'sm', md: 'md' }} mt={userRole === 'siteManager' || sites.length === 0 ? 0 : 6} mb={3} color={headingColor}>
         Site Statistics
-        {selectedSiteId && (
+        {selectedSiteId && (userRole === 'admin' || userRole === 'auditor') && (
           <Badge ml={2} colorScheme="brand" fontSize={{ base: 'xs', md: 'sm' }}>
             {sites.find(s => s._id === selectedSiteId)?.name}
+          </Badge>
+        )}
+        {userRole === 'siteManager' && associatedSite && (
+          <Badge ml={2} colorScheme="green" fontSize={{ base: 'xs', md: 'sm' }}>
+            {associatedSite.name}
           </Badge>
         )}
       </Heading>
@@ -510,19 +577,23 @@ export default function Home() {
       {/* Transaction History Section */}
       <Heading as="h2" size={{ base: 'sm', md: 'md' }} mb={3} color={headingColor}>
         Recent Transactions
-        {selectedSiteId && (
+        {selectedSiteId && (userRole === 'admin' || userRole === 'auditor') && (
           <Badge ml={2} colorScheme="brand" fontSize={{ base: 'xs', md: 'sm' }}>
             {sites.find(s => s._id === selectedSiteId)?.name}
           </Badge>
         )}
-        {!selectedSiteId && (user?.role === 'admin' || user?.role === 'auditor') && (
+        {userRole === 'siteManager' && associatedSite && (
+          <Badge ml={2} colorScheme="green" fontSize={{ base: 'xs', md: 'sm' }}>
+            {associatedSite.name}
+          </Badge>
+        )}
+        {!selectedSiteId && (userRole === 'admin' || userRole === 'auditor') && (
           <Badge ml={2} colorScheme="green" fontSize={{ base: 'xs', md: 'sm' }}>All Sites</Badge>
         )}
       </Heading>
 
       {isLoading ? (
         <Flex justifyContent="center" alignItems="center" minHeight="150px">
-          {/* Using the spinnerColor variable */}
           <Spinner size="lg" color={spinnerColor} />
         </Flex>
       ) : transactions.length > 0 ? (
@@ -552,7 +623,12 @@ export default function Home() {
       ) : (
         <Box textAlign="center" py={6}>
           <Text fontSize="sm" color={secondaryTextColor}>
-            No transaction history found for {selectedSiteId ? "this site." : "your account."}
+            {userRole === 'siteManager' && associatedSite
+              ? `No transaction history found for ${associatedSite.name}.`
+              : userRole === 'admin' || userRole === 'auditor'
+                ? "No transaction history found for the selected sites."
+                : "No transaction history found for your account."
+            }
           </Text>
         </Box>
       )}

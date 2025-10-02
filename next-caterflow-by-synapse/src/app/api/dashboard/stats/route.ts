@@ -20,30 +20,82 @@ async function calculateTotalStockCount(siteIds: string[]): Promise<number> {
     }
 }
 
-// Then update the main POST function to include this calculation
+// Helper function to get empty stats
+function getEmptyStats() {
+    return {
+        monthlyReceiptsCount: 0,
+        receiptsTrend: 0,
+        monthlyDispatchesCount: 0,
+        todaysDispatchesCount: 0,
+        pendingActionsCount: 0,
+        pendingTransfersCount: 0,
+        draftOrdersCount: 0,
+        lowStockItemsCount: 0,
+        outOfStockItemsCount: 0,
+        weeklyActivityCount: 0,
+        todayActivityCount: 0,
+        totalStockCount: 0
+    };
+}
+
+// Fetch all sites user can access
+async function fetchAllUserSites(userSiteInfo: any) {
+    if (userSiteInfo.canAccessMultipleSites) {
+        // Admin/auditor can access all sites
+        const query = groq`*[_type == "Site"] | order(name asc) { _id, name }`;
+        return await client.fetch(query);
+    } else if (userSiteInfo.userSiteId) {
+        // Site manager can only access their site
+        const query = groq`*[_type == "Site" && _id == $siteId] { _id, name }`;
+        return await client.fetch(query, { siteId: userSiteInfo.userSiteId });
+    }
+    return [];
+}
+
+// Main POST function with proper user permission handling
 export async function POST(request: NextRequest) {
     try {
         const { siteIds } = await request.json();
         const userSiteInfo = await getUserSiteInfo(request);
 
-        if (!siteIds || !Array.isArray(siteIds)) {
-            return NextResponse.json(
-                { error: 'siteIds array is required' },
-                { status: 400 }
-            );
+        console.log('🔐 User site info:', {
+            canAccessMultipleSites: userSiteInfo.canAccessMultipleSites,
+            userSiteId: userSiteInfo.userSiteId,
+            requestedSiteIds: siteIds
+        });
+
+        // Determine which site IDs the user is allowed to access
+        let allowedSiteIds: string[] = [];
+
+        if (userSiteInfo.canAccessMultipleSites) {
+            // Admin/auditor can access all requested sites or all sites if none specified
+            if (siteIds && Array.isArray(siteIds) && siteIds.length > 0) {
+                allowedSiteIds = siteIds;
+            } else {
+                // If no sites specified, fetch all sites user can access
+                const allSites = await fetchAllUserSites(userSiteInfo);
+                allowedSiteIds = allSites.map((site: { _id: any; }) => site._id);
+            }
+        } else if (userSiteInfo.userSiteId) {
+            // Site manager - can only access their associated site
+            allowedSiteIds = [userSiteInfo.userSiteId];
+        } else {
+            // User with no site access
+            allowedSiteIds = [];
         }
 
-        // Filter siteIds based on user permissions
-        let filteredSiteIds = siteIds;
-        if (!userSiteInfo.canAccessMultipleSites && userSiteInfo.userSiteId) {
-            filteredSiteIds = [userSiteInfo.userSiteId];
-        } else if (!userSiteInfo.canAccessMultipleSites && !userSiteInfo.userSiteId) {
-            // User has no site association and can't access multiple sites
-            filteredSiteIds = [];
+        console.log('✅ Final allowed site IDs:', allowedSiteIds);
+
+        if (allowedSiteIds.length === 0) {
+            // Return empty data for users with no site access
+            return NextResponse.json({
+                transactions: [],
+                stats: getEmptyStats()
+            });
         }
 
-        // Check cache with filtered site IDs
-        const cacheKey = JSON.stringify(filteredSiteIds.sort());
+        // Check cache with allowed site IDs
+        const cacheKey = JSON.stringify(allowedSiteIds.sort());
         const cachedData = cache.get(cacheKey);
 
         if (cachedData && Date.now() - cachedData.timestamp < CACHE_TTL) {
@@ -56,7 +108,7 @@ export async function POST(request: NextRequest) {
         const startOfWeek = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
         const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
 
-        // Fetch all needed data in parallel using filtered site IDs
+        // Fetch all needed data in parallel using allowed site IDs
         const [
             transactions,
             stockItems,
@@ -70,28 +122,28 @@ export async function POST(request: NextRequest) {
             todayActivityCount,
             totalStockCount
         ] = await Promise.all([
-            fetchTransactions(filteredSiteIds),
+            fetchTransactions(allowedSiteIds),
             fetchStockItems(),
-            fetchBins(filteredSiteIds),
-            countMonthlyReceipts(filteredSiteIds, startOfMonth),
-            countMonthlyDispatches(filteredSiteIds, startOfMonth),
-            countTodaysDispatches(filteredSiteIds, startOfToday),
-            countPendingTransfers(filteredSiteIds),
-            countDraftOrders(filteredSiteIds),
-            countWeeklyActivity(filteredSiteIds, startOfWeek),
-            countTodayActivity(filteredSiteIds, startOfToday),
-            calculateTotalStockCount(filteredSiteIds)
+            fetchBins(allowedSiteIds),
+            countMonthlyReceipts(allowedSiteIds, startOfMonth),
+            countMonthlyDispatches(allowedSiteIds, startOfMonth),
+            countTodaysDispatches(allowedSiteIds, startOfToday),
+            countPendingTransfers(allowedSiteIds),
+            countDraftOrders(allowedSiteIds),
+            countWeeklyActivity(allowedSiteIds, startOfWeek),
+            countTodayActivity(allowedSiteIds, startOfToday),
+            calculateTotalStockCount(allowedSiteIds)
         ]);
 
-        // Calculate low stock items using the original method
-        const [lowStockItemsCount, outOfStockItemsCount] = await calculateLowStockCounts(stockItems, bins, filteredSiteIds);
+        // Calculate low stock items
+        const [lowStockItemsCount, outOfStockItemsCount] = await calculateLowStockCounts(stockItems, bins, allowedSiteIds);
 
         const result = {
             transactions,
             stats: {
                 // Card 1: Receipts This Month
                 monthlyReceiptsCount,
-                receiptsTrend: await calculateReceiptsTrend(filteredSiteIds, startOfMonth),
+                receiptsTrend: await calculateReceiptsTrend(allowedSiteIds, startOfMonth),
 
                 // Card 2: Dispatches This Month
                 monthlyDispatchesCount,
@@ -102,7 +154,7 @@ export async function POST(request: NextRequest) {
                 pendingTransfersCount,
                 draftOrdersCount,
 
-                // Card 4: Low Stock Items (using original calculation)
+                // Card 4: Low Stock Items
                 lowStockItemsCount,
                 outOfStockItemsCount,
 
@@ -110,7 +162,7 @@ export async function POST(request: NextRequest) {
                 weeklyActivityCount,
                 todayActivityCount,
 
-                // Card 6: Total Stock Count (NEW)
+                // Card 6: Total Stock Count
                 totalStockCount
             }
         };
@@ -139,6 +191,10 @@ async function calculateLowStockCounts(stockItems: any[], bins: any[], siteIds: 
 
     const stockItemIds = stockItems.map(item => item._id);
     const binIds = relevantBins.map(bin => bin._id);
+
+    if (stockItemIds.length === 0 || binIds.length === 0) {
+        return [0, 0];
+    }
 
     // Use bulk calculation from original code
     const stockQuantities = await calculateBulkStock(stockItemIds, binIds);
@@ -170,6 +226,8 @@ async function calculateLowStockCounts(stockItems: any[], bins: any[], siteIds: 
 
 // Helper functions for counting documents
 async function fetchTransactions(siteIds: string[]) {
+    if (siteIds.length === 0) return [];
+
     const query = groq`*[_type in ["GoodsReceipt", "DispatchLog", "InternalTransfer"] 
         && (receivingBin->site._ref in $siteIds || sourceBin->site._ref in $siteIds || fromBin->site._ref in $siteIds || toBin->site._ref in $siteIds)
     ] | order(_updatedAt desc) [0..10] {
@@ -194,6 +252,8 @@ async function fetchStockItems() {
 }
 
 async function fetchBins(siteIds: string[]) {
+    if (siteIds.length === 0) return [];
+
     const query = groq`*[_type == "Bin" && site._ref in $siteIds] {
         _id,
         "siteId": site._ref
@@ -202,6 +262,8 @@ async function fetchBins(siteIds: string[]) {
 }
 
 async function countMonthlyReceipts(siteIds: string[], startOfMonth: string) {
+    if (siteIds.length === 0) return 0;
+
     const query = groq`count(*[
         _type == "GoodsReceipt" && 
         receivingBin->site._ref in $siteIds &&
@@ -211,6 +273,8 @@ async function countMonthlyReceipts(siteIds: string[], startOfMonth: string) {
 }
 
 async function countMonthlyDispatches(siteIds: string[], startOfMonth: string) {
+    if (siteIds.length === 0) return 0;
+
     const query = groq`count(*[
         _type == "DispatchLog" && 
         sourceBin->site._ref in $siteIds &&
@@ -220,6 +284,8 @@ async function countMonthlyDispatches(siteIds: string[], startOfMonth: string) {
 }
 
 async function countTodaysDispatches(siteIds: string[], startOfToday: string) {
+    if (siteIds.length === 0) return 0;
+
     const query = groq`count(*[
         _type == "DispatchLog" && 
         sourceBin->site._ref in $siteIds &&
@@ -230,6 +296,8 @@ async function countTodaysDispatches(siteIds: string[], startOfToday: string) {
 }
 
 async function countPendingTransfers(siteIds: string[]) {
+    if (siteIds.length === 0) return 0;
+
     const query = groq`count(*[
         _type == "InternalTransfer" && 
         (fromBin->site._ref in $siteIds || toBin->site._ref in $siteIds) &&
@@ -239,6 +307,8 @@ async function countPendingTransfers(siteIds: string[]) {
 }
 
 async function countDraftOrders(siteIds: string[]) {
+    if (siteIds.length === 0) return 0;
+
     const query = groq`count(*[
         _type == "PurchaseOrder" && 
         status == "draft"
@@ -247,6 +317,8 @@ async function countDraftOrders(siteIds: string[]) {
 }
 
 async function countWeeklyActivity(siteIds: string[], startOfWeek: string) {
+    if (siteIds.length === 0) return 0;
+
     const query = groq`count(*[
         _type in ["GoodsReceipt", "DispatchLog", "InternalTransfer", "StockAdjustment"] &&
         (receivingBin->site._ref in $siteIds || 
@@ -260,6 +332,8 @@ async function countWeeklyActivity(siteIds: string[], startOfWeek: string) {
 }
 
 async function countTodayActivity(siteIds: string[], startOfToday: string) {
+    if (siteIds.length === 0) return 0;
+
     const query = groq`count(*[
         _type in ["GoodsReceipt", "DispatchLog", "InternalTransfer", "StockAdjustment"] &&
         (receivingBin->site._ref in $siteIds || 
@@ -273,6 +347,8 @@ async function countTodayActivity(siteIds: string[], startOfToday: string) {
 }
 
 async function calculateReceiptsTrend(siteIds: string[], startOfMonth: string) {
+    if (siteIds.length === 0) return 0;
+
     // Calculate previous month for comparison
     const prevMonth = new Date(startOfMonth);
     prevMonth.setMonth(prevMonth.getMonth() - 1);
