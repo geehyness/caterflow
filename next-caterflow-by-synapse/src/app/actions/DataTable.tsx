@@ -150,66 +150,48 @@ export default function DataTable({
         return <Text color={primaryTextColor}>{row.description}</Text>;
     };
 
-    // Function to search across all available data including nested objects
-    const searchAllData = (row: PendingAction, searchTerm: string): boolean => {
-        if (!searchTerm) return true;
+    // Improved search function that recursively searches all properties
+    const searchAllData = (row: any, searchTerm: string): boolean => {
+        if (!searchTerm.trim()) return true;
 
         const searchTermLower = searchTerm.toLowerCase();
 
-        // Check basic string properties
-        const basicProperties = [
-            row.title,
-            row.description,
-            row.siteName,
-            row.priority,
-            row.status,
-            row.poNumber,
-            row.supplierName,
-            row.actionType,
-            row.receiptNumber
-        ];
+        // Recursive function to search through all object properties
+        const searchObject = (obj: any): boolean => {
+            if (obj === null || obj === undefined) return false;
 
-        if (basicProperties.some(prop =>
-            prop && typeof prop === 'string' && prop.toLowerCase().includes(searchTermLower)
-        )) {
-            return true;
-        }
+            // Handle primitive values
+            if (typeof obj === 'string') {
+                return obj.toLowerCase().includes(searchTermLower);
+            }
 
-        // Check date properties
-        const dateProperties = [row.createdAt];
-        if (dateProperties.some(date =>
-            date && new Date(date).toLocaleDateString().toLowerCase().includes(searchTermLower)
-        )) {
-            return true;
-        }
+            if (typeof obj === 'number') {
+                return obj.toString().includes(searchTerm);
+            }
 
-        // Check ordered items for PurchaseOrders
-        if (row.actionType === 'PurchaseOrder' && row.orderedItems) {
-            const hasMatchingItem = row.orderedItems.some((item: any) => {
-                return (
-                    (item.stockItem.name && item.stockItem.name.toLowerCase().includes(searchTermLower)) ||
-                    (item.orderedQuantity && item.orderedQuantity.toString().includes(searchTerm)) ||
-                    (item.unitPrice && item.unitPrice.toString().includes(searchTerm))
-                );
-            });
+            if (typeof obj === 'boolean') {
+                return obj.toString().toLowerCase().includes(searchTermLower);
+            }
 
-            if (hasMatchingItem) return true;
-        }
+            // Handle Date objects
+            if (obj instanceof Date) {
+                return obj.toLocaleDateString().toLowerCase().includes(searchTermLower);
+            }
 
-        // Check received items for GoodsReceipts
-        if (row.actionType === 'GoodsReceipt' && row.receivedItems) {
-            const hasMatchingItem = row.receivedItems.some((item: any) => {
-                return (
-                    (item.stockItem?.name && item.stockItem.name.toLowerCase().includes(searchTermLower)) ||
-                    (item.receivedQuantity && item.receivedQuantity.toString().includes(searchTerm)) ||
-                    (item.batchNumber && item.batchNumber.toLowerCase().includes(searchTermLower))
-                );
-            });
+            // Handle arrays - search through each element
+            if (Array.isArray(obj)) {
+                return obj.some(item => searchObject(item));
+            }
 
-            if (hasMatchingItem) return true;
-        }
+            // Handle objects - search through all properties
+            if (typeof obj === 'object') {
+                return Object.values(obj).some(value => searchObject(value));
+            }
 
-        return false;
+            return false;
+        };
+
+        return searchObject(row);
     };
 
     // Safe property access function with nested object support
