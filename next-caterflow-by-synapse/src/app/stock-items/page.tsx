@@ -264,6 +264,7 @@ export default function InventoryPage() {
                 onClose={onClose}
                 item={selectedItem}
                 onSave={handleItemSaved}
+                existingItems={stockItems} // Pass existing items for duplicate checking
             />
         </Box>
     );

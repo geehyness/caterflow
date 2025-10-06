@@ -21,6 +21,14 @@ import {
     NumberIncrementStepper,
     NumberDecrementStepper,
     useColorModeValue,
+    Alert,
+    AlertIcon,
+    AlertTitle,
+    AlertDescription,
+    Box,
+    List,
+    ListItem,
+    Text,
 } from '@chakra-ui/react';
 
 interface StockItem {
@@ -54,9 +62,43 @@ interface StockItemModalProps {
     onClose: () => void;
     item: StockItem | null;
     onSave: () => void;
+    existingItems?: StockItem[]; // Add existing items for duplicate checking
 }
 
-export default function StockItemModal({ isOpen, onClose, item, onSave }: StockItemModalProps) {
+// Smart similarity function
+const calculateSimilarity = (str1: string, str2: string): number => {
+    const words1 = str1.toLowerCase().split(/\s+/).filter(word => word.length > 0);
+    const words2 = str2.toLowerCase().split(/\s+/).filter(word => word.length > 0);
+
+    let matches = 0;
+    let totalWords = Math.max(words1.length, words2.length);
+
+    // Check for exact word matches
+    words1.forEach(word1 => {
+        if (words2.some(word2 => word1 === word2 || word2.includes(word1) || word1.includes(word2))) {
+            matches++;
+        }
+    });
+
+    // Also check for partial matches in the entire string
+    const fullMatchScore = str1.toLowerCase().includes(str2.toLowerCase()) ||
+        str2.toLowerCase().includes(str1.toLowerCase()) ? 0.5 : 0;
+
+    return (matches / totalWords) + fullMatchScore;
+};
+
+const findSimilarItems = (itemName: string, existingItems: StockItem[], threshold: number = 0.3) => {
+    return existingItems
+        .map(item => ({
+            item,
+            similarity: calculateSimilarity(itemName, item.name)
+        }))
+        .filter(result => result.similarity >= threshold)
+        .sort((a, b) => b.similarity - a.similarity)
+        .slice(0, 5); // Show top 5 most similar
+};
+
+export default function StockItemModal({ isOpen, onClose, item, onSave, existingItems = [] }: StockItemModalProps) {
     const [name, setName] = useState('');
     const [sku, setSku] = useState('');
     const [minimumStockLevel, setMinimumStockLevel] = useState(0);
@@ -67,10 +109,14 @@ export default function StockItemModal({ isOpen, onClose, item, onSave }: StockI
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
     const [loading, setLoading] = useState(false);
     const [dataLoading, setDataLoading] = useState(false);
+    const [showSimilarItems, setShowSimilarItems] = useState(false);
+    const [similarItems, setSimilarItems] = useState<Array<{ item: StockItem, similarity: number }>>([]);
+    const [confirmedSave, setConfirmedSave] = useState(false);
     const toast = useToast();
 
     const brandColorScheme = useColorModeValue('brand', 'brand');
     const neutralColorScheme = useColorModeValue('gray', 'gray');
+    const warningColorScheme = useColorModeValue('orange', 'orange');
 
     // Fetch categories and suppliers
     useEffect(() => {
@@ -121,11 +167,51 @@ export default function StockItemModal({ isOpen, onClose, item, onSave }: StockI
             setCategory('');
             setPrimarySupplier('');
             setUnitOfMeasure('');
+            setConfirmedSave(false);
+            setShowSimilarItems(false);
+            setSimilarItems([]);
         }
     }, [item]);
 
+    // Check for similar items when name changes (for new items only)
+    useEffect(() => {
+        if (!item && name.trim().length > 2) {
+            const similar = findSimilarItems(name, existingItems);
+            setSimilarItems(similar);
+            setShowSimilarItems(similar.length > 0);
+        } else {
+            setShowSimilarItems(false);
+            setSimilarItems([]);
+        }
+    }, [name, item, existingItems]);
+
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
+
+        // Check for exact duplicate (only for new items)
+        if (!item) {
+            const exactMatch = existingItems.find(existingItem =>
+                existingItem.name.toLowerCase().trim() === name.toLowerCase().trim()
+            );
+
+            if (exactMatch) {
+                toast({
+                    title: 'Duplicate Item',
+                    description: `An item with the exact name "${exactMatch.name}" already exists.`,
+                    status: 'error',
+                    duration: 5000,
+                    isClosable: true,
+                });
+                return;
+            }
+
+            // Check for similar items that haven't been confirmed
+            if (similarItems.length > 0 && !confirmedSave) {
+                setShowSimilarItems(true);
+                return;
+            }
+        }
+
         setLoading(true);
 
         try {
@@ -161,6 +247,7 @@ export default function StockItemModal({ isOpen, onClose, item, onSave }: StockI
 
             onSave();
             onClose();
+            setConfirmedSave(false);
         } catch (error) {
             console.error('Failed to save stock item:', error);
             toast({
@@ -175,6 +262,21 @@ export default function StockItemModal({ isOpen, onClose, item, onSave }: StockI
         }
     };
 
+    const handleConfirmSave = () => {
+        setConfirmedSave(true);
+        setShowSimilarItems(false);
+        // Trigger save again
+        setTimeout(() => {
+            const fakeEvent = { preventDefault: () => { } } as React.FormEvent;
+            handleSave(fakeEvent);
+        }, 100);
+    };
+
+    const handleCancelSave = () => {
+        setShowSimilarItems(false);
+        setSimilarItems([]);
+    };
+
     return (
         <Modal isOpen={isOpen} onClose={onClose} size="lg">
             <ModalOverlay />
@@ -184,12 +286,35 @@ export default function StockItemModal({ isOpen, onClose, item, onSave }: StockI
                 <form onSubmit={handleSave}>
                     <ModalBody pb={6}>
                         <VStack spacing={4}>
+                            {showSimilarItems && (
+                                <Alert status="warning" borderRadius="md">
+                                    <AlertIcon />
+                                    <Box flex="1">
+                                        <AlertTitle>Similar Items Found</AlertTitle>
+                                        <AlertDescription>
+                                            <Text mb={2}>The following similar items already exist. Are you sure you want to create a new item?</Text>
+                                            <List spacing={1} maxH="120px" overflowY="auto">
+                                                {similarItems.map(({ item: similarItem, similarity }) => (
+                                                    <ListItem key={similarItem._id} fontSize="sm">
+                                                        • {similarItem.name} {similarItem.sku && `(SKU: ${similarItem.sku})`}
+                                                        <Text as="span" color="gray.600" fontSize="xs" ml={2}>
+                                                            {Math.round(similarity * 100)}% similar
+                                                        </Text>
+                                                    </ListItem>
+                                                ))}
+                                            </List>
+                                        </AlertDescription>
+                                    </Box>
+                                </Alert>
+                            )}
+
                             <FormControl isRequired>
                                 <FormLabel>Item Name</FormLabel>
                                 <Input
                                     value={name}
                                     onChange={(e) => setName(e.target.value)}
                                     placeholder="Enter item name"
+                                    isInvalid={!item && similarItems.length > 0 && !confirmedSave}
                                 />
                             </FormControl>
 
@@ -270,17 +395,45 @@ export default function StockItemModal({ isOpen, onClose, item, onSave }: StockI
                     </ModalBody>
 
                     <ModalFooter>
-                        <Button colorScheme={neutralColorScheme} mr={3} onClick={onClose} isDisabled={loading} variant="ghost">
-                            Cancel
-                        </Button>
-                        <Button
-                            colorScheme={brandColorScheme}
-                            type="submit"
-                            isLoading={loading}
-                            isDisabled={dataLoading}
-                        >
-                            {item ? 'Update Item' : 'Create Item'}
-                        </Button>
+                        {showSimilarItems ? (
+                            <>
+                                <Button
+                                    colorScheme={warningColorScheme}
+                                    onClick={handleConfirmSave}
+                                    isLoading={loading}
+                                >
+                                    Yes, Create Anyway
+                                </Button>
+                                <Button
+                                    colorScheme={neutralColorScheme}
+                                    onClick={handleCancelSave}
+                                    ml={3}
+                                    variant="ghost"
+                                >
+                                    Cancel
+                                </Button>
+                            </>
+                        ) : (
+                            <>
+                                <Button
+                                    colorScheme={neutralColorScheme}
+                                    mr={3}
+                                    onClick={onClose}
+                                    isDisabled={loading}
+                                    variant="ghost"
+                                >
+                                    Cancel
+                                </Button>
+                                <Button
+                                    colorScheme={brandColorScheme}
+                                    type="submit"
+                                    isLoading={loading}
+                                    isDisabled={dataLoading}
+                                >
+                                    {item ? 'Update Item' : 'Create Item'}
+                                </Button>
+                            </>
+                        )}
                     </ModalFooter>
                 </form>
             </ModalContent>
