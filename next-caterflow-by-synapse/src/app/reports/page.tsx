@@ -1028,7 +1028,7 @@ export default function ComprehensiveReportsPage() {
                                                                         <Text>Inventory Value</Text>
                                                                     </HStack>
                                                                 </StatLabel>
-                                                                <StatNumber>${(analyticsData.summary.totalInventoryValue).toLocaleString()}</StatNumber>
+                                                                <StatNumber>E {(analyticsData.summary.totalInventoryValue).toLocaleString()}</StatNumber>
                                                                 <StatHelpText>
                                                                     {analyticsData.summary.totalStockItems} items
                                                                 </StatHelpText>

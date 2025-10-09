@@ -341,7 +341,7 @@ export default function GoodsReceiptsPage() {
             accessorKey: 'totalAmount',
             header: 'Total Amount',
             isSortable: true, // Enable sorting for amounts
-            cell: (row: any) => <Text color={primaryTextColor}>${(row.totalAmount || 0).toFixed(2)}</Text>
+            cell: (row: any) => <Text color={primaryTextColor}>E {(row.totalAmount || 0).toFixed(2)}</Text>
         },
         {
             accessorKey: 'orderedItems',

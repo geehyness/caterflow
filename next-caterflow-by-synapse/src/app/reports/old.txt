@@ -823,11 +823,11 @@ export default function ReportsPage() {
                                                             <VStack align="stretch" spacing={3}>
                                                                 <Flex justify="space-between">
                                                                     <Text>Total PO Value:</Text>
-                                                                    <Text fontWeight="bold">${(analyticsData.purchaseOrders?.totalValue || 0).toFixed(2)}</Text>
+                                                                    <Text fontWeight="bold">E {(analyticsData.purchaseOrders?.totalValue || 0).toFixed(2)}</Text>
                                                                 </Flex>
                                                                 <Flex justify="space-between">
                                                                     <Text>Total Dispatch Cost:</Text>
-                                                                    <Text fontWeight="bold">${(analyticsData.dispatches?.totalCost || 0).toFixed(2)}</Text>
+                                                                    <Text fontWeight="bold">E {(analyticsData.dispatches?.totalCost || 0).toFixed(2)}</Text>
                                                                 </Flex>
                                                                 <Flex justify="space-between">
                                                                     <Text>Cost per Person:</Text>
