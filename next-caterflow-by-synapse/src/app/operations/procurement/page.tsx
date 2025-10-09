@@ -546,11 +546,12 @@ export default function ProcurementPage() {
             printWindow.document.write(htmlContent);
             printWindow.document.close();
 
+            // Set the window name for better PDF saving
+            printWindow.document.title = `PO-${selectedPO.poNumber}`;
+
             // Wait for content to load then trigger print
             printWindow.onload = () => {
                 printWindow.print();
-                // Optional: close window after print dialog closes
-                // printWindow.onafterprint = () => printWindow.close();
             };
 
             toast({
@@ -617,6 +618,10 @@ export default function ProcurementPage() {
                 printWindow.document.write(htmlContent);
                 printWindow.document.close();
 
+                // Set the window name with PO number and supplier name
+                const supplierNameSlug = supplier?.name ? supplier.name.replace(/[^a-zA-Z0-9]/g, '-') : 'supplier';
+                printWindow.document.title = `PO-${selectedPO.poNumber}-${supplierNameSlug}`;
+
                 printWindow.onload = () => {
                     printWindow.print();
                 };
@@ -645,11 +650,18 @@ export default function ProcurementPage() {
     const generatePDFHTML = (poData: any, isSupplierSpecific: boolean) => {
         const totalItems = poData.orderedItems.reduce((sum: number, item: any) => sum + item.orderedQuantity, 0);
 
+        // Create a descriptive title
+        let documentTitle = `PO-${poData.poNumber}`;
+        if (isSupplierSpecific && poData.supplierName) {
+            const supplierSlug = poData.supplierName.replace(/[^a-zA-Z0-9]/g, '-');
+            documentTitle += `-${supplierSlug}`;
+        }
+
         return `
     <!DOCTYPE html>
     <html>
     <head>
-        <title>Purchase Order ${poData.poNumber}</title>
+        <title>${documentTitle}</title>
         <style>
             body { 
                 font-family: Arial, sans-serif; 
@@ -1256,48 +1268,62 @@ export default function ProcurementPage() {
                         )}
                     </ModalBody>
                     <ModalFooter>
-                        <HStack spacing={3}>
-                            <Button variant="ghost" onClick={onEditModalClose}>
-                                Cancel
-                            </Button>
-                            <Button
-                                colorScheme="brand"
-                                variant="outline"
-                                onClick={handleSaveChanges}
-                                isLoading={saving}
-                                isDisabled={!canSaveChanges()}
-                            >
-                                Save All Changes
-                            </Button>
-                            <Button
-                                colorScheme="green"
-                                variant="outline"
-                                onClick={exportSinglePO}
-                                isDisabled={!canSaveChanges() || saving}
-                                isLoading={saving}
-                                leftIcon={<Icon as={FiEye} />}
-                            >
-                                {saving ? 'Saving...' : 'Export Single PO'}
-                            </Button>
-                            <Button
-                                colorScheme="green"
-                                variant="outline"
-                                onClick={exportMultiplePOsBySupplier}
-                                isDisabled={!canSaveChanges() || saving}
-                                isLoading={saving}
-                                leftIcon={<Icon as={FiFilter} />}
-                            >
-                                {saving ? 'Saving...' : 'Export by Supplier'}
-                            </Button>
+                        <VStack spacing={3} width="full">
+                            {/* First row - Cancel and Save buttons */}
+                            <HStack spacing={3} width="full" display={{ base: 'grid', md: 'flex' }} gridTemplateColumns={{ base: '1fr 1fr', md: 'none' }}>
+                                <Button variant="ghost" onClick={onEditModalClose} width={{ base: 'full', md: 'auto' }}>
+                                    Cancel
+                                </Button>
+                                <Button
+                                    colorScheme="brand"
+                                    variant="outline"
+                                    onClick={handleSaveChanges}
+                                    isLoading={saving}
+                                    isDisabled={!canSaveChanges()}
+                                    width={{ base: 'full', md: 'auto' }}
+                                >
+                                    Save All Changes
+                                </Button>
+                            </HStack>
+
+                            {/* Second row - Export buttons */}
+                            <HStack spacing={3} width="full" display={{ base: 'grid', md: 'flex' }} gridTemplateColumns={{ base: '1fr 1fr', md: 'none' }}>
+                                <Button
+                                    colorScheme="green"
+                                    variant="outline"
+                                    onClick={exportSinglePO}
+                                    isDisabled={!canSaveChanges() || saving}
+                                    isLoading={saving}
+                                    leftIcon={<Icon as={FiEye} />}
+                                    width={{ base: 'full', md: 'auto' }}
+                                >
+                                    {saving ? 'Saving...' : 'Export Single PO'}
+                                </Button>
+                                <Button
+                                    colorScheme="green"
+                                    variant="outline"
+                                    onClick={exportMultiplePOsBySupplier}
+                                    isDisabled={!canSaveChanges() || saving}
+                                    isLoading={saving}
+                                    leftIcon={<Icon as={FiFilter} />}
+                                    width={{ base: 'full', md: 'auto' }}
+                                >
+                                    {saving ? 'Saving...' : 'Export by Supplier'}
+                                </Button>
+                            </HStack>
+
+                            {/* Third row - Process PO button (full width on mobile) */}
                             <Button
                                 colorScheme="brand"
                                 onClick={handleProcessPO}
                                 isLoading={processing}
-                                isDisabled={!canProcessPO()} // Still require both supplier and price for processing
+                                isDisabled={!canProcessPO()}
+                                width="full"
+                                size={{ base: 'md', md: 'md' }}
                             >
                                 Process PO
                             </Button>
-                        </HStack>
+                        </VStack>
                     </ModalFooter>
                 </ModalContent>
             </Modal>
