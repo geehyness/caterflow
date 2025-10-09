@@ -1409,7 +1409,7 @@ export default function ProcurementPage() {
                                 width="full"
                                 size={{ base: 'md', md: 'md' }}
                             >
-                                Process PO
+                                {saving ? 'Saving...' : 'Process PO'}
                             </Button>
                         </VStack>
                     </ModalFooter>
