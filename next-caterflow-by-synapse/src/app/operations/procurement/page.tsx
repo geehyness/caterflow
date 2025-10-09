@@ -573,6 +573,7 @@ export default function ProcurementPage() {
         }
     };
 
+    // Replace the existing exportMultiplePOsBySupplier function
     const exportMultiplePOsBySupplier = async () => {
         if (!selectedPO) return;
 
@@ -611,9 +612,9 @@ export default function ProcurementPage() {
                     supplierName: supplier?.name
                 };
 
-                // Add delay between opening windows (500ms gap)
+                // Add delay between opening windows (500ms gap) - ensures browser isn't overloaded
                 if (i > 0) {
-                    await new Promise(resolve => setTimeout(resolve, 500));
+                    await new Promise(resolve => setTimeout(resolve, 750)); // Slightly increased delay
                 }
 
                 await openPrintWindow(supplierPO, supplier, i);
@@ -621,9 +622,9 @@ export default function ProcurementPage() {
 
             toast({
                 title: 'PDFs Generated',
-                description: `Purchase orders for ${supplierEntries.length} supplier(s) are ready for printing`,
+                description: `Purchase orders for ${supplierEntries.length} supplier(s) have been prepared for printing. Please print/save each document.`,
                 status: 'success',
-                duration: 3000,
+                duration: 5000,
                 isClosable: true,
             });
         } catch (err: any) {
@@ -638,10 +639,15 @@ export default function ProcurementPage() {
         }
     };
 
+    // Replace the existing openPrintWindow function
     // Helper function to open individual print windows
     const openPrintWindow = (supplierPO: any, supplier: any, index: number): Promise<void> => {
         return new Promise((resolve, reject) => {
-            const printWindow = window.open('', `po-${supplierPO.poNumber}-${index}`);
+            const supplierNameSlug = supplier?.name ? supplier.name.replace(/[^a-zA-Z0-9]/g, '-') : 'supplier';
+            const windowName = `po-${supplierPO.poNumber}-${supplierNameSlug}-${index}`;
+
+            // Open the window immediately
+            const printWindow = window.open('', windowName);
             if (!printWindow) {
                 reject(new Error('Popup blocked. Please allow popups for this site.'));
                 return;
@@ -649,44 +655,35 @@ export default function ProcurementPage() {
 
             const htmlContent = generatePDFHTML(supplierPO, true);
 
-            // Set the window name with PO number and supplier name
-            const supplierNameSlug = supplier?.name ? supplier.name.replace(/[^a-zA-Z0-9]/g, '-') : 'supplier';
-            printWindow.document.title = `${supplierPO.poNumber}-${supplierNameSlug}`;
-
             printWindow.document.write(htmlContent);
             printWindow.document.close();
 
-            // Wait for the window to fully load before resolving
-            printWindow.onload = () => {
-                // Small additional delay to ensure everything is ready
-                setTimeout(() => {
-                    // Auto-print after a brief delay
+            // Use a more reliable way to wait for the content to be ready
+            const printWaiter = () => {
+                // Check if the document state is ready before proceeding
+                if (printWindow.document.readyState === 'complete') {
+                    // Introduce a slightly longer and more reliable delay (700ms)
                     setTimeout(() => {
                         try {
+                            // Attempt to print. Browsers may prevent auto-print on non-user-initiated popups.
                             printWindow.print();
                         } catch (printErr) {
                             console.warn('Auto-print failed, user can print manually:', printErr);
                         }
-                    }, 500);
 
-                    resolve();
-                }, 100);
-            };
-
-            // Fallback in case onload doesn't fire
-            setTimeout(() => {
-                if (printWindow.document.readyState === 'complete') {
-                    resolve();
+                        // Resolve the promise after the print attempt
+                        resolve();
+                    }, 700);
+                } else {
+                    // If not ready, poll again shortly
+                    setTimeout(printWaiter, 50);
                 }
-            }, 2000);
-
-            // Handle window closing
-            printWindow.onbeforeunload = () => {
-                resolve();
             };
+
+            // Start waiting process
+            printWaiter();
         });
     };
-
     // HTML generator function for PDF content
     const generatePDFHTML = (poData: any, isSupplierSpecific: boolean) => {
         const totalItems = poData.orderedItems.reduce((sum: number, item: any) => sum + item.orderedQuantity, 0);
@@ -699,402 +696,267 @@ export default function ProcurementPage() {
         }
 
         return `
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>${documentTitle}</title>
-        <style>
+<!DOCTYPE html>
+<html>
+<head>
+    <title>${documentTitle}</title>
+    <style>
+        body { 
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; 
+            margin: 40px; 
+            color: #151515;
+            background: #F5F7FA;
+        }
+        .header-container {
+            display: flex;
+            align-items: center; /* Center vertically */
+            margin-bottom: 30px;
+            border-bottom: 2px solid #E2E8F0;
+            padding-bottom: 20px;
+            gap: 20px; /* Space between logo and text */
+        }
+        
+        .logo-container {
+            flex-shrink: 0;
+        }
+        
+        .logo {
+            height: 80px; /* Increased to 60px */
+            width: auto;
+            opacity: 0.8;
+        }
+        
+        .header-content {
+            text-align: left; /* Changed from center to left */
+            flex-grow: 1;
+        }
+        .header-content h1 { 
+            margin: 0; 
+            color: #0067FF;
+            font-size: 28px;
+            font-weight: 600;
+        }
+        .info-section { 
+            margin-bottom: 30px;
+            background: #FFFFFF;
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid #E2E8F0;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.03);
+        }
+        .info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        .info-item {
+            margin-bottom: 10px;
+        }
+        .info-label {
+            font-weight: 600;
+            color: #4A5568;
+            font-size: 14px;
+        }
+        .info-value {
+            color: #151515;
+            font-weight: 500;
+        }
+        .table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background: #FFFFFF;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.03);
+            border: 1px solid #E2E8F0;
+        }
+        .table th {
+            background-color: #F7FAFC;
+            border: 1px solid #E2E8F0;
+            padding: 12px 16px;
+            text-align: left;
+            font-weight: 600;
+            color: #2D3748;
+            font-size: 14px;
+        }
+        .table td {
+            border: 1px solid #E2E8F0;
+            padding: 12px 16px;
+            color: #4A5568;
+            font-size: 14px;
+        }
+        .table tr:nth-child(even) {
+            background-color: #F7FAFC;
+        }
+        .table tr:hover {
+            background-color: #EDF2F7;
+        }
+        .footer {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #E2E8F0;
+            font-size: 12px;
+            color: #718096;
+            text-align: center;
+            background: #FFFFFF;
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid #E2E8F0;
+        }
+        .caterflow-brand {
+            font-size: 11px;
+            color: #0067FF;
+            margin-top: 8px;
+            font-style: italic;
+        }
+        .supplier-header {
+            background-color: #EBF8FF;
+            padding: 16px 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border: 1px solid #BEE3F8;
+            color: #2C5A8F;
+        }
+        .supplier-header h2 {
+            margin: 0;
+            color: #2C5A8F;
+            font-size: 18px;
+            font-weight: 600;
+        }
+        .po-number {
+            font-size: 16px;
+            font-weight: 600;
+            color: #0067FF;
+        }
+        .po-date {
+            font-size: 14px;
+            color: #718096;
+        }
+        @media print {
             body { 
-                font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; 
-                margin: 40px; 
-                color: #151515;
-                background: #F5F7FA;
+                margin: 25px;
+                background: white;
             }
+            .no-print { display: none; }
             .header-container {
-                display: flex;
-                align-items: center;
-                margin-bottom: 30px;
-                border-bottom: 2px solid #E2E8F0;
-                padding-bottom: 20px;
-                gap: 20px;
-            }
-            
-            .logo-container {
-                flex-shrink: 0;
-            }
-            
-            .logo {
-                height: 80px;
-                width: auto;
-                opacity: 0.8;
-            }
-            
-            .header-content {
-                text-align: left;
-                flex-grow: 1;
-            }
-            .header-content h1 { 
-                margin: 0; 
-                color: #0067FF;
-                font-size: 28px;
-                font-weight: 600;
-            }
-            .info-section { 
-                margin-bottom: 30px;
-                background: #FFFFFF;
-                padding: 20px;
-                border-radius: 12px;
-                border: 1px solid #E2E8F0;
-                box-shadow: 0 1px 3px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.03);
-            }
-            .info-grid {
-                display: grid;
-                grid-template-columns: 1fr 1fr;
-                gap: 20px;
-            }
-            .info-item {
-                margin-bottom: 10px;
-            }
-            .info-label {
-                font-weight: 600;
-                color: #4A5568;
-                font-size: 14px;
-            }
-            .info-value {
-                color: #151515;
-                font-weight: 500;
-            }
-            .table {
-                width: 100%;
-                border-collapse: collapse;
-                margin: 20px 0;
-                background: #FFFFFF;
-                border-radius: 12px;
-                overflow: hidden;
-                box-shadow: 0 1px 3px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.03);
-                border: 1px solid #E2E8F0;
-            }
-            .table th {
-                background-color: #F7FAFC;
-                border: 1px solid #E2E8F0;
-                padding: 12px 16px;
-                text-align: left;
-                font-weight: 600;
-                color: #2D3748;
-                font-size: 14px;
-            }
-            .table td {
-                border: 1px solid #E2E8F0;
-                padding: 12px 16px;
-                color: #4A5568;
-                font-size: 14px;
-            }
-            .table tr:nth-child(even) {
-                background-color: #F7FAFC;
-            }
-            .table tr:hover {
-                background-color: #EDF2F7;
-            }
-            .footer {
-                margin-top: 40px;
-                padding-top: 20px;
-                border-top: 1px solid #E2E8F0;
-                font-size: 12px;
-                color: #718096;
-                text-align: center;
-                background: #FFFFFF;
-                padding: 20px;
-                border-radius: 12px;
-                border: 1px solid #E2E8F0;
-            }
-            .caterflow-brand {
-                font-size: 11px;
-                color: #0067FF;
-                margin-top: 8px;
-                font-style: italic;
-            }
-            .supplier-header {
-                background-color: #EBF8FF;
-                padding: 16px 20px;
-                border-radius: 8px;
                 margin-bottom: 20px;
-                border: 1px solid #BEE3F8;
-                color: #2C5A8F;
             }
-            .supplier-header h2 {
-                margin: 0;
-                color: #2C5A8F;
-                font-size: 18px;
-                font-weight: 600;
-            }
-            .po-number {
-                font-size: 16px;
-                font-weight: 600;
-                color: #0067FF;
-            }
-            .po-date {
-                font-size: 14px;
-                color: #718096;
-            }
-            
-            /* Print Loading Styles */
-            .print-loading {
-                position: fixed;
-                top: 50%;
-                left: 50%;
-                transform: translate(-50%, -50%);
-                background: rgba(255,255,255,0.95);
-                padding: 30px;
-                border-radius: 12px;
-                text-align: center;
-                z-index: 1000;
-                box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+            .info-section, .table, .footer {
+                box-shadow: none;
                 border: 1px solid #E2E8F0;
-                min-width: 300px;
             }
-            .print-loading p {
-                margin: 10px 0;
-                color: #4A5568;
-                font-size: 14px;
-            }
-            .print-loading p:first-child {
-                font-weight: 600;
-                color: #2D3748;
-                font-size: 16px;
-            }
-            
-            @media print {
-                body { 
-                    margin: 0;
-                    padding: 20px;
-                    background: white;
-                    -webkit-print-color-adjust: exact !important;
-                    print-color-adjust: exact !important;
-                }
-                .no-print { 
-                    display: none !important; 
-                }
-                .print-loading {
-                    display: none !important;
-                }
-                .header-container {
-                    margin-bottom: 20px;
-                    page-break-after: avoid;
-                }
-                .info-section, .table, .footer {
-                    box-shadow: none;
-                    border: 1px solid #E2E8F0;
-                    page-break-inside: avoid;
-                }
-                .table {
-                    page-break-inside: avoid;
-                }
-                tr {
-                    page-break-inside: avoid;
-                }
-                .supplier-header {
-                    background-color: #EBF8FF !important;
-                    -webkit-print-color-adjust: exact;
-                }
-                .table th {
-                    background-color: #F7FAFC !important;
-                    -webkit-print-color-adjust: exact;
-                }
-                .table tr:nth-child(even) {
-                    background-color: #F7FAFC !important;
-                    -webkit-print-color-adjust: exact;
-                }
-            }
-            
-            /* Loading animation */
-            .loading-spinner {
-                border: 3px solid #f3f3f3;
-                border-top: 3px solid #0067FF;
-                border-radius: 50%;
-                width: 40px;
-                height: 40px;
-                animation: spin 1s linear infinite;
-                margin: 0 auto 20px;
-            }
-            
-            @keyframes spin {
-                0% { transform: rotate(0deg); }
-                100% { transform: rotate(360deg); }
-            }
-            
-            @media print {
-                .loading-spinner {
-                    display: none;
-                }
-            }
-        </style>
-    </head>
-    <body>
-        <!-- Loading Indicator -->
-        <div class="print-loading no-print">
-            <div class="loading-spinner"></div>
-            <p>Loading purchase order for printing...</p>
-            <p>If print dialog doesn't open automatically, click the print button below.</p>
+        }
+    </style>
+</head>
+<body>
+<div class="header-container">
+<div class="logo-container">
+    <img src="/icon-512x512.png" alt="Caterflow" class="logo" />
+</div>
+<div class="header-content">
+    <h1>PURCHASE ORDER</h1>
+    <p style="font-size: 16px; margin: 5px 0;">PO Number: <strong class="po-number">${poData.poNumber}</strong></p>
+    <p style="font-size: 14px; margin: 5px 0;" class="po-date">Date: ${new Date(poData.orderDate).toLocaleDateString()}</p>
+</div>
+</div>
+
+    ${isSupplierSpecific && poData.supplierName ? `
+        <div class="supplier-header">
+            <h2>Supplier: ${poData.supplierName}</h2>
+            <p style="margin: 5px 0 0 0; font-size: 14px;">This document contains items to be quoted by ${poData.supplierName}</p>
         </div>
-    
-        <div class="header-container">
-            <div class="logo-container">
-                <img src="/icon-512x512.png" alt="Caterflow" class="logo" />
-            </div>
-            <div class="header-content">
-                <h1>PURCHASE ORDER</h1>
-                <p style="font-size: 16px; margin: 5px 0;">PO Number: <strong class="po-number">${poData.poNumber}</strong></p>
-                <p style="font-size: 14px; margin: 5px 0;" class="po-date">Date: ${new Date(poData.orderDate).toLocaleDateString()}</p>
-            </div>
-        </div>
-    
-        ${isSupplierSpecific && poData.supplierName ? `
-            <div class="supplier-header">
-                <h2>Supplier: ${poData.supplierName}</h2>
-                <p style="margin: 5px 0 0 0; font-size: 14px;">This document contains items to be quoted by ${poData.supplierName}</p>
-            </div>
-        ` : ''}
-    
-        <div class="info-section">
-            <div class="info-grid">
-                <div>
-                    <div class="info-item">
-                        <span class="info-label">Total Items:</span>
-                        <span class="info-value"> ${totalItems}</span>
-                    </div>
-                    <div class="info-item">
-                        <span class="info-label">Unique Items:</span>
-                        <span class="info-value"> ${poData.orderedItems.length}</span>
-                    </div>
+    ` : ''}
+
+    <div class="info-section">
+        <div class="info-grid">
+            <div>
+                <div class="info-item">
+                    <span class="info-label">Total Items:</span>
+                    <span class="info-value"> ${totalItems}</span>
                 </div>
-                <div>
-                    <div class="info-item">
-                        <span class="info-label">Site:</span>
-                        <span class="info-value"> ${poData.site?.name || 'N/A'}</span>
-                    </div>
-                    <div class="info-item">
-                        <span class="info-label">Status:</span>
-                        <span class="info-value"> ${poData.status?.toUpperCase() || 'N/A'}</span>
-                    </div>
+                <div class="info-item">
+                    <span class="info-label">Unique Items:</span>
+                    <span class="info-value"> ${poData.orderedItems.length}</span>
                 </div>
             </div>
         </div>
-    
-        <table class="table">
-            <thead>
+    </div>
+
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Item #</th>
+                <th>Description</th>
+                <th>SKU</th>
+                <th>Quantity</th>
+                <th>Unit of Measure</th>
+                ${!isSupplierSpecific ? '<th>Supplier</th>' : ''}
+            </tr>
+        </thead>
+        <tbody>
+            ${poData.orderedItems.map((item: any, index: number) => `
                 <tr>
-                    <th>Item #</th>
-                    <th>Description</th>
-                    <th>SKU</th>
-                    <th>Quantity</th>
-                    <th>Unit of Measure</th>
-                    ${!isSupplierSpecific ? '<th>Supplier</th>' : ''}
+                    <td style="font-weight: 500;">${index + 1}</td>
+                    <td><strong>${item.stockItem.name}</strong></td>
+                    <td>${item.stockItem.sku || 'N/A'}</td>
+                    <td style="font-weight: 500;">${item.orderedQuantity}</td>
+                    <td>${item.stockItem.unitOfMeasure}</td>
+                    ${!isSupplierSpecific ? `<td>${item.supplier?.name || 'Not assigned'}</td>` : ''}
                 </tr>
-            </thead>
-            <tbody>
-                ${poData.orderedItems.map((item: any, index: number) => `
-                    <tr>
-                        <td style="font-weight: 500;">${index + 1}</td>
-                        <td><strong>${item.stockItem.name}</strong></td>
-                        <td>${item.stockItem.sku || 'N/A'}</td>
-                        <td style="font-weight: 500;">${item.orderedQuantity}</td>
-                        <td>${item.stockItem.unitOfMeasure}</td>
-                        ${!isSupplierSpecific ? `<td>${item.supplier?.name || 'Not assigned'}</td>` : ''}
-                    </tr>
-                `).join('')}
-            </tbody>
-        </table>
-    
-        ${poData.notes ? `
-            <div class="info-section">
-                <h3 style="margin: 0 0 12px 0; color: #2D3748; font-size: 16px;">Notes:</h3>
-                <p style="margin: 0; color: #4A5568; line-height: 1.5;">${poData.notes}</p>
-            </div>
-        ` : ''}
-    
-        <div class="footer">
-            <p style="margin: 0 0 8px 0;">Generated on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}</p>
-            <p style="margin: 0 0 8px 0;">This is a system-generated purchase order. Please provide your quotation for the requested items.</p>
-            <div class="caterflow-brand">
-                <a href="https://synapse-digital.vercel.app/" target="_blank" style="color: #0067FF; text-decoration: none; cursor: pointer;">
-                    Caterflow by Synapse
-                </a>
-            </div>
+            `).join('')}
+        </tbody>
+    </table>
+
+    ${poData.notes ? `
+        <div class="info-section">
+            <h3 style="margin: 0 0 12px 0; color: #2D3748; font-size: 16px;">Notes:</h3>
+            <p style="margin: 0; color: #4A5568; line-height: 1.5;">${poData.notes}</p>
         </div>
-    
-        <div class="no-print" style="text-align: center; margin-top: 20px;">
-            <button onclick="window.print()" style="
-                background: #0067FF;
-                color: white;
-                border: none;
-                padding: 12px 24px;
-                border-radius: 8px;
-                cursor: pointer;
-                font-size: 14px;
-                font-weight: 500;
-                transition: background-color 0.2s;
-                margin: 5px;
-            " onmouseover="this.style.backgroundColor='#0052CC'" onmouseout="this.style.backgroundColor='#0067FF'">
-                Print / Save as PDF
-            </button>
-            <button onclick="window.close()" style="
-                background: #718096;
-                color: white;
-                border: none;
-                padding: 12px 24px;
-                border-radius: 8px;
-                cursor: pointer;
-                font-size: 14px;
-                font-weight: 500;
-                margin: 5px;
-                transition: background-color 0.2s;
-            " onmouseover="this.style.backgroundColor='#4A5568'" onmouseout="this.style.backgroundColor='#718096'">
-                Close
-            </button>
-        </div>
-    
-        <script>
-            // Hide loading indicator when content is ready
-            window.addEventListener('load', function() {
-                console.log('Window loaded, preparing for print...');
-                
-                setTimeout(function() {
-                    const loadingEl = document.querySelector('.print-loading');
-                    if (loadingEl) {
-                        loadingEl.style.display = 'none';
-                        console.log('Loading indicator hidden');
-                    }
-                    
-                    // Auto-print after a short delay
-                    setTimeout(function() {
-                        console.log('Attempting to auto-print...');
-                        try {
-                            window.print();
-                            console.log('Print dialog opened successfully');
-                        } catch (err) {
-                            console.warn('Auto-print failed:', err);
-                        }
-                    }, 800);
-                }, 1000);
-            });
-    
-            // Fallback: hide loading indicator if content takes too long
-            setTimeout(function() {
-                const loadingEl = document.querySelector('.print-loading');
-                if (loadingEl && loadingEl.style.display !== 'none') {
-                    loadingEl.style.display = 'none';
-                    console.log('Loading indicator hidden by fallback timer');
-                }
-            }, 5000);
-    
-            // Also hide loading when DOM is ready (before images load)
-            document.addEventListener('DOMContentLoaded', function() {
-                console.log('DOM content loaded');
-            });
-        </script>
-    </body>
-    </html>
-        `;
+    ` : ''}
+
+    <div class="footer">
+    <p style="margin: 0 0 8px 0;">Generated on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}</p>
+    <p style="margin: 0 0 8px 0;">This is a system-generated purchase order. Please provide your quotation for the requested items.</p>
+    <div class="caterflow-brand">
+        <a href="https://synapse-digital.vercel.app/" target="_blank" style="color: #0067FF; text-decoration: none; cursor: pointer;">
+            Caterflow by Synapse
+        </a>
+    </div>
+</div>
+
+    <div class="no-print" style="text-align: center; margin-top: 20px;">
+        <button onclick="window.print()" style="
+            background: #0067FF;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: background-color 0.2s;
+        " onmouseover="this.style.backgroundColor='#0052CC'" onmouseout="this.style.backgroundColor='#0067FF'">
+            Print / Save as PDF
+        </button>
+        <button onclick="window.close()" style="
+            background: #718096;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            margin-left: 10px;
+            transition: background-color 0.2s;
+        " onmouseover="this.style.backgroundColor='#4A5568'" onmouseout="this.style.backgroundColor='#718096'">
+            Close Window
+        </button>
+    </div>
+</body>
+</html>
+    `;
     };
 
     /* ---------- Columns ---------- */
