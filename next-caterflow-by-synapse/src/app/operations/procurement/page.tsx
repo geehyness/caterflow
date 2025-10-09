@@ -473,6 +473,14 @@ export default function ProcurementPage() {
         if (!selectedPO) return false;
         return selectedPO.orderedItems.every(item => {
             const supplier = editedSuppliers[item._key] ?? item.supplier?._id;
+            return Boolean(supplier); // Only require supplier, price is optional for saving
+        });
+    };
+
+    const canProcessPO = () => {
+        if (!selectedPO) return false;
+        return selectedPO.orderedItems.every(item => {
+            const supplier = editedSuppliers[item._key] ?? item.supplier?._id;
             const totalPrice = editedPrices[item._key];
             return Boolean(supplier) && typeof totalPrice === 'number' && totalPrice > 0;
         });
@@ -482,8 +490,14 @@ export default function ProcurementPage() {
         const supplier = editedSuppliers[item._key] ?? item.supplier?._id;
         const totalPrice = editedPrices[item._key];
         if (!supplier) return 'No supplier selected';
-        if (totalPrice === undefined || totalPrice === null) return 'No total price entered';
-        if (typeof totalPrice !== 'number' || totalPrice <= 0) return 'Enter a valid total price';
+        // Don't require price for saving, only for processing
+        return null;
+    };
+
+    const getRowWarning = (item: any) => {
+        const totalPrice = editedPrices[item._key];
+        if (totalPrice === undefined || totalPrice === null) return 'No price entered (required for processing)';
+        if (typeof totalPrice !== 'number' || totalPrice <= 0) return 'Enter a valid price (required for processing)';
         return null;
     };
 
@@ -493,6 +507,314 @@ export default function ProcurementPage() {
             case 'processed': return 'green';
             default: return 'gray';
         }
+    };
+
+    const exportSinglePO = async () => {
+        if (!selectedPO) return;
+
+        try {
+            // First save any changes
+            if (canSaveChanges()) {
+                await handleSaveChanges();
+            }
+
+            // Use current state data to generate PDF
+            const poData = {
+                ...selectedPO,
+                orderedItems: selectedPO.orderedItems.map(item => ({
+                    ...item,
+                    supplier: editedSuppliers[item._key]
+                        ? suppliers.find(s => s._id === editedSuppliers[item._key])
+                        : item.supplier,
+                    // Don't include prices in export
+                    unitPrice: undefined
+                }))
+            };
+
+            // Generate PDF using browser's print functionality
+            const printWindow = window.open('', '_blank');
+            if (!printWindow) {
+                throw new Error('Popup blocked. Please allow popups for this site.');
+            }
+
+            const htmlContent = generatePDFHTML(poData, false);
+
+            printWindow.document.write(htmlContent);
+            printWindow.document.close();
+
+            // Wait for content to load then trigger print
+            printWindow.onload = () => {
+                printWindow.print();
+                // Optional: close window after print dialog closes
+                // printWindow.onafterprint = () => printWindow.close();
+            };
+
+            toast({
+                title: 'PDF Generated',
+                description: 'Purchase order PDF is ready for printing/saving',
+                status: 'success',
+                duration: 3000,
+                isClosable: true,
+            });
+        } catch (err: any) {
+            console.error('Export failed:', err);
+            toast({
+                title: 'Export Failed',
+                description: err?.message || 'Failed to generate PDF',
+                status: 'error',
+                duration: 5000,
+                isClosable: true,
+            });
+        }
+    };
+
+    const exportMultiplePOsBySupplier = async () => {
+        if (!selectedPO) return;
+
+        try {
+            // First save any changes
+            if (canSaveChanges()) {
+                await handleSaveChanges();
+            }
+
+            // Group items by supplier using current state
+            const itemsBySupplier: { [supplierId: string]: any[] } = {};
+
+            selectedPO.orderedItems.forEach(item => {
+                const supplierId = editedSuppliers[item._key] ?? item.supplier?._id;
+                if (supplierId) {
+                    if (!itemsBySupplier[supplierId]) {
+                        itemsBySupplier[supplierId] = [];
+                    }
+                    itemsBySupplier[supplierId].push({
+                        ...item,
+                        // Don't include prices in export
+                        unitPrice: undefined
+                    });
+                }
+            });
+
+            // Generate separate PDFs for each supplier
+            Object.entries(itemsBySupplier).forEach(([supplierId, items]) => {
+                const supplier = suppliers.find(s => s._id === supplierId);
+                const supplierPO = {
+                    ...selectedPO,
+                    orderedItems: items,
+                    supplierName: supplier?.name
+                };
+
+                const printWindow = window.open('', '_blank');
+                if (!printWindow) {
+                    throw new Error('Popup blocked. Please allow popups for this site.');
+                }
+
+                const htmlContent = generatePDFHTML(supplierPO, true);
+
+                printWindow.document.write(htmlContent);
+                printWindow.document.close();
+
+                printWindow.onload = () => {
+                    printWindow.print();
+                };
+            });
+
+            toast({
+                title: 'PDFs Generated',
+                description: 'Purchase orders by supplier are ready for printing',
+                status: 'success',
+                duration: 3000,
+                isClosable: true,
+            });
+        } catch (err: any) {
+            console.error('Export failed:', err);
+            toast({
+                title: 'Export Failed',
+                description: err?.message || 'Failed to generate PDFs',
+                status: 'error',
+                duration: 5000,
+                isClosable: true,
+            });
+        }
+    };
+
+    // HTML generator function for PDF content
+    const generatePDFHTML = (poData: any, isSupplierSpecific: boolean) => {
+        const totalItems = poData.orderedItems.reduce((sum: number, item: any) => sum + item.orderedQuantity, 0);
+
+        return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Purchase Order ${poData.poNumber}</title>
+        <style>
+            body { 
+                font-family: Arial, sans-serif; 
+                margin: 40px; 
+                color: #333;
+            }
+            .header { 
+                text-align: center; 
+                margin-bottom: 30px;
+                border-bottom: 2px solid #333;
+                padding-bottom: 20px;
+            }
+            .header h1 { 
+                margin: 0; 
+                color: #2c5aa0;
+            }
+            .info-section { 
+                margin-bottom: 30px;
+            }
+            .info-grid {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 20px;
+            }
+            .info-item {
+                margin-bottom: 10px;
+            }
+            .info-label {
+                font-weight: bold;
+                color: #666;
+            }
+            .table {
+                width: 100%;
+                border-collapse: collapse;
+                margin: 20px 0;
+            }
+            .table th {
+                background-color: #f5f5f5;
+                border: 1px solid #ddd;
+                padding: 12px;
+                text-align: left;
+                font-weight: bold;
+            }
+            .table td {
+                border: 1px solid #ddd;
+                padding: 12px;
+            }
+            .table tr:nth-child(even) {
+                background-color: #f9f9f9;
+            }
+            .footer {
+                margin-top: 40px;
+                padding-top: 20px;
+                border-top: 1px solid #ddd;
+                font-size: 12px;
+                color: #666;
+            }
+            .supplier-header {
+                background-color: #e8f4fd;
+                padding: 15px;
+                border-radius: 5px;
+                margin-bottom: 20px;
+            }
+            @media print {
+                body { margin: 0; }
+                .no-print { display: none; }
+            }
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <h1>PURCHASE ORDER</h1>
+            <p style="font-size: 16px; margin: 5px 0;">PO Number: <strong>${poData.poNumber}</strong></p>
+            <p style="font-size: 14px; margin: 5px 0;">Date: ${new Date(poData.orderDate).toLocaleDateString()}</p>
+        </div>
+    
+        ${isSupplierSpecific && poData.supplierName ? `
+            <div class="supplier-header">
+                <h2 style="margin: 0; color: #2c5aa0;">Supplier: ${poData.supplierName}</h2>
+                <p style="margin: 5px 0 0 0;">This document contains items to be quoted by ${poData.supplierName}</p>
+            </div>
+        ` : ''}
+    
+        <div class="info-section">
+            <div class="info-grid">
+                <div>
+                    <div class="info-item">
+                        <span class="info-label">Site:</span> ${poData.site?.name || 'N/A'}
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">PO Status:</span> ${poData.status.toUpperCase()}
+                    </div>
+                </div>
+                <div>
+                    <div class="info-item">
+                        <span class="info-label">Total Items:</span> ${totalItems}
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Unique Items:</span> ${poData.orderedItems.length}
+                    </div>
+                </div>
+            </div>
+        </div>
+    
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Item #</th>
+                    <th>Description</th>
+                    <th>SKU</th>
+                    <th>Quantity</th>
+                    <th>Unit of Measure</th>
+                    ${!isSupplierSpecific ? '<th>Supplier</th>' : ''}
+                </tr>
+            </thead>
+            <tbody>
+                ${poData.orderedItems.map((item: any, index: number) => `
+                    <tr>
+                        <td>${index + 1}</td>
+                        <td><strong>${item.stockItem.name}</strong></td>
+                        <td>${item.stockItem.sku || 'N/A'}</td>
+                        <td>${item.orderedQuantity}</td>
+                        <td>${item.stockItem.unitOfMeasure}</td>
+                        ${!isSupplierSpecific ? `<td>${item.supplier?.name || 'Not assigned'}</td>` : ''}
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
+    
+        ${poData.notes ? `
+            <div class="info-section">
+                <h3>Notes:</h3>
+                <p>${poData.notes}</p>
+            </div>
+        ` : ''}
+    
+        <div class="footer">
+            <p>Generated on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}</p>
+            <p>This is a system-generated purchase order. Please provide your quotation for the requested items.</p>
+        </div>
+    
+        <div class="no-print" style="text-align: center; margin-top: 20px;">
+            <button onclick="window.print()" style="
+                background: #2c5aa0;
+                color: white;
+                border: none;
+                padding: 10px 20px;
+                border-radius: 5px;
+                cursor: pointer;
+                font-size: 16px;
+            ">
+                Print / Save as PDF
+            </button>
+            <button onclick="window.close()" style="
+                background: #666;
+                color: white;
+                border: none;
+                padding: 10px 20px;
+                border-radius: 5px;
+                cursor: pointer;
+                font-size: 16px;
+                margin-left: 10px;
+            ">
+                Close
+            </button>
+        </div>
+    </body>
+    </html>
+        `;
     };
 
     /* ---------- Columns ---------- */
@@ -624,7 +946,7 @@ export default function ProcurementPage() {
                 }
             }
 
-            // Then update purchase order items
+            // Then update purchase order items (even without prices)
             const updates = selectedPO.orderedItems.map(item => {
                 const supplierId = editedSuppliers[item._key] ?? item.supplier?._id;
                 const totalPrice = editedPrices[item._key];
@@ -634,12 +956,12 @@ export default function ProcurementPage() {
                     supplierId: supplierId,
                     newPrice: totalPrice ? totalPrice / item.orderedQuantity : undefined
                 };
-            }).filter(update => update.supplierId && update.newPrice);
+            }).filter(update => update.supplierId); // Only require supplier, price is optional
 
             // Update the purchase order items
             await updatePurchaseOrderItems(selectedPO._id, updates);
 
-            // Update stock item prices
+            // Update stock item prices only if provided
             for (const item of selectedPO.orderedItems) {
                 const totalPrice = editedPrices[item._key];
                 if (totalPrice) {
@@ -888,9 +1210,10 @@ export default function ProcurementPage() {
                                                                 min="0"
                                                                 size="sm"
                                                                 width="100px"
+                                                                placeholder="0.00"
                                                             />
-                                                            {rowError && rowError !== 'No supplier selected' && (
-                                                                <Text fontSize="xs" color={errorTextColor}>{rowError}</Text>
+                                                            {getRowWarning(item) && (
+                                                                <Text fontSize="xs" color="orange.500">{getRowWarning(item)}</Text>
                                                             )}
                                                         </Td>
                                                         <Td borderColor={borderColor}>
@@ -910,9 +1233,18 @@ export default function ProcurementPage() {
                                 {!canSaveChanges() && (
                                     <Alert status="warning" borderRadius="md" bg={warningAlertBg}>
                                         <AlertIcon />
-                                        <AlertTitle color={warningAlertTitleColor}>Missing data</AlertTitle>
+                                        <AlertTitle color={warningAlertTitleColor}>Missing suppliers</AlertTitle>
                                         <AlertDescription color={warningAlertDescriptionColor}>
-                                            Some rows are missing supplier or total price. Fix those before saving.
+                                            Some rows are missing suppliers. You need to select suppliers for all items before saving or exporting.
+                                        </AlertDescription>
+                                    </Alert>
+                                )}
+                                {canSaveChanges() && !canProcessPO() && (
+                                    <Alert status="info" borderRadius="md" bg={useColorModeValue('blue.50', 'blue.900')}>
+                                        <AlertIcon />
+                                        <AlertTitle color={useColorModeValue('blue.800', 'blue.100')}>Prices missing</AlertTitle>
+                                        <AlertDescription color={useColorModeValue('blue.700', 'blue.200')}>
+                                            You can save without prices and continue later. Prices are required for processing the PO.
                                         </AlertDescription>
                                     </Alert>
                                 )}
@@ -934,10 +1266,30 @@ export default function ProcurementPage() {
                                 Save All Changes
                             </Button>
                             <Button
+                                colorScheme="green"
+                                variant="outline"
+                                onClick={exportSinglePO}
+                                isDisabled={!canSaveChanges() || saving}
+                                isLoading={saving}
+                                leftIcon={<Icon as={FiEye} />}
+                            >
+                                {saving ? 'Saving...' : 'Export Single PO'}
+                            </Button>
+                            <Button
+                                colorScheme="green"
+                                variant="outline"
+                                onClick={exportMultiplePOsBySupplier}
+                                isDisabled={!canSaveChanges() || saving}
+                                isLoading={saving}
+                                leftIcon={<Icon as={FiFilter} />}
+                            >
+                                {saving ? 'Saving...' : 'Export by Supplier'}
+                            </Button>
+                            <Button
                                 colorScheme="brand"
                                 onClick={handleProcessPO}
                                 isLoading={processing}
-                                isDisabled={!canSaveChanges()}
+                                isDisabled={!canProcessPO()} // Still require both supplier and price for processing
                             >
                                 Process PO
                             </Button>
