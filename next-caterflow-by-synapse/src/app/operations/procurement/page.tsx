@@ -814,7 +814,7 @@ export default function ProcurementPage() {
 <body>
 <div class="header-container">
 <div class="logo-container">
-    <img src="/logo.png" alt="Caterflow" class="logo" />
+    <img src="/icon-512x512.png" alt="Caterflow" class="logo" />
 </div>
 <div class="header-content">
     <h1>PURCHASE ORDER</h1>
