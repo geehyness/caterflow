@@ -658,179 +658,273 @@ export default function ProcurementPage() {
         }
 
         return `
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>${documentTitle}</title>
-        <style>
+<!DOCTYPE html>
+<html>
+<head>
+    <title>${documentTitle}</title>
+    <style>
+        body { 
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; 
+            margin: 40px; 
+            color: #151515;
+            background: #F5F7FA;
+        }
+        .header-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 30px;
+            border-bottom: 2px solid #E2E8F0;
+            padding-bottom: 20px;
+        }
+        .logo-container {
+            flex-shrink: 0;
+        }
+        .logo {
+            height: 32px;
+            width: auto;
+            opacity: 0.8;
+        }
+        .header-content {
+            flex-grow: 1;
+            text-align: center;
+        }
+        .header-content h1 { 
+            margin: 0; 
+            color: #0067FF;
+            font-size: 28px;
+            font-weight: 600;
+        }
+        .info-section { 
+            margin-bottom: 30px;
+            background: #FFFFFF;
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid #E2E8F0;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.03);
+        }
+        .info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        .info-item {
+            margin-bottom: 10px;
+        }
+        .info-label {
+            font-weight: 600;
+            color: #4A5568;
+            font-size: 14px;
+        }
+        .info-value {
+            color: #151515;
+            font-weight: 500;
+        }
+        .table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background: #FFFFFF;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.03);
+            border: 1px solid #E2E8F0;
+        }
+        .table th {
+            background-color: #F7FAFC;
+            border: 1px solid #E2E8F0;
+            padding: 12px 16px;
+            text-align: left;
+            font-weight: 600;
+            color: #2D3748;
+            font-size: 14px;
+        }
+        .table td {
+            border: 1px solid #E2E8F0;
+            padding: 12px 16px;
+            color: #4A5568;
+            font-size: 14px;
+        }
+        .table tr:nth-child(even) {
+            background-color: #F7FAFC;
+        }
+        .table tr:hover {
+            background-color: #EDF2F7;
+        }
+        .footer {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #E2E8F0;
+            font-size: 12px;
+            color: #718096;
+            text-align: center;
+            background: #FFFFFF;
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid #E2E8F0;
+        }
+        .caterflow-brand {
+            font-size: 11px;
+            color: #A0AEC0;
+            margin-top: 8px;
+            font-style: italic;
+        }
+        .supplier-header {
+            background-color: #EBF8FF;
+            padding: 16px 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border: 1px solid #BEE3F8;
+            color: #2C5A8F;
+        }
+        .supplier-header h2 {
+            margin: 0;
+            color: #2C5A8F;
+            font-size: 18px;
+            font-weight: 600;
+        }
+        .po-number {
+            font-size: 16px;
+            font-weight: 600;
+            color: #0067FF;
+        }
+        .po-date {
+            font-size: 14px;
+            color: #718096;
+        }
+        @media print {
             body { 
-                font-family: Arial, sans-serif; 
-                margin: 40px; 
-                color: #333;
+                margin: 25px;
+                background: white;
             }
-            .header { 
-                text-align: center; 
-                margin-bottom: 30px;
-                border-bottom: 2px solid #333;
-                padding-bottom: 20px;
-            }
-            .header h1 { 
-                margin: 0; 
-                color: #2c5aa0;
-            }
-            .info-section { 
-                margin-bottom: 30px;
-            }
-            .info-grid {
-                display: grid;
-                grid-template-columns: 1fr 1fr;
-                gap: 20px;
-            }
-            .info-item {
-                margin-bottom: 10px;
-            }
-            .info-label {
-                font-weight: bold;
-                color: #666;
-            }
-            .table {
-                width: 100%;
-                border-collapse: collapse;
-                margin: 20px 0;
-            }
-            .table th {
-                background-color: #f5f5f5;
-                border: 1px solid #ddd;
-                padding: 12px;
-                text-align: left;
-                font-weight: bold;
-            }
-            .table td {
-                border: 1px solid #ddd;
-                padding: 12px;
-            }
-            .table tr:nth-child(even) {
-                background-color: #f9f9f9;
-            }
-            .footer {
-                margin-top: 40px;
-                padding-top: 20px;
-                border-top: 1px solid #ddd;
-                font-size: 12px;
-                color: #666;
-            }
-            .supplier-header {
-                background-color: #e8f4fd;
-                padding: 15px;
-                border-radius: 5px;
+            .no-print { display: none; }
+            .header-container {
                 margin-bottom: 20px;
             }
-            @media print {
-                body { margin: 0; }
-                .no-print { display: none; }
+            .info-section, .table, .footer {
+                box-shadow: none;
+                border: 1px solid #E2E8F0;
             }
-        </style>
-    </head>
-    <body>
-        <div class="header">
+        }
+    </style>
+</head>
+<body>
+    <div class="header-container">
+        <div class="logo-container">
+            <img src="/icon-512x512.png" alt="Caterflow" class="logo" />
+        </div>
+        <div class="header-content">
             <h1>PURCHASE ORDER</h1>
-            <p style="font-size: 16px; margin: 5px 0;">PO Number: <strong>${poData.poNumber}</strong></p>
-            <p style="font-size: 14px; margin: 5px 0;">Date: ${new Date(poData.orderDate).toLocaleDateString()}</p>
+            <p style="font-size: 16px; margin: 5px 0;">PO Number: <strong class="po-number">${poData.poNumber}</strong></p>
+            <p style="font-size: 14px; margin: 5px 0;" class="po-date">Date: ${new Date(poData.orderDate).toLocaleDateString()}</p>
         </div>
-    
-        ${isSupplierSpecific && poData.supplierName ? `
-            <div class="supplier-header">
-                <h2 style="margin: 0; color: #2c5aa0;">Supplier: ${poData.supplierName}</h2>
-                <p style="margin: 5px 0 0 0;">This document contains items to be quoted by ${poData.supplierName}</p>
-            </div>
-        ` : ''}
-    
-        <div class="info-section">
-            <div class="info-grid">
-                <div>
-                    <div class="info-item">
-                        <span class="info-label">Site:</span> ${poData.site?.name || 'N/A'}
-                    </div>
-                    <div class="info-item">
-                        <span class="info-label">PO Status:</span> ${poData.status.toUpperCase()}
-                    </div>
+        <div style="width: 100px;"></div> <!-- Spacer for balance -->
+    </div>
+
+    ${isSupplierSpecific && poData.supplierName ? `
+        <div class="supplier-header">
+            <h2>Supplier: ${poData.supplierName}</h2>
+            <p style="margin: 5px 0 0 0; font-size: 14px;">This document contains items to be quoted by ${poData.supplierName}</p>
+        </div>
+    ` : ''}
+
+    <div class="info-section">
+        <div class="info-grid">
+            <div>
+                <div class="info-item">
+                    <span class="info-label">Site:</span>
+                    <span class="info-value"> ${poData.site?.name || 'N/A'}</span>
                 </div>
-                <div>
-                    <div class="info-item">
-                        <span class="info-label">Total Items:</span> ${totalItems}
-                    </div>
-                    <div class="info-item">
-                        <span class="info-label">Unique Items:</span> ${poData.orderedItems.length}
-                    </div>
+                <div class="info-item">
+                    <span class="info-label">PO Status:</span>
+                    <span class="info-value"> ${poData.status.toUpperCase()}</span>
                 </div>
             </div>
+            <div>
+                <div class="info-item">
+                    <span class="info-label">Total Items:</span>
+                    <span class="info-value"> ${totalItems}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Unique Items:</span>
+                    <span class="info-value"> ${poData.orderedItems.length}</span>
+                </div>
+            </div>
         </div>
-    
-        <table class="table">
-            <thead>
+    </div>
+
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Item #</th>
+                <th>Description</th>
+                <th>SKU</th>
+                <th>Quantity</th>
+                <th>Unit of Measure</th>
+                ${!isSupplierSpecific ? '<th>Supplier</th>' : ''}
+            </tr>
+        </thead>
+        <tbody>
+            ${poData.orderedItems.map((item: any, index: number) => `
                 <tr>
-                    <th>Item #</th>
-                    <th>Description</th>
-                    <th>SKU</th>
-                    <th>Quantity</th>
-                    <th>Unit of Measure</th>
-                    ${!isSupplierSpecific ? '<th>Supplier</th>' : ''}
+                    <td style="font-weight: 500;">${index + 1}</td>
+                    <td><strong>${item.stockItem.name}</strong></td>
+                    <td>${item.stockItem.sku || 'N/A'}</td>
+                    <td style="font-weight: 500;">${item.orderedQuantity}</td>
+                    <td>${item.stockItem.unitOfMeasure}</td>
+                    ${!isSupplierSpecific ? `<td>${item.supplier?.name || 'Not assigned'}</td>` : ''}
                 </tr>
-            </thead>
-            <tbody>
-                ${poData.orderedItems.map((item: any, index: number) => `
-                    <tr>
-                        <td>${index + 1}</td>
-                        <td><strong>${item.stockItem.name}</strong></td>
-                        <td>${item.stockItem.sku || 'N/A'}</td>
-                        <td>${item.orderedQuantity}</td>
-                        <td>${item.stockItem.unitOfMeasure}</td>
-                        ${!isSupplierSpecific ? `<td>${item.supplier?.name || 'Not assigned'}</td>` : ''}
-                    </tr>
-                `).join('')}
-            </tbody>
-        </table>
-    
-        ${poData.notes ? `
-            <div class="info-section">
-                <h3>Notes:</h3>
-                <p>${poData.notes}</p>
-            </div>
-        ` : ''}
-    
-        <div class="footer">
-            <p>Generated on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}</p>
-            <p>This is a system-generated purchase order. Please provide your quotation for the requested items.</p>
+            `).join('')}
+        </tbody>
+    </table>
+
+    ${poData.notes ? `
+        <div class="info-section">
+            <h3 style="margin: 0 0 12px 0; color: #2D3748; font-size: 16px;">Notes:</h3>
+            <p style="margin: 0; color: #4A5568; line-height: 1.5;">${poData.notes}</p>
         </div>
-    
-        <div class="no-print" style="text-align: center; margin-top: 20px;">
-            <button onclick="window.print()" style="
-                background: #2c5aa0;
-                color: white;
-                border: none;
-                padding: 10px 20px;
-                border-radius: 5px;
-                cursor: pointer;
-                font-size: 16px;
-            ">
-                Print / Save as PDF
-            </button>
-            <button onclick="window.close()" style="
-                background: #666;
-                color: white;
-                border: none;
-                padding: 10px 20px;
-                border-radius: 5px;
-                cursor: pointer;
-                font-size: 16px;
-                margin-left: 10px;
-            ">
-                Close
-            </button>
+    ` : ''}
+
+    <div class="footer">
+        <p style="margin: 0 0 8px 0;">Generated on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}</p>
+        <p style="margin: 0 0 8px 0;">This is a system-generated purchase order. Please provide your quotation for the requested items.</p>
+        <div class="caterflow-brand">
+            Caterflow by Synapse
         </div>
-    </body>
-    </html>
-        `;
+    </div>
+
+    <div class="no-print" style="text-align: center; margin-top: 20px;">
+        <button onclick="window.print()" style="
+            background: #0067FF;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: background-color 0.2s;
+        " onmouseover="this.style.backgroundColor='#0052CC'" onmouseout="this.style.backgroundColor='#0067FF'">
+            Print / Save as PDF
+        </button>
+        <button onclick="window.close()" style="
+            background: #718096;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            margin-left: 10px;
+            transition: background-color 0.2s;
+        " onmouseover="this.style.backgroundColor='#4A5568'" onmouseout="this.style.backgroundColor='#718096'">
+            Close
+        </button>
+    </div>
+</body>
+</html>
+    `;
     };
 
     /* ---------- Columns ---------- */
