@@ -26,8 +26,7 @@ import {
     VStack,
     Icon,
     HStack,
-   
- Select,
+    Select,
     Table,
     Thead,
     Tbody,
@@ -35,6 +34,478 @@ import {
     Th,
     Td,
     TableContainer,
+    Switch,
+    Tooltip,
+    Alert,
+    AlertIcon,
+    AlertTitle,
+    AlertDescription,
+    NumberInput,
+    NumberInputField,
+    Modal,
+    ModalBody,
+    ModalContent,
+    ModalFooter,
+    ModalHeader,
+    ModalOverlay,
+} from '@chakra-ui/react';
+import { FiPlus, FiSearch, FiEye, FiFilter, FiEdit, FiInfo, FiCheck } from 'react-icons/fi';
+import DataTable from '@/app/actions/DataTable';
+import { useSession } from 'next-auth/react';
+import CreatePurchaseOrderModal from '@/app/actions/CreatePurchaseOrderModal';
+import PurchaseOrderModal, { PurchaseOrderDetails } from '@/app/actions/PurchaseOrderModal';
+import { PendingAction } from '@/app/actions/types';
+import { StockItem, Category, Site } from '@/lib/sanityTypes';
+
+interface PurchaseOrder {
+    _id: string;
+    poNumber: string;
+    orderDate: string;
+    status: string;
+    site: { _id: string; name: string };
+    orderedItems: Array<{
+        _key: string;
+        orderedQuantity: number;
+        unitPrice: number;
+        stockItem: {
+            _id: string;
+            name: string;
+            sku?: string;
+            unitOfMeasure: string;
+            primarySupplier?: { _id: string; name: string } | null;
+            suppliers?: Array<{ _ref: string }>;
+        };
+        supplier?: { _id: string; name: string } | null;
+    }>;
+    totalAmount: number;
+    supplierNames?: string;
+}
+
+interface Supplier {
+    _id: string;
+    name: string;
+}
+
+type StockItemWithSupplier = PurchaseOrder['orderedItems'][0]['stockItem'] & {
+    suppliersList?: Supplier[];
+};
+
+export default function ProcurementPage() {
+    const { data: session, status } = useSession();
+    const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [processing, setProcessing] = useState(false);
+    const [saving, setSaving] = useState(false);
+    const toast = useToast();
+
+    const { isOpen: isEditModalOpen, onOpen: onEditModalOpen, onClose: onEditModalClose } = useDisclosure();
+    const [selectedPO, setSelectedPO] = useState<PurchaseOrder | null>(null);
+    const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+    const [stockItems, setStockItems] = useState<{ [key: string]: StockItemWithSupplier }>({});
+    const [editedSuppliers, setEditedSuppliers] = useState<{ [key: string]: string | undefined }>({});
+    const [editedPrices, setEditedPrices] = useState<{ [key: string]: number | undefined }>({});
+    const [defaultSupplierFlags, setDefaultSupplierFlags] = useState<{ [key: string]: boolean }>({});
+    
+    // Theming props - ALL HOOK CALLS MUST BE AT THE TOP LEVEL
+    const bgPrimary = useColorModeValue('neutral.light.bg-primary', 'neutral.dark.bg-primary');
+    const bgCard = useColorModeValue('neutral.light.bg-card', 'neutral.dark.bg-card');
+    const borderColor = useColorModeValue('neutral.light.border-color', 'neutral.dark.border-color');
+    const primaryTextColor = useColorModeValue('neutral.light.text-primary', 'neutral.dark.text-primary');
+    const secondaryTextColor = useColorModeValue('neutral.light.text-secondary', 'neutral.dark.text-secondary');
+    const accentColor = useColorModeValue('brand.500', 'brand.300');
+    const errorBg = useColorModeValue('red.50', 'red.900');
+    const errorTextColor = useColorModeValue('red.500', 'red.300');
+    const warningAlertBg = useColorModeValue('yellow.50', 'yellow.900');
+    const warningAlertTitleColor = useColorModeValue('yellow.800', 'yellow.100');
+    const warningAlertDescriptionColor = useColorModeValue('yellow.700', 'yellow.200');
+    const hoverColor = useColorModeValue('gray.50', 'gray.700');
+    const infoAlertBg = useColorModeValue('blue.50', 'blue.900');
+    const infoAlertTitleColor = useColorModeValue('blue.800', 'blue.100');
+    const infoAlertDescriptionColor = useColorModeValue('blue.700', 'blue.200');
+    
+    /* ---------- Fetch helpers ---------- */
+    const fetchApprovedPOs = useCallback(async () => {
+        setLoading(true);
+        try {
+            const response = await fetch('/api/purchase-orders?status=approved');
+            if (!response.ok) throw new Error('Failed to fetch purchase orders');
+            const data = await response.json();
+            setPurchaseOrders(data);
+        } catch (err) {
+            console.error(err);
+            toast({
+                title: 'Error',
+                description: 'Failed to load purchase orders',
+                status: 'error',
+                duration: 5000,
+                isClosable: true,
+            });
+        } finally {
+            setLoading(false);
+        }
+    }, [toast]);
+
+    const fetchSuppliers = useCallback(async () => {
+        try {
+            const res = await fetch('/api/suppliers');
+            if (!res.ok) throw new Error('Failed to fetch suppliers');
+            const data = await res.json();
+            setSuppliers(data);
+        } catch (err) {
+            console.error(err);
+        }
+    }, []);
+
+    const fetchStockItemDetails = useCallback(async (itemId: string) => {
+        try {
+            const response = await fetch(`/api/procurement/stock-items?id=${itemId}`);
+            if (!response.ok) throw new Error('Failed to fetch stock item details');
+            const data = await response.json();
+            const suppliersList = (data.suppliers || []).map((s: any) => ({ _id: s._id, name: s.name }));
+            setStockItems(prev => ({
+                ...prev,
+                [itemId]: { ...data, suppliersList, primarySupplier: data.primarySupplier || null },
+            }));
+            return { ...data, suppliersList };
+        } catch (err) {
+            console.error(err);
+            return null;
+        }
+    }, []);
+
+    useEffect(() => {
+        if (status === 'authenticated') {
+            fetchApprovedPOs();
+            fetchSuppliers();
+        }
+    }, [status, fetchApprovedPOs, fetchSuppliers]);
+
+    /* ---------- Server helpers (client calls) ---------- */
+    const addSupplierToStockItem = async (itemId: string, supplierId: string) => {
+        try {
+            const resp = await fetch('/api/procurement/suppliers', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ itemId, supplierId }),
+            });
+            if (!resp.ok) {
+                const errorData = await resp.json().catch(() => ({}));
+                if (errorData.error && errorData.error.includes('already exists')) {
+                    return { success: true, message: 'Supplier already exists' };
+                }
+                throw new Error(errorData.error || 'Failed to add supplier to stock item');
+            }
+            const json = await resp.json();
+            setStockItems(prev => {
+                const s = prev[itemId];
+                if (!s) return prev;
+                const newSuppliersList = [...(s.suppliersList || [])];
+                if (!newSuppliersList.find(x => x._id === supplierId)) {
+                    newSuppliersList.push({
+                        _id: supplierId,
+                        name: suppliers.find(x => x._id === supplierId)?.name || ''
+                    });
+                }
+                return { ...prev, [itemId]: { ...s, suppliersList: newSuppliersList } };
+            });
+            return json;
+        } catch (err) {
+            console.error('addSupplierToStockItem error:', err);
+            throw err;
+        }
+    };
+
+    const setPrimarySupplierAPI = async (itemId: string, supplierId: string) => {
+        try {
+            const resp = await fetch('/api/procurement/primary-supplier', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ itemId, supplierId }),
+            });
+            if (!resp.ok) {
+                const j = await resp.json().catch(() => ({}));
+                throw new Error(j?.error || 'Failed to set primary supplier');
+            }
+            const json = await resp.json();
+            setStockItems(prev => {
+                const s = prev[itemId];
+                if (!s) return prev;
+                return { ...prev, [itemId]: { ...s, primarySupplier: { _id: supplierId, name: suppliers.find(x => x._id === supplierId)?.name || '' } } };
+            });
+            return json;
+        } catch (err) {
+            console.error('setPrimarySupplierAPI error:', err);
+            throw err;
+        }
+    };
+
+    const unsetPrimarySupplierAPI = async (itemId: string) => {
+        try {
+            const resp = await fetch('/api/procurement/stock-items', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ itemId, updates: { primarySupplier: null } }),
+            });
+            if (!resp.ok) {
+                const j = await resp.json().catch(() => ({}));
+                throw new Error(j?.error || 'Failed to unset primary supplier');
+            }
+            setStockItems(prev => {
+                const s = prev[itemId];
+                if (!s) return prev;
+                return { ...prev, [itemId]: { ...s, primarySupplier: null } };
+            });
+            return await resp.json();
+        } catch (err) {
+            console.error('unsetPrimarySupplierAPI error:', err);
+            throw err;
+        }
+    };
+
+    const updateStockItemUnitPrice = async (itemId: string, unitPrice: number) => {
+        try {
+            const resp = await fetch('/api/procurement/stock-items', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ itemId, updates: { unitPrice } }),
+            });
+            if (!resp.ok) {
+                const j = await resp.json().catch(() => ({}));
+                throw new Error(j?.error || 'Failed to update stock item price');
+            }
+            const json = await resp.json();
+            setStockItems(prev => {
+                const s = prev[itemId];
+                if (!s) return prev;
+                return { ...prev, [itemId]: { ...s, unitPrice } };
+            });
+            return json;
+        } catch (err) {
+            console.error('updateStockItemUnitPrice error:', err);
+            throw err;
+        }
+    };
+
+    const updatePurchaseOrderItems = async (poId: string, updates: Array<{ itemKey: string; newPrice?: number; newQuantity?: number; supplierId?: string }>) => {
+        try {
+            const resp = await fetch('/api/purchase-orders/update-items', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ poId, updates }),
+            });
+            if (!resp.ok) {
+                const j = await resp.json().catch(() => ({}));
+                throw new Error(j?.error || 'Failed to update purchase order items');
+            }
+            return await resp.json();
+        } catch (err) {
+            console.error('updatePurchaseOrderItems error:', err);
+            throw err;
+        }
+    };
+
+    /* ---------- Modal actions ---------- */
+    const handleEditPO = useCallback(async (po: PurchaseOrder) => {
+        setSelectedPO(po);
+        const initialSuppliers: { [key: string]: string | undefined } = {};
+        const initialPrices: { [key: string]: number | undefined } = {};
+        const initialDefaultFlags: { [key: string]: boolean } = {};
+
+        for (const item of po.orderedItems) {
+            let itemDetails = stockItems[item.stockItem._id];
+            if (!itemDetails) {
+                const fetched = await fetchStockItemDetails(item.stockItem._id);
+                itemDetails = fetched || undefined;
+            }
+            initialSuppliers[item._key] = item.supplier?._id;
+            initialPrices[item._key] = item.unitPrice > 0 ? item.unitPrice * item.orderedQuantity : undefined;
+            const selectedSupplierId = item.supplier?._id;
+            const isPrimary = !!(itemDetails?.primarySupplier?._id && selectedSupplierId === itemDetails.primarySupplier._id);
+            initialDefaultFlags[item._key] = isPrimary;
+            if (itemDetails?.primarySupplier && !selectedSupplierId) {
+                initialSuppliers[item._key] = itemDetails.primarySupplier._id;
+                initialDefaultFlags[item._key] = true;
+            }
+        }
+        setEditedSuppliers(initialSuppliers);
+        setEditedPrices(initialPrices);
+        setDefaultSupplierFlags(initialDefaultFlags);
+        onEditModalOpen();
+    }, [fetchStockItemDetails, onEditModalOpen, stockItems]);
+
+    const handleSupplierChange = (itemKey: string, supplierId: string, stockItemId: string) => {
+        setEditedSuppliers(prev => ({ ...prev, [itemKey]: supplierId }));
+        const itemDetails = stockItems[stockItemId];
+        if (itemDetails?.primarySupplier?._id === supplierId) {
+            setDefaultSupplierFlags(prev => ({ ...prev, [itemKey]: true }));
+        } else {
+            setDefaultSupplierFlags(prev => ({ ...prev, [itemKey]: false }));
+        }
+    };
+
+    const formatCurrencyInput = (value: string) => {
+        if (!value) return '';
+        const cleaned = value.replace(/[^\d.]/g, '');
+        const parts = cleaned.split('.');
+        if (parts.length > 2) {
+            return parts[0] + '.' + parts.slice(1).join('');
+        }
+        if (parts[1] && parts[1].length > 2) {
+            return parts[0] + '.' + parts[1].substring(0, 2);
+        }
+        return cleaned;
+    };
+
+    const handlePriceChange = (itemKey: string, value: string) => {
+        const formattedValue = formatCurrencyInput(value);
+        const valueAsNumber = parseFloat(formattedValue);
+        setEditedPrices(prev => ({ ...prev, [itemKey]: isNaN(valueAsNumber) ? undefined : valueAsNumber }));
+    };
+
+    const handleDefaultSupplierToggle = async (itemKey: string, stockItemId: string, checked: boolean) => {
+        const supplierId = editedSuppliers[itemKey];
+        if (!supplierId) {
+            toast({
+                title: 'Select supplier first',
+                description: 'Choose a supplier before marking as default.',
+                status: 'warning',
+                duration: 3000,
+                isClosable: true,
+            });
+            setDefaultSupplierFlags(prev => ({ ...prev, [itemKey]: false }));
+            return;
+        }
+        try {
+            await addSupplierToStockItem(stockItemId, supplierId);
+            if (checked) {
+                await setPrimarySupplierAPI(stockItemId, supplierId);
+                setDefaultSupplierFlags(prev => ({ ...prev, [itemKey]: true }));
+                toast({
+                    title: 'Default supplier set',
+                    description: 'Primary supplier updated for this item.',
+                    status: 'success',
+                    duration: 2000,
+                    isClosable: true,
+                });
+            } else {
+                await unsetPrimarySupplierAPI(stockItemId);
+                setDefaultSupplierFlags(prev => ({ ...prev, [itemKey]: false }));
+                toast({
+                    title: 'Default supplier unset',
+                    description: 'Primary supplier removed for this item.',
+                    status: 'info',
+                    duration: 2000,
+                    isClosable: true,
+                });
+            }
+            await fetchStockItemDetails(stockItemId);
+        } catch (err: any) {
+            console.error(err);
+            toast({
+                title: 'Error',
+                description: err?.message || 'Failed to update primary supplier.',
+                status: 'error',
+                duration: 4000,
+                isClosable: true,
+            });
+            setDefaultSupplierFlags(prev => ({ ...prev, [itemKey]: !checked }));
+        }
+    };
+
+    /* ---------- Validation helpers & UI state ---------- */
+    const canSaveChanges = () => {
+        if (!selectedPO) return false;
+        return selectedPO.orderedItems.every(item => {
+            const supplier = editedSuppliers[item._key] ?? item.supplier?._id;
+            return Boolean(supplier);
+        });
+    };
+
+    const canProcessPO = () => {
+        if (!selectedPO) return false;
+        return selectedPO.orderedItems.every(item => {
+            const supplier = editedSuppliers[item._key] ?? item.supplier?._id;
+            const totalPrice = editedPrices[item._key];
+            return Boolean(supplier) && typeof totalPrice === 'number' && totalPrice > 0;
+        });
+    };
+
+    const getRowError = (item: any) => {
+        const supplier = editedSuppliers[item._key] ?? item.supplier?._id;
+        if (!supplier) return 'No supplier selected';
+        return null;
+    };
+
+    const getRowWarning = (item: any) => {
+        const totalPrice = editedPrices[item._key];
+        if (totalPrice === undefined || totalPrice === null) return 'No price entered (required for processing)';
+        if (typeof totalPrice !== 'number' || totalPrice <= 0) return 'Enter a valid price (required for processing)';
+        return null;
+    };
+
+    const getStatusColor = (status: string) => {
+        switch (status) {
+            case 'approved': return 'orange';
+            case 'processed': return 'green';
+            default: return 'gray';
+        }
+    };
+
+    const exportSinglePO = async () => {
+        if (!selectedPO) return;
+        try {
+            if (canSaveChanges()) {
+                await handleSaveChanges();
+            }
+            const poData = {
+                ...selectedPO,
+                orderedItems: selectedPO.orderedItems.map(item => ({
+                    ...item,
+                    supplier: editedSuppliers[item._key] ? suppliers.find(s => s._id === editedSuppliers[item._key]) : item.supplier,
+                    unitPrice: undefined
+                }))
+            };
+            const printWindow = window.open('', '_blank');
+            if (!printWindow) {
+                throw new Error('Popup blocked. Please allow popups for this site.');
+            }
+            const htmlContent = generatePDFHTML(poData, false);
+            printWindow.document.write(htmlContent);
+            printWindow.document.close();
+            printWindow.onload = () => {
+                printWindow.print();
+            };
+            toast({
+                title: 'PDF Generated',
+                description: 'Purchase order PDF is ready for printing/saving',
+                status: 'success',
+                duration: 3000,
+                isClosable: true,
+            });
+        } catch (err: any) {
+            console.error('Export failed:', err);
+            toast({
+                title: 'Export Failed',
+                description: err?.message || 'Failed to generate PDF',
+                status: 'error',
+                duration: 5000,
+                isClosable: true,
+            });
+        }
+    };
+
+    const exportMultiplePOsBySupplier = async () => {
+        if (!selectedPO) return;
+        try {
+            if (canSaveChanges()) {
+                await handleSaveChanges();
+            }
+            const itemsBySupplier: { [supplierId: string]: any[] } = {};
+            selectedPO.orderedItems.forEach(item => {
+                const supplierId = editedSuppliers[item._key] ?? item.supplier?._id;
+                if (supplierId) {
+                    if (!itemsBySupplier[supplierId]) {
+            TableContainer,
     Switch,
     Tooltip,
     Alert,
