@@ -547,7 +547,7 @@ export default function ProcurementPage() {
             printWindow.document.close();
 
             // Set the window name for better PDF saving
-            printWindow.document.title = `PO-${selectedPO.poNumber}`;
+            printWindow.document.title = `${selectedPO.poNumber}`;
 
             // Wait for content to load then trigger print
             printWindow.onload = () => {
@@ -620,7 +620,7 @@ export default function ProcurementPage() {
 
                 // Set the window name with PO number and supplier name
                 const supplierNameSlug = supplier?.name ? supplier.name.replace(/[^a-zA-Z0-9]/g, '-') : 'supplier';
-                printWindow.document.title = `PO-${selectedPO.poNumber}-${supplierNameSlug}`;
+                printWindow.document.title = `${selectedPO.poNumber}-${supplierNameSlug}`;
 
                 printWindow.onload = () => {
                     printWindow.print();
