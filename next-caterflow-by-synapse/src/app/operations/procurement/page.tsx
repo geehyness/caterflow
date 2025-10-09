@@ -671,28 +671,26 @@ export default function ProcurementPage() {
         }
         .header-container {
             display: flex;
-            justify-content: space-between;
-            align-items: center; /* Changed from flex-start to center */
+            align-items: center; /* Center vertically */
             margin-bottom: 30px;
             border-bottom: 2px solid #E2E8F0;
             padding-bottom: 20px;
-            min-height: 60px; /* Ensures consistent height */
+            gap: 20px; /* Space between logo and text */
         }
-        ..logo-container {
+        
+        .logo-container {
             flex-shrink: 0;
-            display: flex;
-            align-items: center;
-            height: 60px; /* Matches the height of two lines of text */
         }
         
         .logo {
-            height: 40px; /* Increased from 32px to better match text height */
+            height: 60px; /* Increased to 60px */
             width: auto;
             opacity: 0.8;
         }
+        
         .header-content {
+            text-align: left; /* Changed from center to left */
             flex-grow: 1;
-            text-align: center;
         }
         .header-content h1 { 
             margin: 0; 
@@ -814,17 +812,16 @@ export default function ProcurementPage() {
     </style>
 </head>
 <body>
-    <div class="header-container">
-        <div class="logo-container">
-            <img src="/icon-512x512.png" alt="Caterflow" class="logo" />
-        </div>
-        <div class="header-content">
-            <h1>PURCHASE ORDER</h1>
-            <p style="font-size: 16px; margin: 5px 0;">PO Number: <strong class="po-number">${poData.poNumber}</strong></p>
-            <p style="font-size: 14px; margin: 5px 0;" class="po-date">Date: ${new Date(poData.orderDate).toLocaleDateString()}</p>
-        </div>
-        <div style="width: 100px;"></div> <!-- Spacer for balance -->
-    </div>
+<div class="header-container">
+<div class="logo-container">
+    <img src="/logo.png" alt="Caterflow" class="logo" />
+</div>
+<div class="header-content">
+    <h1>PURCHASE ORDER</h1>
+    <p style="font-size: 16px; margin: 5px 0;">PO Number: <strong class="po-number">${poData.poNumber}</strong></p>
+    <p style="font-size: 14px; margin: 5px 0;" class="po-date">Date: ${new Date(poData.orderDate).toLocaleDateString()}</p>
+</div>
+</div>
 
     ${isSupplierSpecific && poData.supplierName ? `
         <div class="supplier-header">
@@ -834,6 +831,7 @@ export default function ProcurementPage() {
     ` : ''}
 
     <div class="info-section">
+        <div class="info-grid">
             <div>
                 <div class="info-item">
                     <span class="info-label">Total Items:</span>
@@ -844,6 +842,7 @@ export default function ProcurementPage() {
                     <span class="info-value"> ${poData.orderedItems.length}</span>
                 </div>
             </div>
+        </div>
     </div>
 
     <table class="table">
