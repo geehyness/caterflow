@@ -91,6 +91,45 @@ type StockItemWithSupplier = PurchaseOrder['orderedItems'][0]['stockItem'] & {
     suppliersList?: Supplier[];
 };
 
+// Sequential export helper function
+async function exportReportsSequentially(reports: any[]) {
+    for (const report of reports) {
+        await new Promise<void>((resolve) => {
+            const exportWindow = window.open('', '_blank');
+
+            if (!exportWindow) {
+                console.error('Popup blocked or failed to open export window.');
+                resolve();
+                return;
+            }
+
+            exportWindow.document.write(report.htmlContent);
+            exportWindow.document.close();
+            exportWindow.document.title = report.windowName;
+
+            // Wait for content to load
+            exportWindow.onload = () => {
+                // Add a small delay to ensure everything is ready
+                setTimeout(() => {
+                    try {
+                        exportWindow.print();
+                    } catch (printErr) {
+                        console.warn('Auto-print failed, user can print manually:', printErr);
+                    }
+
+                    // Check if window is closed every 500ms
+                    const checkClosed = setInterval(() => {
+                        if (exportWindow.closed) {
+                            clearInterval(checkClosed);
+                            resolve();
+                        }
+                    }, 500);
+                }, 700);
+            };
+        });
+    }
+}
+
 
 export default function ProcurementPage() {
     const { data: session, status } = useSession();
@@ -98,6 +137,7 @@ export default function ProcurementPage() {
     const [loading, setLoading] = useState(true);
     const [processing, setProcessing] = useState(false);
     const [saving, setSaving] = useState(false);
+    const [exporting, setExporting] = useState(false);
     const toast = useToast();
 
     const { isOpen: isEditModalOpen, onOpen: onEditModalOpen, onClose: onEditModalClose } = useDisclosure();
@@ -535,24 +575,15 @@ export default function ProcurementPage() {
                 }))
             };
 
-            // Generate PDF using browser's print functionality
-            const printWindow = window.open('', '_blank');
-            if (!printWindow) {
-                throw new Error('Popup blocked. Please allow popups for this site.');
-            }
-
             const htmlContent = generatePDFHTML(poData, false);
 
-            printWindow.document.write(htmlContent);
-            printWindow.document.close();
-
-            // Set the window name for better PDF saving
-            printWindow.document.title = `${selectedPO.poNumber}`;
-
-            // Wait for content to load then trigger print
-            printWindow.onload = () => {
-                printWindow.print();
-            };
+            // Use sequential export for single PO as well for consistency
+            setExporting(true);
+            await exportReportsSequentially([{
+                htmlContent,
+                windowName: `${selectedPO.poNumber}`
+            }]);
+            setExporting(false);
 
             toast({
                 title: 'PDF Generated',
@@ -563,6 +594,7 @@ export default function ProcurementPage() {
             });
         } catch (err: any) {
             console.error('Export failed:', err);
+            setExporting(false);
             toast({
                 title: 'Export Failed',
                 description: err?.message || 'Failed to generate PDF',
@@ -573,7 +605,7 @@ export default function ProcurementPage() {
         }
     };
 
-    // Replace the existing exportMultiplePOsBySupplier function
+    // Updated exportMultiplePOsBySupplier function
     const exportMultiplePOsBySupplier = async () => {
         if (!selectedPO) return;
 
@@ -600,11 +632,8 @@ export default function ProcurementPage() {
                 }
             });
 
-            // Process suppliers sequentially with delays
-            const supplierEntries = Object.entries(itemsBySupplier);
-
-            for (let i = 0; i < supplierEntries.length; i++) {
-                const [supplierId, items] = supplierEntries[i];
+            // Prepare reports for sequential export
+            const reports = Object.entries(itemsBySupplier).map(([supplierId, items], index) => {
                 const supplier = suppliers.find(s => s._id === supplierId);
                 const supplierPO = {
                     ...selectedPO,
@@ -612,23 +641,30 @@ export default function ProcurementPage() {
                     supplierName: supplier?.name
                 };
 
-                // Add delay between opening windows (500ms gap) - ensures browser isn't overloaded
-                if (i > 0) {
-                    await new Promise(resolve => setTimeout(resolve, 750)); // Slightly increased delay
-                }
+                const supplierNameSlug = supplier?.name ? supplier.name.replace(/[^a-zA-Z0-9]/g, '-') : 'supplier';
+                const windowName = `po-${selectedPO.poNumber}-${supplierNameSlug}-${index}`;
 
-                await openPrintWindow(supplierPO, supplier, i);
-            }
+                return {
+                    htmlContent: generatePDFHTML(supplierPO, true),
+                    windowName
+                };
+            });
+
+            // Export sequentially
+            setExporting(true);
+            await exportReportsSequentially(reports);
+            setExporting(false);
 
             toast({
-                title: 'PDFs Generated',
-                description: `Purchase orders for ${supplierEntries.length} supplier(s) have been prepared for printing. Please print/save each document.`,
+                title: 'All exports completed',
+                description: `${reports.length} purchase order(s) have been exported successfully.`,
                 status: 'success',
                 duration: 5000,
                 isClosable: true,
             });
         } catch (err: any) {
             console.error('Export failed:', err);
+            setExporting(false);
             toast({
                 title: 'Export Failed',
                 description: err?.message || 'Failed to generate PDFs',
@@ -639,51 +675,6 @@ export default function ProcurementPage() {
         }
     };
 
-    // Replace the existing openPrintWindow function
-    // Helper function to open individual print windows
-    const openPrintWindow = (supplierPO: any, supplier: any, index: number): Promise<void> => {
-        return new Promise((resolve, reject) => {
-            const supplierNameSlug = supplier?.name ? supplier.name.replace(/[^a-zA-Z0-9]/g, '-') : 'supplier';
-            const windowName = `po-${supplierPO.poNumber}-${supplierNameSlug}-${index}`;
-
-            // Open the window immediately
-            const printWindow = window.open('', windowName);
-            if (!printWindow) {
-                reject(new Error('Popup blocked. Please allow popups for this site.'));
-                return;
-            }
-
-            const htmlContent = generatePDFHTML(supplierPO, true);
-
-            printWindow.document.write(htmlContent);
-            printWindow.document.close();
-
-            // Use a more reliable way to wait for the content to be ready
-            const printWaiter = () => {
-                // Check if the document state is ready before proceeding
-                if (printWindow.document.readyState === 'complete') {
-                    // Introduce a slightly longer and more reliable delay (700ms)
-                    setTimeout(() => {
-                        try {
-                            // Attempt to print. Browsers may prevent auto-print on non-user-initiated popups.
-                            printWindow.print();
-                        } catch (printErr) {
-                            console.warn('Auto-print failed, user can print manually:', printErr);
-                        }
-
-                        // Resolve the promise after the print attempt
-                        resolve();
-                    }, 700);
-                } else {
-                    // If not ready, poll again shortly
-                    setTimeout(printWaiter, 50);
-                }
-            };
-
-            // Start waiting process
-            printWaiter();
-        });
-    };
     // HTML generator function for PDF content
     const generatePDFHTML = (poData: any, isSupplierSpecific: boolean) => {
         const totalItems = poData.orderedItems.reduce((sum: number, item: any) => sum + item.orderedQuantity, 0);
@@ -1418,23 +1409,23 @@ export default function ProcurementPage() {
                                     colorScheme="green"
                                     variant="outline"
                                     onClick={exportSinglePO}
-                                    isDisabled={!canSaveChanges() || saving}
-                                    isLoading={saving}
+                                    isDisabled={!canSaveChanges() || saving || exporting}
+                                    isLoading={exporting}
                                     leftIcon={<Icon as={FiEye} />}
                                     width={{ base: 'full', md: 'auto' }}
                                 >
-                                    {saving ? 'Saving...' : 'Export Single PO'}
+                                    {exporting ? 'Exporting...' : 'Export Single PO'}
                                 </Button>
                                 <Button
                                     colorScheme="green"
                                     variant="outline"
                                     onClick={exportMultiplePOsBySupplier}
-                                    isDisabled={!canSaveChanges() || saving}
-                                    isLoading={saving}
+                                    isDisabled={!canSaveChanges() || saving || exporting}
+                                    isLoading={exporting}
                                     leftIcon={<Icon as={FiFilter} />}
                                     width={{ base: 'full', md: 'auto' }}
                                 >
-                                    {saving ? 'Saving...' : 'Export by Supplier'}
+                                    {exporting ? 'Exporting...' : 'Export by Supplier'}
                                 </Button>
                             </HStack>
 
@@ -1447,7 +1438,7 @@ export default function ProcurementPage() {
                                 width="full"
                                 size={{ base: 'md', md: 'md' }}
                             >
-                                {saving ? 'Saving...' : 'Process PO'}
+                                {processing ? 'Processing...' : 'Process PO'}
                             </Button>
                         </VStack>
                     </ModalFooter>
