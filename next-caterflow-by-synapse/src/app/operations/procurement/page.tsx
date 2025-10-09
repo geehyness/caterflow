@@ -672,16 +672,21 @@ export default function ProcurementPage() {
         .header-container {
             display: flex;
             justify-content: space-between;
-            align-items: flex-start;
+            align-items: center; /* Changed from flex-start to center */
             margin-bottom: 30px;
             border-bottom: 2px solid #E2E8F0;
             padding-bottom: 20px;
+            min-height: 60px; /* Ensures consistent height */
         }
-        .logo-container {
+        ..logo-container {
             flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            height: 60px; /* Matches the height of two lines of text */
         }
+        
         .logo {
-            height: 32px;
+            height: 40px; /* Increased from 32px to better match text height */
             width: auto;
             opacity: 0.8;
         }
@@ -829,17 +834,6 @@ export default function ProcurementPage() {
     ` : ''}
 
     <div class="info-section">
-        <div class="info-grid">
-            <div>
-                <div class="info-item">
-                    <span class="info-label">Site:</span>
-                    <span class="info-value"> ${poData.site?.name || 'N/A'}</span>
-                </div>
-                <div class="info-item">
-                    <span class="info-label">PO Status:</span>
-                    <span class="info-value"> ${poData.status.toUpperCase()}</span>
-                </div>
-            </div>
             <div>
                 <div class="info-item">
                     <span class="info-label">Total Items:</span>
@@ -850,7 +844,6 @@ export default function ProcurementPage() {
                     <span class="info-value"> ${poData.orderedItems.length}</span>
                 </div>
             </div>
-        </div>
     </div>
 
     <table class="table">
