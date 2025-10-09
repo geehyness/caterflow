@@ -683,7 +683,7 @@ export default function ProcurementPage() {
         }
         
         .logo {
-            height: 60px; /* Increased to 60px */
+            height: 80px; /* Increased to 60px */
             width: auto;
             opacity: 0.8;
         }
@@ -881,7 +881,7 @@ export default function ProcurementPage() {
     <p style="margin: 0 0 8px 0;">Generated on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}</p>
     <p style="margin: 0 0 8px 0;">This is a system-generated purchase order. Please provide your quotation for the requested items.</p>
     <div class="caterflow-brand">
-        <a href="https://synapse-digital.vercel.app/" target="_blank" style="color: #A0AEC0; text-decoration: none; cursor: pointer;">
+        <a href="https://synapse-digital.vercel.app/" target="_blank" style="color: #0067FF; text-decoration: none; cursor: pointer;">
             Caterflow by Synapse
         </a>
     </div>
