@@ -2017,8 +2017,7 @@ interface PieChartData {
 }
 
 const StatusPieChart = ({ data, title, colors = CHART_COLORS.primary }: { data: any[], title: string, colors?: string[] }) => (
-    <Card height="600px">
-
+    <Card height="400px">
         <CardBody>
             <Text fontWeight="bold" mb={4}>{title}</Text>
             <ResponsiveContainer width="100%" height="100%">
