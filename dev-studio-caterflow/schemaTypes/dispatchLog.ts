@@ -188,6 +188,20 @@ export default defineType({
             type: 'text',
             rows: 3,
         }),
+        defineField({
+            name: 'sellingPrice',
+            title: 'Selling Price per Person',
+            type: 'number',
+            description: 'Selling price per person from the dispatch type',
+            readOnly: true,
+        }),
+        defineField({
+            name: 'totalSales',
+            title: 'Total Sales',
+            type: 'number',
+            description: 'Calculated total sales (peopleFed × sellingPrice)',
+            readOnly: true,
+        }),
     ],
     preview: {
         select: {

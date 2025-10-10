@@ -35,6 +35,11 @@ import {
     ModalBody,
     ModalFooter,
     Textarea,
+    NumberInput,
+    NumberInputField,
+    NumberInputStepper,
+    NumberIncrementStepper,
+    NumberDecrementStepper,
 } from '@chakra-ui/react';
 import { FiPlus, FiEdit, FiTrash2, FiSave, FiX } from 'react-icons/fi';
 import { useSession } from 'next-auth/react';
@@ -44,6 +49,7 @@ interface DispatchType {
     name: string;
     description?: string;
     defaultTime?: string;
+    sellingPrice: number;
     isActive: boolean;
 }
 
@@ -99,6 +105,7 @@ export default function DispatchTypesPage() {
             name: '',
             description: '',
             defaultTime: '',
+            sellingPrice: 0,
             isActive: true
         });
         onOpen();
@@ -249,6 +256,7 @@ export default function DispatchTypesPage() {
                                         <Th>Name</Th>
                                         <Th>Description</Th>
                                         <Th>Default Time</Th>
+                                        <Th>Selling Price</Th>
                                         <Th>Status</Th>
                                         <Th>Actions</Th>
                                     </Tr>
@@ -263,6 +271,7 @@ export default function DispatchTypesPage() {
                                                 </Text>
                                             </Td>
                                             <Td>{type.defaultTime || 'Not set'}</Td>
+                                            <Td>${type.sellingPrice.toFixed(2)}</Td>
                                             <Td>
                                                 <Badge colorScheme={type.isActive ? 'green' : 'red'}>
                                                     {type.isActive ? 'Active' : 'Inactive'}
@@ -290,7 +299,7 @@ export default function DispatchTypesPage() {
                                     ))}
                                     {dispatchTypes.length === 0 && (
                                         <Tr>
-                                            <Td colSpan={5} textAlign="center" py={8}>
+                                            <Td colSpan={6} textAlign="center" py={8}>
                                                 <Text color="gray.500">No dispatch types found.</Text>
                                             </Td>
                                         </Tr>
@@ -336,6 +345,24 @@ export default function DispatchTypesPage() {
                                         onChange={(e) => setEditingType(prev => prev ? { ...prev, defaultTime: e.target.value } : null)}
                                         placeholder="HH:MM"
                                     />
+                                </FormControl>
+                                <FormControl isRequired>
+                                    <FormLabel>Selling Price per Person</FormLabel>
+                                    <NumberInput
+                                        value={editingType?.sellingPrice || 0}
+                                        min={0}
+                                        step={0.01}
+                                        precision={2}
+                                        onChange={(valueString, valueNumber) =>
+                                            setEditingType(prev => prev ? { ...prev, sellingPrice: valueNumber } : null)
+                                        }
+                                    >
+                                        <NumberInputField />
+                                        <NumberInputStepper>
+                                            <NumberIncrementStepper />
+                                            <NumberDecrementStepper />
+                                        </NumberInputStepper>
+                                    </NumberInput>
                                 </FormControl>
                                 <FormControl>
                                     <HStack>

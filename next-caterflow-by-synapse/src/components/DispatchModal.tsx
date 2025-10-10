@@ -78,6 +78,7 @@ interface DispatchType {
     name: string;
     description?: string;
     defaultTime: string;
+    sellingPrice: number; // ADDED
 }
 
 interface User {
@@ -130,6 +131,7 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
     const [isSaving, setIsSaving] = useState(false);
     const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
     const [savedDispatchId, setSavedDispatchId] = useState<string>('');
+    const [selectedDispatchType, setSelectedDispatchType] = useState<DispatchType | null>(null); // ADDED
 
     const toast = useToast();
     const { data: session, status: sessionStatus } = useSession();
@@ -178,6 +180,12 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
 
                 setDispatchTypes(dispatchTypesData);
                 setAllBins(binsData);
+
+                // ADDED: Set selected dispatch type if editing
+                if (dispatch?.dispatchType?._id) {
+                    const currentType = dispatchTypesData.find((type: DispatchType) => type._id === dispatch.dispatchType._id);
+                    setSelectedDispatchType(currentType || null);
+                }
             } catch (error) {
                 console.error('Error fetching data:', error);
                 toast({
@@ -195,7 +203,21 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
         if (isOpen) {
             fetchData();
         }
-    }, [isOpen, toast]);
+    }, [isOpen, toast, dispatch?.dispatchType?._id]); // ADDED dependency
+
+    // ADDED: Handler for dispatch type change
+    const handleDispatchTypeChange = (typeId: string) => {
+        setDispatchType(typeId);
+        const selectedType = dispatchTypes.find(type => type._id === typeId);
+        setSelectedDispatchType(selectedType || null);
+    };
+
+    // ADDED: Calculate total sales
+    const calculateTotalSales = (): number => {
+        if (!selectedDispatchType || !peopleFed) return 0;
+        return peopleFed * selectedDispatchType.sellingPrice;
+    };
+
 
     // initialize form from dispatch prop (edit) or defaults (new)
     useEffect(() => {
@@ -448,7 +470,9 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
                 peopleFed: safeNumber(peopleFed || 0),
                 evidenceStatus: dispatch?.evidenceStatus || 'pending',
                 status,
-                dispatchedBy: { _type: 'reference', _ref: (session?.user as any)?.id || (session?.user as any)?._id || undefined }
+                dispatchedBy: { _type: 'reference', _ref: (session?.user as any)?.id || (session?.user as any)?._id || undefined },
+                sellingPrice: selectedDispatchType?.sellingPrice || 0, // ADDED
+                totalSales: calculateTotalSales(), // ADDED
             };
 
             let url = '/api/dispatches';
@@ -638,12 +662,12 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
                                                 <Select
                                                     placeholder="Select dispatch type"
                                                     value={dispatchType}
-                                                    onChange={(e) => setDispatchType(e.target.value)}
+                                                    onChange={(e) => handleDispatchTypeChange(e.target.value)} // UPDATED
                                                     isDisabled={!isEditable || loading}
                                                 >
                                                     {dispatchTypes.map((type) => (
                                                         <option key={type._id} value={type._id}>
-                                                            {type.name}
+                                                            {type.name} (${type.sellingPrice}/person)
                                                         </option>
                                                     ))}
                                                 </Select>
@@ -854,6 +878,26 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
                                                 )}
                                             </VStack>
                                         )}
+
+                                        {selectedDispatchType && peopleFed && peopleFed > 0 && (
+                                            <VStack align="stretch" mt={4} p={4} borderRadius="md" bg="green.50" border="1px" borderColor="green.200">
+                                                <HStack justify="space-between">
+                                                    <Text fontWeight="bold" color="green.800">Estimated Sales:</Text>
+                                                    <Text fontWeight="bold" fontSize="lg" color="green.800">
+                                                        ${calculateTotalSales().toFixed(2)}
+                                                    </Text>
+                                                </HStack>
+                                                <HStack justify="space-between">
+                                                    <Text fontSize="sm" color="green.700">Selling Price:</Text>
+                                                    <Text fontSize="sm" color="green.700">${selectedDispatchType.sellingPrice}/person</Text>
+                                                </HStack>
+                                                <HStack justify="space-between">
+                                                    <Text fontSize="sm" color="green.700">People Fed:</Text>
+                                                    <Text fontSize="sm" color="green.700">{peopleFed}</Text>
+                                                </HStack>
+                                            </VStack>
+                                        )}
+
 
                                         <Button
                                             leftIcon={<FiPlus />}

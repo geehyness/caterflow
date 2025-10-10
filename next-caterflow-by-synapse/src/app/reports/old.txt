@@ -1049,7 +1049,7 @@ function renderCellValue(value: any, column: string): React.ReactNode {
     // Format currency
     if (column.includes('amount') || column.includes('cost') || column.includes('price')) {
         if (typeof value === 'number') {
-            return `$${value.toFixed(2)}`;
+            return `E {(value.toFixed(2)}`;
         }
     }
 

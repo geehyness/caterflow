@@ -66,7 +66,7 @@ export async function generatePurchaseOrderPDF(purchaseOrder: any, includePrices
                 doc.text(item.stockItem?.unitOfMeasure || 'EA', uomX, y);
 
                 if (includePrices) {
-                    doc.text(`$${item.unitPrice?.toFixed(2) || '0.00'}`, priceX, y);
+                    doc.text(`E {(item.unitPrice?.toFixed(2) || '0.00'}`, priceX, y);
                 }
 
                 y += 20;

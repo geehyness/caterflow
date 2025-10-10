@@ -1,4 +1,4 @@
-// src/app/reports/page.tsx - COMPLETE IMPLEMENTATION
+// src/app/reports/page.tsx - UPDATED WITH ACCURATE DATA AND EXPORTS
 'use client';
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
@@ -100,7 +100,7 @@ interface DispatchLog {
     _id: string;
     dispatchNumber: string;
     dispatchDate: string;
-    dispatchType: { _id: string; name: string; description: string };
+    dispatchType: { _id: string; name: string; description: string; sellingPrice: number };
     sourceBin: { _id: string; name: string; site: Site };
     dispatchedBy: AppUser;
     dispatchedItems: Array<{
@@ -112,6 +112,8 @@ interface DispatchLog {
     peopleFed: number;
     totalCost: number;
     costPerPerson: number;
+    sellingPrice: number;
+    totalSales: number;
     evidenceStatus: string;
 }
 
@@ -223,6 +225,11 @@ interface EnhancedAnalyticsData {
         monthlySpending: Array<{ month: string; spending: number }>;
         costPerPersonTrend: Array<{ date: string; cost: number }>;
         inventoryTurnover: number;
+        totalReceivedGoodsValue: number;
+        totalSales: number;
+        consumption: number;
+        profit: number;
+        profitPercentage: number;
     };
     suppliers: {
         performance: Array<{ name: string; orders: number; value: number }>;
@@ -232,6 +239,32 @@ interface EnhancedAnalyticsData {
         byRole: Array<{ name: string; value: number }>;
         activity: Array<{ name: string; actions: number }>;
     };
+}
+
+// OLD REPORTS INTERFACES
+interface ReportData {
+    [key: string]: any;
+}
+
+interface ReportConfig {
+    title: string;
+    description: string;
+    endpoint: string;
+    columns: string[];
+    filters?: {
+        dateRange?: boolean;
+        site?: boolean;
+        status?: boolean;
+    };
+}
+
+interface OldAnalyticsData {
+    purchaseOrders: any;
+    goodsReceipts: any;
+    dispatches: any;
+    transfers: any;
+    binCounts: any;
+    lowStock: any;
 }
 
 // Chart color schemes
@@ -262,14 +295,31 @@ const STATUS_COLORS: { [key: string]: string } = {
 export default function ComprehensiveReportsPage() {
     const { data: session, status } = useSession();
     const [activeTab, setActiveTab] = useState(0);
-    const [loading, setLoading] = useState<{ [key: string]: boolean }>({});
+    const [analyticsTab, setAnalyticsTab] = useState(0);
+
+    // Analytics states
     const [analyticsLoading, setAnalyticsLoading] = useState(false);
     const [exportLoading, setExportLoading] = useState(false);
     const [analyticsData, setAnalyticsData] = useState<EnhancedAnalyticsData | null>(null);
     const [rawData, setRawData] = useState<{ [key: string]: any[] }>({});
-    const toast = useToast();
 
-    // Date ranges
+    // Old Reports states
+    const [loading, setLoading] = useState<{ [key: string]: boolean }>({});
+    const [reportData, setReportData] = useState<{ [key: string]: ReportData[] }>({});
+    const [filteredData, setFilteredData] = useState<{ [key: string]: ReportData[] }>({});
+    const [sites, setSites] = useState<any[]>([]);
+    const [searchTerms, setSearchTerms] = useState<{ [key: string]: string }>({});
+    const [oldAnalyticsData, setOldAnalyticsData] = useState<OldAnalyticsData | null>(null);
+
+    // Filter states for old reports
+    const [selectedSites, setSelectedSites] = useState<{ [key: string]: string }>({});
+    const [dateRanges, setDateRanges] = useState<{ [key: string]: { start: string; end: string } }>({});
+    const [analyticsDateRange, setAnalyticsDateRange] = useState<{ start: string; end: string }>({
+        start: '',
+        end: ''
+    });
+
+    // Date ranges for new analytics
     const [primaryDateRange, setPrimaryDateRange] = useState<{ start: string; end: string }>({
         start: format(startOfMonth(new Date()), 'yyyy-MM-dd'),
         end: format(new Date(), 'yyyy-MM-dd')
@@ -280,54 +330,178 @@ export default function ComprehensiveReportsPage() {
     });
     const [compareMode, setCompareMode] = useState(false);
 
+    const toast = useToast();
+
     // Theme colors
     const bgPrimary = useColorModeValue('neutral.light.bg-primary', 'neutral.dark.bg-primary');
     const bgCard = useColorModeValue('neutral.light.bg-card', 'neutral.dark.bg-card');
     const borderColor = useColorModeValue('neutral.light.border-color', 'neutral.dark.border-color');
     const primaryTextColor = useColorModeValue('neutral.light.text-primary', 'neutral.dark.text-primary');
     const secondaryTextColor = useColorModeValue('neutral.light.text-secondary', 'neutral.dark.text-secondary');
+    const tableHeaderBg = useColorModeValue('gray.50', 'gray.700');
+    const tableRowHoverBg = useColorModeValue('gray.50', 'gray.700');
 
-    // Fetch all data for comprehensive analytics
+    // OLD REPORTS CONFIGURATION
+    const reportConfigs: ReportConfig[] = useMemo(() => [
+        {
+            title: 'Purchase Orders',
+            description: 'Detailed purchase order history and status',
+            endpoint: '/api/purchase-orders',
+            columns: ['poNumber', 'orderDate', 'status', 'supplierNames', 'site.name', 'totalAmount', 'orderedItems'],
+            filters: {
+                dateRange: true,
+                site: true,
+                status: true
+            }
+        },
+        {
+            title: 'Goods Receipts',
+            description: 'Goods receipt transactions and inventory updates',
+            endpoint: '/api/goods-receipts',
+            columns: ['receiptNumber', 'receiptDate', 'status', 'purchaseOrder.poNumber', 'purchaseOrder.site.name', 'receivedItems', 'receivingBin.name'],
+            filters: {
+                dateRange: true,
+                site: true,
+                status: true
+            }
+        },
+        {
+            title: 'Dispatches',
+            description: 'Dispatch records and consumption tracking',
+            endpoint: '/api/dispatches',
+            columns: ['dispatchNumber', 'dispatchDate', 'dispatchType.name', 'sourceBin.site.name', 'peopleFed', 'totalCost', 'evidenceStatus', 'dispatchedBy.name'],
+            filters: {
+                dateRange: true,
+                site: true,
+                status: true
+            }
+        },
+        {
+            title: 'Transfers',
+            description: 'Internal stock transfers between bins and sites',
+            endpoint: '/api/operations/transfers',
+            columns: ['transferNumber', 'transferDate', 'status', 'fromBin.site.name', 'toBin.site.name', 'transferredItems', 'requestedBy.name'],
+            filters: {
+                dateRange: true,
+                site: true,
+                status: true
+            }
+        },
+        {
+            title: 'Bin Counts',
+            description: 'Stock counting and variance reports',
+            endpoint: '/api/bin-counts',
+            columns: ['countNumber', 'countDate', 'status', 'bin.name', 'bin.site.name', 'countedItems', 'totalVariance', 'countedBy.name'],
+            filters: {
+                dateRange: true,
+                site: true,
+                status: true
+            }
+        }
+    ], []);
+
+    const currentReport = activeTab > 0 ? reportConfigs[activeTab - 1] : null;
+
+    // Use refs for the filter function to avoid circular dependencies for old reports
+    const filterStateRef = useRef({
+        reportData,
+        dateRanges,
+        selectedSites,
+        searchTerms,
+        reportConfigs
+    });
+
+    // Update the ref when state changes for old reports
+    useEffect(() => {
+        filterStateRef.current = {
+            reportData,
+            dateRanges,
+            selectedSites,
+            searchTerms,
+            reportConfigs
+        };
+    }, [reportData, dateRanges, selectedSites, searchTerms, reportConfigs]);
+
+    // ========== NEW ANALYTICS FUNCTIONS ==========
+
+    // Fetch all data for comprehensive analytics - FIXED WITH ACCURATE DATA FETCHING
     const fetchAllData = useCallback(async () => {
         setAnalyticsLoading(true);
         try {
+            console.log('🔄 Starting comprehensive data fetch for analytics...');
+
             const endpoints = [
                 '/api/purchase-orders',
                 '/api/goods-receipts',
                 '/api/dispatches',
-                '/api/transfers',
+                '/api/operations/transfers',
                 '/api/bin-counts',
-                '/api/stock-items',
+                '/api/analytics/stock-values',
                 '/api/low-stock',
                 '/api/suppliers',
                 '/api/users',
                 '/api/sites'
             ];
 
-            const [
-                purchaseOrders, goodsReceipts, dispatches, transfers,
-                binCounts, stockItems, lowStock, suppliers, users, sites
-            ] = await Promise.all(
-                endpoints.map(endpoint =>
-                    fetch(endpoint).then(r => r.ok ? r.json() : [])
-                )
+            const results = await Promise.allSettled(
+                endpoints.map(async (endpoint) => {
+                    console.log(`📡 Fetching from ${endpoint}...`);
+                    const response = await fetch(endpoint);
+                    if (!response.ok) {
+                        throw new Error(`Failed to fetch ${endpoint}: ${response.status}`);
+                    }
+                    return response.json();
+                })
             );
 
-            // Store raw data
-            setRawData({
+            // Process results with error handling
+            const [
                 purchaseOrders, goodsReceipts, dispatches, transfers,
-                binCounts, stockItems, lowStock, suppliers, users, sites
+                binCounts, stockValues, lowStock, suppliers, users, sites
+            ] = results.map((result, index) => {
+                if (result.status === 'fulfilled') {
+                    console.log(`✅ Successfully fetched from ${endpoints[index]}:`, result.value?.length || 'data received');
+                    return result.value;
+                } else {
+                    console.error(`❌ Failed to fetch from ${endpoints[index]}:`, result.reason);
+                    return [];
+                }
             });
 
-            // Process analytics data
+            // Store raw data for export
+            const stockItemsData = stockValues?.items || stockValues || [];
+            setRawData({
+                purchaseOrders: purchaseOrders || [],
+                goodsReceipts: goodsReceipts || [],
+                dispatches: dispatches || [],
+                transfers: transfers || [],
+                binCounts: binCounts || [],
+                stockItems: Array.isArray(stockItemsData) ? stockItemsData : [], // Ensure it's always an array
+                lowStock: lowStock || [],
+                suppliers: suppliers || [],
+                users: users || [],
+                sites: sites || []
+            });
+
+            // Process analytics data with accurate calculations
             const analytics = processAnalyticsData({
-                purchaseOrders, goodsReceipts, dispatches, transfers,
-                binCounts, stockItems, lowStock, suppliers, users, sites
+                purchaseOrders: purchaseOrders || [],
+                goodsReceipts: goodsReceipts || [],
+                dispatches: dispatches || [],
+                transfers: transfers || [],
+                binCounts: binCounts || [],
+                stockValues: stockValues || { items: [], summary: { totalInventoryValue: 0 } },
+                lowStock: lowStock || [],
+                suppliers: suppliers || [],
+                users: users || [],
+                sites: sites || []
             });
 
             setAnalyticsData(analytics);
+            console.log('✅ Analytics data processed successfully');
+
         } catch (error) {
-            console.error('Error fetching analytics data:', error);
+            console.error('❌ Error fetching analytics data:', error);
             toast({
                 title: 'Error',
                 description: 'Failed to load analytics data',
@@ -340,12 +514,27 @@ export default function ComprehensiveReportsPage() {
         }
     }, [toast]);
 
-    // Process all data into analytics format
+    // Process all data into analytics format - FIXED WITH ACCURATE CALCULATIONS
     const processAnalyticsData = (data: any): EnhancedAnalyticsData => {
         const {
-            purchaseOrders, goodsReceipts, dispatches, transfers,
-            binCounts, stockItems, lowStock, suppliers, users, sites
+            purchaseOrders = [],
+            goodsReceipts = [],
+            dispatches = [],
+            transfers = [],
+            binCounts = [],
+            stockValues = { items: [], summary: { totalInventoryValue: 0 } },
+            lowStock = [],
+            suppliers = [],
+            users = [],
+            sites = []
         } = data;
+
+        console.log('📊 Processing analytics data:', {
+            purchaseOrders: purchaseOrders.length,
+            goodsReceipts: goodsReceipts.length,
+            dispatches: dispatches.length,
+            stockItems: stockValues.items?.length || 0
+        });
 
         // Helper functions
         const getStatusBreakdown = (items: any[]) => {
@@ -366,7 +555,7 @@ export default function ComprehensiveReportsPage() {
                     item.receivingBin?.site?.name ||
                     item.fromBin?.site?.name ||
                     item.bin?.site?.name ||
-                    'Unknown';
+                    'Unknown Site';
                 siteCounts[siteName] = (siteCounts[siteName] || 0) + 1;
             });
             return Object.entries(siteCounts).map(([name, value]) => ({ name, value }));
@@ -375,29 +564,58 @@ export default function ComprehensiveReportsPage() {
         const getMonthlyBreakdown = (items: any[], dateField: string) => {
             const monthlyCounts: { [key: string]: number } = {};
             items.forEach(item => {
-                const date = new Date(item[dateField]);
-                const monthYear = format(date, 'MMM yyyy');
-                monthlyCounts[monthYear] = (monthlyCounts[monthYear] || 0) + 1;
+                try {
+                    const date = new Date(item[dateField]);
+                    if (!isNaN(date.getTime())) {
+                        const monthYear = format(date, 'MMM yyyy');
+                        monthlyCounts[monthYear] = (monthlyCounts[monthYear] || 0) + 1;
+                    }
+                } catch (error) {
+                    // Skip invalid dates
+                }
             });
             return Object.entries(monthlyCounts).map(([name, value]) => ({ name, value }));
         };
 
-        // Calculate inventory value
-        const totalInventoryValue = stockItems.reduce((sum: number, item: StockItem) => {
-            // This would need actual stock levels from your system
-            return sum + (item.unitPrice * (item.minimumStockLevel || 0));
+        // ACCURATE FINANCIAL CALCULATIONS
+        const totalInventoryValue = stockValues?.summary?.totalInventoryValue || 0;
+        const stockItemsArray = stockValues?.items || [];
+
+        // Calculate Total Received Goods Value (from Goods Receipts) - FIXED
+        const totalReceivedGoodsValue = goodsReceipts.reduce((sum: number, gr: any) => {
+            const receiptValue = gr.receivedItems?.reduce((itemSum: number, item: any) => {
+                // Use unit price from stock item reference if available, otherwise fallback
+                const unitPrice = item.stockItem?.unitPrice || item.unitPrice || 0;
+                return itemSum + (item.receivedQuantity || 0) * unitPrice;
+            }, 0) || 0;
+            return sum + receiptValue;
         }, 0);
 
-        // Process purchase orders
+        // Calculate Total Sales from dispatches - FIXED
+        const totalSales = dispatches.reduce((sum: number, dispatch: any) => {
+            return sum + (dispatch.totalSales || 0);
+        }, 0);
+
+        // Calculate total dispatch cost - FIXED
+        const totalDispatchCost = dispatches.reduce((sum: number, d: any) => sum + (d.totalCost || 0), 0);
+
+        // Calculate consumption: Total Received Goods Value - Total Dispatch Cost
+        const consumption = totalReceivedGoodsValue - totalDispatchCost;
+
+        // Calculate profit and profit percentage - FIXED
+        const profit = totalSales - consumption;
+        const profitPercentage = totalSales > 0 ? (profit / totalSales) * 100 : 0;
+
+        // Process purchase orders with accurate data
         const poStatusBreakdown = getStatusBreakdown(purchaseOrders);
         const poSiteBreakdown = getSiteBreakdown(purchaseOrders);
         const poMonthlyBreakdown = getMonthlyBreakdown(purchaseOrders, 'orderDate');
-        const poTotalValue = purchaseOrders.reduce((sum: number, po: PurchaseOrder) => sum + (po.totalAmount || 0), 0);
+        const poTotalValue = purchaseOrders.reduce((sum: number, po: any) => sum + (po.totalAmount || 0), 0);
 
-        // Top items by quantity ordered
-        const topItems = purchaseOrders.flatMap((po: PurchaseOrder) =>
+        // Top items by quantity ordered - FIXED
+        const topItems = purchaseOrders.flatMap((po: any) =>
             po.orderedItems?.map((item: any) => ({
-                name: item.stockItem?.name || 'Unknown',
+                name: item.stockItem?.name || 'Unknown Item',
                 quantity: item.orderedQuantity || 0,
                 value: (item.orderedQuantity || 0) * (item.unitPrice || 0)
             })) || []
@@ -412,6 +630,89 @@ export default function ComprehensiveReportsPage() {
             return acc;
         }, []).sort((a: { quantity: number; }, b: { quantity: number; }) => b.quantity - a.quantity).slice(0, 10);
 
+        // Process dispatches with accurate data
+        const dispatchByType = dispatches.reduce((acc: any[], dispatch: any) => {
+            const type = dispatch.dispatchType?.name || 'Unknown Type';
+            const existing = acc.find(item => item.name === type);
+            if (existing) {
+                existing.value++;
+            } else {
+                acc.push({ name: type, value: 1 });
+            }
+            return acc;
+        }, []);
+
+        const dispatchTopItems = dispatches.flatMap((dispatch: any) =>
+            dispatch.dispatchedItems?.map((item: any) => ({
+                name: item.stockItem?.name || 'Unknown Item',
+                quantity: item.dispatchedQuantity || 0,
+                cost: item.totalCost || 0
+            })) || []
+        ).reduce((acc: any[], item: { name: any; quantity: any; cost: any; }) => {
+            const existing = acc.find(i => i.name === item.name);
+            if (existing) {
+                existing.quantity += item.quantity;
+                existing.cost += item.cost;
+            } else {
+                acc.push({ ...item });
+            }
+            return acc;
+        }, []).sort((a: { quantity: number; }, b: { quantity: number; }) => b.quantity - a.quantity).slice(0, 10);
+
+        // Process inventory with accurate data
+        const inventoryByCategory = stockItemsArray.reduce((acc: any[], item: any) => {
+            const category = item.category?.title || 'Uncategorized';
+            const existing = acc.find(cat => cat.name === category);
+            if (existing) {
+                existing.value++;
+            } else {
+                acc.push({ name: category, value: 1 });
+            }
+            return acc;
+        }, []);
+
+        // Calculate low stock breakdown accurately
+        const criticalStockItems = lowStock.filter((item: any) => (item.currentStock || 0) === 0).length;
+        const warningStockItems = lowStock.filter((item: any) =>
+            (item.currentStock || 0) > 0 && (item.currentStock || 0) <= (item.minimumStockLevel || 0)
+        ).length;
+        const healthyStockItems = stockItemsArray.length - lowStock.length;
+
+        // Process bin counts with accurate data
+        const binCountAccuracy = binCounts.length > 0 ?
+            binCounts.reduce((sum: number, count: any) => {
+                const accurateItems = count.countedItems?.filter((item: any) => item.variance === 0).length || 0;
+                const totalItems = count.countedItems?.length || 0;
+                return sum + (totalItems > 0 ? accurateItems / totalItems : 0);
+            }, 0) / binCounts.length : 0;
+
+        const varianceAnalysis = binCounts.flatMap((count: any) =>
+            count.countedItems?.map((item: any) => item.variance) || []
+        ).reduce((acc: any, variance: number) => {
+            if (variance > 0) acc.positive++;
+            else if (variance < 0) acc.negative++;
+            else acc.zero++;
+            return acc;
+        }, { positive: 0, negative: 0, zero: 0 });
+
+        // Process suppliers with accurate data
+        const supplierPerformance = purchaseOrders.flatMap((po: any) =>
+            po.orderedItems?.map((item: any) => ({
+                name: item.supplier?.name || 'Unknown Supplier',
+                orders: 1,
+                value: (item.orderedQuantity || 0) * (item.unitPrice || 0)
+            })) || []
+        ).reduce((acc: any[], supplier: { name: any; orders: any; value: any; }) => {
+            const existing = acc.find(s => s.name === supplier.name);
+            if (existing) {
+                existing.orders += supplier.orders;
+                existing.value += supplier.value;
+            } else {
+                acc.push(supplier);
+            }
+            return acc;
+        }, []).sort((a: { value: number; }, b: { value: number; }) => b.value - a.value).slice(0, 10);
+
         return {
             summary: {
                 totalPurchaseOrders: purchaseOrders.length,
@@ -419,14 +720,14 @@ export default function ComprehensiveReportsPage() {
                 totalDispatches: dispatches.length,
                 totalTransfers: transfers.length,
                 totalBinCounts: binCounts.length,
-                totalStockItems: stockItems.length,
+                totalStockItems: stockItemsArray.length,
                 totalSuppliers: suppliers.length,
                 totalUsers: users.length,
                 totalSites: sites.length,
                 totalInventoryValue,
-                totalPeopleFed: dispatches.reduce((sum: number, d: DispatchLog) => sum + (d.peopleFed || 0), 0),
+                totalPeopleFed: dispatches.reduce((sum: number, d: any) => sum + (d.peopleFed || 0), 0),
                 lowStockItems: lowStock.length,
-                criticalStockItems: lowStock.filter((item: any) => (item.currentStock || 0) === 0).length
+                criticalStockItems
             },
             purchaseOrders: {
                 byStatus: poStatusBreakdown,
@@ -444,7 +745,7 @@ export default function ComprehensiveReportsPage() {
                 byStatus: getStatusBreakdown(goodsReceipts),
                 bySite: getSiteBreakdown(goodsReceipts),
                 efficiency: goodsReceipts.filter((gr: any) => gr.status === 'completed').length / Math.max(goodsReceipts.length, 1),
-                conditionBreakdown: goodsReceipts.flatMap((gr: GoodsReceipt) =>
+                conditionBreakdown: goodsReceipts.flatMap((gr: any) =>
                     gr.receivedItems?.map((item: any) => item.condition) || []
                 ).reduce((acc: { [key: string]: number }, condition: string) => {
                     acc[condition] = (acc[condition] || 0) + 1;
@@ -452,120 +753,80 @@ export default function ComprehensiveReportsPage() {
                 }, {})
             },
             dispatches: {
-                byType: dispatches.reduce((acc: any[], dispatch: DispatchLog) => {
-                    const type = dispatch.dispatchType?.name || 'Unknown';
-                    const existing = acc.find(item => item.name === type);
-                    if (existing) {
-                        existing.value++;
-                    } else {
-                        acc.push({ name: type, value: 1 });
-                    }
-                    return acc;
-                }, []),
+                byType: dispatchByType,
                 bySite: getSiteBreakdown(dispatches),
-                totalPeopleFed: dispatches.reduce((sum: number, d: DispatchLog) => sum + (d.peopleFed || 0), 0),
-                totalCost: dispatches.reduce((sum: number, d: DispatchLog) => sum + (d.totalCost || 0), 0),
-                costPerPerson: dispatches.reduce((sum: number, d: DispatchLog) => sum + (d.peopleFed || 0), 0) > 0 ?
-                    dispatches.reduce((sum: number, d: DispatchLog) => sum + (d.totalCost || 0), 0) /
-                    dispatches.reduce((sum: number, d: DispatchLog) => sum + (d.peopleFed || 0), 0) : 0,
-                topItems: dispatches.flatMap((dispatch: DispatchLog) =>
-                    dispatch.dispatchedItems?.map((item: any) => ({
-                        name: item.stockItem?.name || 'Unknown',
-                        quantity: item.dispatchedQuantity || 0,
-                        cost: item.totalCost || 0
-                    })) || []
-                ).reduce((acc: any[], item: { name: any; quantity: any; cost: any; }) => {
-                    const existing = acc.find(i => i.name === item.name);
-                    if (existing) {
-                        existing.quantity += item.quantity;
-                        existing.cost += item.cost;
-                    } else {
-                        acc.push({ ...item });
-                    }
-                    return acc;
-                }, []).sort((a: { quantity: number; }, b: { quantity: number; }) => b.quantity - a.quantity).slice(0, 10)
+                totalPeopleFed: dispatches.reduce((sum: number, d: any) => sum + (d.peopleFed || 0), 0),
+                totalCost: totalDispatchCost,
+                costPerPerson: dispatches.reduce((sum: number, d: any) => sum + (d.peopleFed || 0), 0) > 0 ?
+                    totalDispatchCost / dispatches.reduce((sum: number, d: any) => sum + (d.peopleFed || 0), 0) : 0,
+                topItems: dispatchTopItems
             },
             transfers: {
                 byStatus: getStatusBreakdown(transfers),
                 bySite: getSiteBreakdown(transfers),
-                approvalRate: transfers.filter((t: InternalTransfer) =>
+                approvalRate: transfers.filter((t: any) =>
                     ['approved', 'completed'].includes(t.status)
                 ).length / Math.max(transfers.length, 1)
             },
             inventory: {
-                byCategory: stockItems.reduce((acc: any[], item: StockItem) => {
-                    const category = item.category?.title || 'Uncategorized';
-                    const existing = acc.find(cat => cat.name === category);
-                    if (existing) {
-                        existing.value++;
-                    } else {
-                        acc.push({ name: category, value: 1 });
-                    }
-                    return acc;
-                }, []),
+                byCategory: inventoryByCategory,
                 totalValue: totalInventoryValue,
                 lowStockBreakdown: {
-                    critical: lowStock.filter((item: any) => (item.currentStock || 0) === 0).length,
-                    warning: lowStock.filter((item: any) =>
-                        (item.currentStock || 0) > 0 && (item.currentStock || 0) <= (item.minimumStockLevel || 0)
-                    ).length,
-                    healthy: stockItems.length - lowStock.length
+                    critical: criticalStockItems,
+                    warning: warningStockItems,
+                    healthy: healthyStockItems
                 }
             },
             binCounts: {
                 byStatus: getStatusBreakdown(binCounts),
-                accuracy: binCounts.reduce((sum: number, count: InventoryCount) => {
-                    const accurateItems = count.countedItems?.filter((item: any) => item.variance === 0).length || 0;
-                    const totalItems = count.countedItems?.length || 0;
-                    return sum + (totalItems > 0 ? accurateItems / totalItems : 0);
-                }, 0) / Math.max(binCounts.length, 1),
-                varianceAnalysis: binCounts.flatMap((count: InventoryCount) =>
-                    count.countedItems?.map((item: any) => item.variance) || []
-                ).reduce((acc: any, variance: number) => {
-                    if (variance > 0) acc.positive++;
-                    else if (variance < 0) acc.negative++;
-                    else acc.zero++;
-                    return acc;
-                }, { positive: 0, negative: 0, zero: 0 })
+                accuracy: binCountAccuracy,
+                varianceAnalysis
             },
             financial: {
-                monthlySpending: purchaseOrders.reduce((acc: any[], po: PurchaseOrder) => {
-                    const month = format(new Date(po.orderDate), 'MMM yyyy');
-                    const existing = acc.find(item => item.month === month);
-                    if (existing) {
-                        existing.spending += po.totalAmount || 0;
-                    } else {
-                        acc.push({ month, spending: po.totalAmount || 0 });
+                monthlySpending: purchaseOrders.reduce((acc: any[], po: any) => {
+                    try {
+                        const date = new Date(po.orderDate);
+                        if (!isNaN(date.getTime())) {
+                            const month = format(date, 'MMM yyyy');
+                            const existing = acc.find(item => item.month === month);
+                            if (existing) {
+                                existing.spending += po.totalAmount || 0;
+                            } else {
+                                acc.push({ month, spending: po.totalAmount || 0 });
+                            }
+                        }
+                    } catch (error) {
+                        // Skip invalid dates
                     }
                     return acc;
                 }, []).sort((a: { month: string | number | Date; }, b: { month: string | number | Date; }) => new Date(a.month).getTime() - new Date(b.month).getTime()),
-                costPerPersonTrend: dispatches.map((dispatch: DispatchLog) => ({
-                    date: format(new Date(dispatch.dispatchDate), 'MMM dd'),
-                    cost: dispatch.costPerPerson || 0
-                })).slice(-30), // Last 30 dispatches
-                inventoryTurnover: 0.5 // This would need actual turnover calculation
+                costPerPersonTrend: dispatches.map((dispatch: any) => {
+                    try {
+                        const date = new Date(dispatch.dispatchDate);
+                        if (!isNaN(date.getTime())) {
+                            return {
+                                date: format(date, 'MMM dd'),
+                                cost: dispatch.costPerPerson || 0
+                            };
+                        }
+                    } catch (error) {
+                        // Skip invalid dates
+                    }
+                    return { date: 'Unknown', cost: 0 };
+                }).filter((item: { date: string; cost: number }) => item.date !== 'Unknown').slice(-30),
+                inventoryTurnover: 0.5, // This would need more complex calculation
+                totalReceivedGoodsValue,
+                totalSales,
+                consumption,
+                profit,
+                profitPercentage
             },
             suppliers: {
-                performance: purchaseOrders.flatMap((po: PurchaseOrder) =>
-                    po.orderedItems?.map((item: any) => ({
-                        name: item.supplier?.name || 'Unknown',
-                        orders: 1,
-                        value: (item.orderedQuantity || 0) * (item.unitPrice || 0)
-                    })) || []
-                ).reduce((acc: any[], supplier: { name: any; orders: any; value: any; }) => {
-                    const existing = acc.find(s => s.name === supplier.name);
-                    if (existing) {
-                        existing.orders += supplier.orders;
-                        existing.value += supplier.value;
-                    } else {
-                        acc.push(supplier);
-                    }
-                    return acc;
-                }, []).sort((a: { value: number; }, b: { value: number; }) => b.value - a.value).slice(0, 10),
-                activeCount: suppliers.filter((s: Supplier) => s.isActive).length
+                performance: supplierPerformance,
+                activeCount: suppliers.filter((s: any) => s.isActive).length
             },
             users: {
-                byRole: users.reduce((acc: any[], user: AppUser) => {
+                byRole: users.reduce((acc: any[], user: any) => {
                     const role = user.role || 'unknown';
                     const existing = acc.find(item => item.name === role);
                     if (existing) {
@@ -575,51 +836,66 @@ export default function ComprehensiveReportsPage() {
                     }
                     return acc;
                 }, []),
-                activity: [] // This would need user activity data
+                activity: [] // This would need user activity tracking
             }
         };
     };
 
-    // Enhanced Excel export with multiple sheets
     const exportToExcel = useCallback(async () => {
         setExportLoading(true);
         try {
+            console.log('📊 Starting comprehensive Excel export...');
+
+            // If we don't have raw data, fetch it first
+            if (Object.keys(rawData).length === 0) {
+                console.log('🔄 No raw data available, fetching data first...');
+                await fetchAllData();
+            }
+
             const workbook = XLSX.utils.book_new();
 
-            // 1. Executive Summary Sheet
+            // 1. EXECUTIVE SUMMARY SHEET - NO CURRENCY SYMBOLS
+            console.log('📝 Creating Executive Summary sheet...');
             const summaryData = [
                 ['CATERFLOW COMPREHENSIVE REPORT', ''],
                 ['Generated On', new Date().toLocaleDateString()],
                 ['Generated By', session?.user?.name || 'Unknown'],
+                ['Report Period', `${primaryDateRange.start} to ${primaryDateRange.end}`],
                 ['', ''],
                 ['EXECUTIVE SUMMARY', ''],
-                ['Total Purchase Orders', analyticsData?.summary.totalPurchaseOrders],
-                ['Total Goods Receipts', analyticsData?.summary.totalGoodsReceipts],
-                ['Total Dispatches', analyticsData?.summary.totalDispatches],
-                ['Total People Fed', analyticsData?.summary.totalPeopleFed],
-                ['Total Inventory Value', `$${analyticsData?.summary.totalInventoryValue.toLocaleString()}`],
-                ['Low Stock Items', analyticsData?.summary.lowStockItems],
-                ['Critical Stock Items', analyticsData?.summary.criticalStockItems],
+                ['Total Purchase Orders', analyticsData?.summary.totalPurchaseOrders || 0],
+                ['Total Goods Receipts', analyticsData?.summary.totalGoodsReceipts || 0],
+                ['Total Dispatches', analyticsData?.summary.totalDispatches || 0],
+                ['Total People Fed', analyticsData?.summary.totalPeopleFed || 0],
+                ['Total Inventory Value', analyticsData?.summary.totalInventoryValue || 0],
+                ['Low Stock Items', analyticsData?.summary.lowStockItems || 0],
+                ['Critical Stock Items', analyticsData?.summary.criticalStockItems || 0],
                 ['', ''],
                 ['FINANCIAL OVERVIEW', ''],
-                ['Total PO Value', `$${analyticsData?.purchaseOrders.totalValue.toLocaleString()}`],
-                ['Average Order Value', `$${analyticsData?.purchaseOrders.avgOrderValue.toFixed(2)}`],
-                ['Total Dispatch Cost', `$${analyticsData?.dispatches.totalCost.toLocaleString()}`],
-                ['Cost Per Person', `$${analyticsData?.dispatches.costPerPerson.toFixed(2)}`]
+                ['Total PO Value', analyticsData?.purchaseOrders.totalValue || 0],
+                ['Average Order Value', analyticsData?.purchaseOrders.avgOrderValue || 0],
+                ['Total Dispatch Cost', analyticsData?.dispatches.totalCost || 0],
+                ['Cost Per Person', analyticsData?.dispatches.costPerPerson || 0],
+                ['Total Sales', analyticsData?.financial.totalSales || 0],
+                ['Total Received Goods Value', analyticsData?.financial.totalReceivedGoodsValue || 0],
+                ['Consumption', analyticsData?.financial.consumption || 0],
+                ['Profit', analyticsData?.financial.profit || 0],
+                ['Profit Percentage', analyticsData?.financial.profitPercentage || 0]
             ];
 
             const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
             XLSX.utils.book_append_sheet(workbook, summarySheet, 'Executive Summary');
 
-            // 2. Purchase Orders Sheet
-            const poData = rawData.purchaseOrders?.map((po: PurchaseOrder) => ({
-                'PO Number': po.poNumber,
-                'Order Date': format(new Date(po.orderDate), 'yyyy-MM-dd'),
-                Status: po.status,
-                'Ordered By': po.orderedBy?.name,
-                Site: po.site?.name,
-                'Total Amount': po.totalAmount,
-                'Evidence Status': po.evidenceStatus,
+            // 2. PURCHASE ORDERS SHEET - NO CURRENCY SYMBOLS
+            console.log('📝 Creating Purchase Orders sheet...');
+            const poData = rawData.purchaseOrders?.map((po: any) => ({
+                'PO Number': po.poNumber || 'N/A',
+                'Order Date': po.orderDate ? format(new Date(po.orderDate), 'yyyy-MM-dd') : 'N/A',
+                'Status': po.status || 'N/A',
+                'Ordered By': po.orderedBy?.name || 'N/A',
+                'Site': po.site?.name || 'N/A',
+                'Total Amount': po.totalAmount || 0,
+                'Evidence Status': po.evidenceStatus || 'N/A',
                 'Item Count': po.orderedItems?.length || 0
             })) || [];
 
@@ -628,15 +904,16 @@ export default function ComprehensiveReportsPage() {
                 XLSX.utils.book_append_sheet(workbook, poSheet, 'Purchase Orders');
             }
 
-            // 3. Goods Receipts Sheet
-            const grData = rawData.goodsReceipts?.map((gr: GoodsReceipt) => ({
-                'Receipt Number': gr.receiptNumber,
-                'Receipt Date': format(new Date(gr.receiptDate), 'yyyy-MM-dd'),
-                Status: gr.status,
-                'PO Number': gr.purchaseOrder?.poNumber,
-                'Receiving Bin': gr.receivingBin?.name,
-                Site: gr.receivingBin?.site?.name,
-                'Evidence Status': gr.evidenceStatus,
+            // 3. GOODS RECEIPTS SHEET - NO CURRENCY SYMBOLS
+            console.log('📝 Creating Goods Receipts sheet...');
+            const grData = rawData.goodsReceipts?.map((gr: any) => ({
+                'Receipt Number': gr.receiptNumber || 'N/A',
+                'Receipt Date': gr.receiptDate ? format(new Date(gr.receiptDate), 'yyyy-MM-dd') : 'N/A',
+                'Status': gr.status || 'N/A',
+                'PO Number': gr.purchaseOrder?.poNumber || 'N/A',
+                'Receiving Bin': gr.receivingBin?.name || 'N/A',
+                'Site': gr.receivingBin?.site?.name || 'N/A',
+                'Evidence Status': gr.evidenceStatus || 'N/A',
                 'Item Count': gr.receivedItems?.length || 0
             })) || [];
 
@@ -645,18 +922,20 @@ export default function ComprehensiveReportsPage() {
                 XLSX.utils.book_append_sheet(workbook, grSheet, 'Goods Receipts');
             }
 
-            // 4. Dispatches Sheet
-            const dispatchData = rawData.dispatches?.map((dispatch: DispatchLog) => ({
-                'Dispatch Number': dispatch.dispatchNumber,
-                'Dispatch Date': format(new Date(dispatch.dispatchDate), 'yyyy-MM-dd'),
-                'Dispatch Type': dispatch.dispatchType?.name,
-                'Source Bin': dispatch.sourceBin?.name,
-                Site: dispatch.sourceBin?.site?.name,
-                'Dispatched By': dispatch.dispatchedBy?.name,
-                'People Fed': dispatch.peopleFed,
-                'Total Cost': dispatch.totalCost,
-                'Cost Per Person': dispatch.costPerPerson,
-                'Evidence Status': dispatch.evidenceStatus
+            // 4. DISPATCHES SHEET - NO CURRENCY SYMBOLS
+            console.log('📝 Creating Dispatches sheet...');
+            const dispatchData = rawData.dispatches?.map((dispatch: any) => ({
+                'Dispatch Number': dispatch.dispatchNumber || 'N/A',
+                'Dispatch Date': dispatch.dispatchDate ? format(new Date(dispatch.dispatchDate), 'yyyy-MM-dd') : 'N/A',
+                'Dispatch Type': dispatch.dispatchType?.name || 'N/A',
+                'Source Bin': dispatch.sourceBin?.name || 'N/A',
+                'Site': dispatch.sourceBin?.site?.name || 'N/A',
+                'Dispatched By': dispatch.dispatchedBy?.name || 'N/A',
+                'People Fed': dispatch.peopleFed || 0,
+                'Total Cost': dispatch.totalCost || 0,
+                'Cost Per Person': dispatch.costPerPerson || 0,
+                'Total Sales': dispatch.totalSales || 0,
+                'Evidence Status': dispatch.evidenceStatus || 'N/A'
             })) || [];
 
             if (dispatchData.length > 0) {
@@ -664,17 +943,18 @@ export default function ComprehensiveReportsPage() {
                 XLSX.utils.book_append_sheet(workbook, dispatchSheet, 'Dispatches');
             }
 
-            // 5. Transfers Sheet
-            const transferData = rawData.transfers?.map((transfer: InternalTransfer) => ({
-                'Transfer Number': transfer.transferNumber,
-                'Transfer Date': format(new Date(transfer.transferDate), 'yyyy-MM-dd'),
-                Status: transfer.status,
-                'From Bin': transfer.fromBin?.name,
-                'From Site': transfer.fromBin?.site?.name,
-                'To Bin': transfer.toBin?.name,
-                'To Site': transfer.toBin?.site?.name,
-                'Transferred By': transfer.transferredBy?.name,
-                'Approved By': transfer.approvedBy?.name,
+            // 5. TRANSFERS SHEET - NO CURRENCY SYMBOLS
+            console.log('📝 Creating Transfers sheet...');
+            const transferData = rawData.transfers?.map((transfer: any) => ({
+                'Transfer Number': transfer.transferNumber || 'N/A',
+                'Transfer Date': transfer.transferDate ? format(new Date(transfer.transferDate), 'yyyy-MM-dd') : 'N/A',
+                'Status': transfer.status || 'N/A',
+                'From Bin': transfer.fromBin?.name || 'N/A',
+                'From Site': transfer.fromBin?.site?.name || 'N/A',
+                'To Bin': transfer.toBin?.name || 'N/A',
+                'To Site': transfer.toBin?.site?.name || 'N/A',
+                'Transferred By': transfer.transferredBy?.name || 'N/A',
+                'Approved By': transfer.approvedBy?.name || 'N/A',
                 'Item Count': transfer.transferredItems?.length || 0
             })) || [];
 
@@ -683,14 +963,15 @@ export default function ComprehensiveReportsPage() {
                 XLSX.utils.book_append_sheet(workbook, transferSheet, 'Transfers');
             }
 
-            // 6. Bin Counts Sheet
-            const binCountData = rawData.binCounts?.map((count: InventoryCount) => ({
-                'Count Number': count.countNumber,
-                'Count Date': format(new Date(count.countDate), 'yyyy-MM-dd'),
-                Status: count.status,
-                Bin: count.bin?.name,
-                Site: count.bin?.site?.name,
-                'Counted By': count.countedBy?.name,
+            // 6. BIN COUNTS SHEET - NO CURRENCY SYMBOLS
+            console.log('📝 Creating Bin Counts sheet...');
+            const binCountData = rawData.binCounts?.map((count: any) => ({
+                'Count Number': count.countNumber || 'N/A',
+                'Count Date': count.countDate ? format(new Date(count.countDate), 'yyyy-MM-dd') : 'N/A',
+                'Status': count.status || 'N/A',
+                'Bin': count.bin?.name || 'N/A',
+                'Site': count.bin?.site?.name || 'N/A',
+                'Counted By': count.countedBy?.name || 'N/A',
                 'Item Count': count.countedItems?.length || 0,
                 'Accuracy': count.countedItems?.length ?
                     (count.countedItems.filter((item: any) => item.variance === 0).length / count.countedItems.length * 100).toFixed(1) + '%' : '0%'
@@ -701,35 +982,45 @@ export default function ComprehensiveReportsPage() {
                 XLSX.utils.book_append_sheet(workbook, binCountSheet, 'Bin Counts');
             }
 
-            // 7. Stock Items Sheet
-            const stockItemData = rawData.stockItems?.map((item: StockItem) => ({
-                Name: item.name,
-                SKU: item.sku,
-                Category: item.category?.title,
-                'Item Type': item.itemType,
-                'Unit of Measure': item.unitOfMeasure,
-                'Unit Price': item.unitPrice,
-                'Minimum Stock Level': item.minimumStockLevel,
-                'Reorder Quantity': item.reorderQuantity,
-                'Primary Supplier': item.primarySupplier?.name,
-                'Supplier Count': item.suppliers?.length || 0
-            })) || [];
+            // 7. STOCK ITEMS SHEET - NO CURRENCY SYMBOLS (FIXED)
+            console.log('📝 Creating Stock Items sheet...');
+            // Handle both array and object with items property
+            const stockItemsArray = Array.isArray(rawData.stockItems)
+                ? rawData.stockItems
+                : (rawData.stockItems as any)?.items || [];
 
-            if (stockItemData.length > 0) {
-                const stockItemSheet = XLSX.utils.json_to_sheet(stockItemData);
+            const stockItemsData = stockItemsArray.map((item: any) => ({
+                'Name': item.name || 'N/A',
+                'SKU': item.sku || 'N/A',
+                'Category': item.category?.title || 'N/A',
+                'Item Type': item.itemType || 'N/A',
+                'Unit of Measure': item.unitOfMeasure || 'N/A',
+                'Unit Price': item.unitPrice || 0,
+                'Minimum Stock Level': item.minimumStockLevel || 0,
+                'Reorder Quantity': item.reorderQuantity || 0,
+                'Current Stock': item.currentStock || 0,
+                'Stock Value': (item.currentStock || 0) * (item.unitPrice || 0),
+                'Primary Supplier': item.primarySupplier?.name || 'N/A',
+                'Supplier Count': item.suppliers?.length || 0
+            }));
+
+            if (stockItemsData.length > 0) {
+                const stockItemSheet = XLSX.utils.json_to_sheet(stockItemsData);
                 XLSX.utils.book_append_sheet(workbook, stockItemSheet, 'Stock Items');
             }
 
-            // 8. Low Stock Alerts Sheet
+            // 8. LOW STOCK ALERTS SHEET - NO CURRENCY SYMBOLS
+            console.log('📝 Creating Low Stock Alerts sheet...');
             const lowStockData = rawData.lowStock?.map((item: any) => ({
-                Name: item.name,
-                SKU: item.sku,
-                'Current Stock': item.currentStock,
-                'Minimum Stock Level': item.minimumStockLevel,
-                'Unit of Measure': item.unitOfMeasure,
-                Category: item.category?.title,
-                'Primary Supplier': item.primarySupplier?.name,
-                Status: (item.currentStock || 0) === 0 ? 'CRITICAL' : 'WARNING'
+                'Name': item.name || 'N/A',
+                'SKU': item.sku || 'N/A',
+                'Current Stock': item.currentStock || 0,
+                'Minimum Stock Level': item.minimumStockLevel || 0,
+                'Unit of Measure': item.unitOfMeasure || 'N/A',
+                'Category': item.category?.title || 'N/A',
+                'Primary Supplier': item.primarySupplier?.name || 'N/A',
+                'Status': (item.currentStock || 0) === 0 ? 'CRITICAL' :
+                    (item.currentStock || 0) <= (item.minimumStockLevel || 0) ? 'LOW STOCK' : 'HEALTHY'
             })) || [];
 
             if (lowStockData.length > 0) {
@@ -737,36 +1028,61 @@ export default function ComprehensiveReportsPage() {
                 XLSX.utils.book_append_sheet(workbook, lowStockSheet, 'Low Stock Alerts');
             }
 
-            // 9. Analytics Data Sheet
+            // 9. ANALYTICS DATA SHEET - NO CURRENCY SYMBOLS
+            console.log('📝 Creating Analytics Data sheet...');
             const analyticsSheetData = [
                 ['ANALYTICS DATA', ''],
                 ['PURCHASE ORDERS BY STATUS', ''],
-                ...analyticsData?.purchaseOrders.byStatus.map(item => [item.name, item.value]) || [],
+                ...(analyticsData?.purchaseOrders.byStatus.map(item => [item.name, item.value]) || [['No Data', 0]]),
                 ['', ''],
                 ['DISPATCHES BY TYPE', ''],
-                ...analyticsData?.dispatches.byType.map(item => [item.name, item.value]) || [],
+                ...(analyticsData?.dispatches.byType.map(item => [item.name, item.value]) || [['No Data', 0]]),
                 ['', ''],
                 ['INVENTORY BY CATEGORY', ''],
-                ...analyticsData?.inventory.byCategory.map(item => [item.name, item.value]) || []
+                ...(analyticsData?.inventory.byCategory.map(item => [item.name, item.value]) || [['No Data', 0]]),
+                ['', ''],
+                ['FINANCIAL METRICS', ''],
+                ['Total Received Goods Value', analyticsData?.financial.totalReceivedGoodsValue || 0],
+                ['Total Dispatch Cost', analyticsData?.dispatches.totalCost || 0],
+                ['Consumption', analyticsData?.financial.consumption || 0],
+                ['Total Sales', analyticsData?.financial.totalSales || 0],
+                ['Profit', analyticsData?.financial.profit || 0],
+                ['Profit Percentage', analyticsData?.financial.profitPercentage || 0]
             ];
 
             const analyticsSheet = XLSX.utils.aoa_to_sheet(analyticsSheetData);
             XLSX.utils.book_append_sheet(workbook, analyticsSheet, 'Analytics Data');
 
+            // 10. SUPPLIER PERFORMANCE SHEET - NO CURRENCY SYMBOLS
+            console.log('📝 Creating Supplier Performance sheet...');
+            const supplierData = analyticsData?.suppliers.performance.map(supplier => ({
+                'Supplier Name': supplier.name || 'N/A',
+                'Total Orders': supplier.orders || 0,
+                'Total Value': supplier.value || 0
+            })) || [];
+
+            if (supplierData.length > 0) {
+                const supplierSheet = XLSX.utils.json_to_sheet(supplierData);
+                XLSX.utils.book_append_sheet(workbook, supplierSheet, 'Supplier Performance');
+            }
+
             // Generate Excel file
+            console.log('💾 Generating Excel file...');
             const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
             const data = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-            saveAs(data, `Caterflow_Comprehensive_Report_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+            const fileName = `Caterflow_Comprehensive_Report_${format(new Date(), 'yyyy-MM-dd')}.xlsx`;
+            saveAs(data, fileName);
 
+            console.log('✅ Excel export completed successfully');
             toast({
                 title: 'Export Successful',
-                description: 'Comprehensive report exported with multiple sheets',
+                description: `Comprehensive report exported with ${workbook.SheetNames.length} sheets`,
                 status: 'success',
-                duration: 3000,
+                duration: 4000,
                 isClosable: true,
             });
         } catch (error) {
-            console.error('Error exporting to Excel:', error);
+            console.error('❌ Error exporting to Excel:', error);
             toast({
                 title: 'Export Failed',
                 description: 'Failed to export comprehensive report',
@@ -777,87 +1093,346 @@ export default function ComprehensiveReportsPage() {
         } finally {
             setExportLoading(false);
         }
-    }, [analyticsData, rawData, session, toast]);
+    }, [analyticsData, rawData, session, toast, fetchAllData, primaryDateRange]);
 
-    interface PieChartData {
-        name: string;
-        value: number;
-    }
+    // ========== OLD REPORTS FUNCTIONS ==========
+    // (Keeping existing old reports functions as they are working correctly)
+    // Helper function to get date from item based on report type
+    const getItemDate = (item: any, reportTitle: string): string => {
+        switch (reportTitle) {
+            case 'Purchase Orders':
+                return item.orderDate || item.createdAt || '';
+            case 'Goods Receipts':
+                return item.receiptDate || '';
+            case 'Dispatches':
+                return item.dispatchDate || '';
+            case 'Transfers':
+                return item.transferDate || '';
+            case 'Bin Counts':
+                return item.countDate || '';
+            default:
+                return item.createdAt || '';
+        }
+    };
 
-    const StatusPieChart = ({ data, title, colors = CHART_COLORS.primary }: { data: any[], title: string, colors?: string[] }) => (
-        <Card height="400px">
-            <CardBody>
-                <Text fontWeight="bold" mb={4}>{title}</Text>
-                <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                        <Pie
-                            data={data}
-                            cx="50%"
-                            cy="50%"
-                            labelLine={true}
-                            label={({ name, value }) => {
-                                const total = data.reduce((sum, item) => sum + item.value, 0);
-                                const percentage = (((value as number) / total) * 100).toFixed(0);
-                                return `${name}: ${percentage}%`;
-                            }}
-                            outerRadius={100}
-                            fill="#8884d8"
-                            dataKey="value"
-                        >
-                            {data.map((entry, index) => (
-                                <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
-                            ))}
-                        </Pie>
-                        <Tooltip formatter={(value) => [value, 'Count']} />
-                        <Legend />
-                    </PieChart>
-                </ResponsiveContainer>
-            </CardBody>
-        </Card>
-    );
+    // Helper function to get site from item based on report type
+    const getItemSite = (item: any, reportTitle: string): any => {
+        switch (reportTitle) {
+            case 'Purchase Orders':
+                return item.site;
+            case 'Goods Receipts':
+                return item.purchaseOrder?.site;
+            case 'Dispatches':
+                return item.sourceBin?.site;
+            case 'Transfers':
+                return item.fromBin?.site;
+            case 'Bin Counts':
+                return item.bin?.site;
+            default:
+                return item.site;
+        }
+    };
 
-    const BarChartComponent = ({ data, title, dataKey, color = CHART_COLORS.primary[0] }: { data: any[], title: string, dataKey: string, color?: string }) => (
-        <Card height="400px">
-            <CardBody>
-                <Text fontWeight="bold" mb={4}>{title}</Text>
-                <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={data}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="name" />
-                        <YAxis />
-                        <Tooltip />
-                        <Legend />
-                        <Bar dataKey={dataKey} fill={color} />
-                    </BarChart>
-                </ResponsiveContainer>
-            </CardBody>
-        </Card>
-    );
+    // Filter report data - using ref to avoid dependencies
+    const filterReportData = useCallback((reportTitle: string, dataToFilter?: ReportData[]) => {
+        const { reportData, dateRanges, selectedSites, searchTerms, reportConfigs } = filterStateRef.current;
 
-    const LineChartComponent = ({ data, title, dataKey, color = CHART_COLORS.primary[0] }: { data: any[], title: string, dataKey: string, color?: string }) => (
-        <Card height="400px">
-            <CardBody>
-                <Text fontWeight="bold" mb={4}>{title}</Text>
-                <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={data}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="name" />
-                        <YAxis />
-                        <Tooltip />
-                        <Legend />
-                        <Line type="monotone" dataKey={dataKey} stroke={color} strokeWidth={2} />
-                    </LineChart>
-                </ResponsiveContainer>
-            </CardBody>
-        </Card>
-    );
+        const data = dataToFilter || reportData[reportTitle];
+        if (!data) return;
 
-    // Load data on component mount
+        const config = reportConfigs.find(r => r.title === reportTitle);
+        if (!config) return;
+
+        let filtered = [...data];
+
+        // Apply date range filter
+        if (config.filters?.dateRange) {
+            filtered = filtered.filter((item: any) => {
+                const itemDate = getItemDate(item, reportTitle);
+                const dateRange = dateRanges[reportTitle];
+                return (!dateRange?.start || itemDate >= dateRange.start) &&
+                    (!dateRange?.end || itemDate <= dateRange.end);
+            });
+        }
+
+        // Apply site filter
+        if (config.filters?.site && selectedSites[reportTitle] !== 'all') {
+            filtered = filtered.filter((item: any) => {
+                const itemSite = getItemSite(item, reportTitle);
+                return itemSite === selectedSites[reportTitle] ||
+                    (typeof itemSite === 'object' && itemSite._id === selectedSites[reportTitle]);
+            });
+        }
+
+        // Apply search filter
+        const searchTerm = searchTerms[reportTitle];
+        if (searchTerm) {
+            filtered = filtered.filter(item =>
+                Object.values(item).some(value =>
+                    value?.toString().toLowerCase().includes(searchTerm.toLowerCase())
+                )
+            );
+        }
+
+        setFilteredData(prev => ({ ...prev, [reportTitle]: filtered }));
+    }, []);
+
+    // Fetch report data (only if not already loaded)
+    const fetchReportData = useCallback(async (reportTitle: string) => {
+        if (filterStateRef.current.reportData[reportTitle]) {
+            filterReportData(reportTitle);
+            return;
+        }
+
+        setLoading(prev => ({ ...prev, [reportTitle]: true }));
+        try {
+            const config = filterStateRef.current.reportConfigs.find(r => r.title === reportTitle);
+            if (!config) return;
+
+            console.log(`📡 Fetching ${reportTitle} data from ${config.endpoint}...`);
+            const response = await fetch(config.endpoint);
+
+            if (!response.ok) {
+                throw new Error(`Failed to fetch ${reportTitle} data: ${response.status}`);
+            }
+
+            let data = await response.json();
+            console.log(`✅ ${reportTitle} data fetched:`, data.length, 'items');
+
+            setReportData(prev => ({ ...prev, [reportTitle]: data }));
+            filterReportData(reportTitle, data);
+        } catch (error) {
+            console.error(`Error fetching ${reportTitle} data:`, error);
+            toast({
+                title: 'Error',
+                description: `Failed to load ${reportTitle} data`,
+                status: 'error',
+                duration: 5000,
+                isClosable: true,
+            });
+        } finally {
+            setLoading(prev => ({ ...prev, [reportTitle]: false }));
+        }
+    }, [filterReportData, toast]);
+
+    // Initialize filter states for old reports
     useEffect(() => {
-        if (status === 'authenticated') {
+        const initialDateRanges: { [key: string]: { start: string; end: string } } = {};
+        const initialSelectedSites: { [key: string]: string } = {};
+        const initialSearchTerms: { [key: string]: string } = {};
+
+        reportConfigs.forEach(config => {
+            initialDateRanges[config.title] = {
+                start: new Date(new Date().getFullYear() - 1, 0, 1).toISOString().split('T')[0],
+                end: new Date().toISOString().split('T')[0]
+            };
+            initialSelectedSites[config.title] = 'all';
+            initialSearchTerms[config.title] = '';
+        });
+
+        setDateRanges(initialDateRanges);
+        setSelectedSites(initialSelectedSites);
+        setSearchTerms(initialSearchTerms);
+    }, [reportConfigs]);
+
+    // Fetch sites for old reports
+    useEffect(() => {
+        const fetchSites = async () => {
+            try {
+                console.log('🌐 Fetching sites for reports...');
+                const response = await fetch('/api/sites');
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log('✅ Sites fetched:', data.length, 'sites');
+                    setSites(data);
+                }
+            } catch (error) {
+                console.error('Failed to fetch sites:', error);
+            }
+        };
+        fetchSites();
+    }, []);
+
+    // Export single report to CSV
+    const exportToCSV = useCallback((reportTitle: string) => {
+        const data = filteredData[reportTitle];
+        if (!data || data.length === 0) {
+            toast({
+                title: 'No Data',
+                description: 'There is no data to export',
+                status: 'warning',
+                duration: 3000,
+                isClosable: true,
+            });
+            return;
+        }
+
+        try {
+            const config = reportConfigs.find(r => r.title === reportTitle);
+            if (!config) return;
+
+            const headers = config.columns.map(col =>
+                col.split('.').map(part =>
+                    part.replace(/([A-Z])/g, ' $1').trim()
+                ).join(' > ')
+            ).join(',');
+
+            const csvData = data.map(item => {
+                return config.columns.map(column => {
+                    const value = getNestedValue(item, column);
+                    const stringValue = String(value || '').replace(/"/g, '""');
+                    return `"${stringValue}"`;
+                }).join(',');
+            }).join('\n');
+
+            const csv = `${headers}\n${csvData}`;
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `${reportTitle.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.csv`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+
+            toast({
+                title: 'Export Successful',
+                description: `${reportTitle} data exported to CSV`,
+                status: 'success',
+                duration: 3000,
+                isClosable: true,
+            });
+        } catch (error) {
+            console.error('Error exporting to CSV:', error);
+            toast({
+                title: 'Export Failed',
+                description: 'Failed to export data to CSV',
+                status: 'error',
+                duration: 5000,
+                isClosable: true,
+            });
+        }
+    }, [filteredData, reportConfigs, toast]);
+
+    // Export all reports to a single organized CSV file
+    const exportAllReports = useCallback(async () => {
+        try {
+            setAnalyticsLoading(true);
+            console.log('📊 Starting export of all reports...');
+
+            const fetchPromises = reportConfigs.map(async (config) => {
+                console.log(`📡 Fetching ${config.title}...`);
+                const response = await fetch(config.endpoint);
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch ${config.title}`);
+                }
+                return response.json();
+            });
+
+            const allData = await Promise.all(fetchPromises);
+            console.log('✅ All reports data fetched');
+
+            let combinedCsv = '';
+
+            reportConfigs.forEach((config, reportIndex) => {
+                const data = allData[reportIndex] || [];
+
+                if (data.length > 0) {
+                    combinedCsv += `${config.title}\n`;
+                    combinedCsv += `${config.description}\n\n`;
+
+                    const headers = config.columns.map(col =>
+                        col.split('.').map(part =>
+                            part.replace(/([A-Z])/g, ' $1').trim()
+                        ).join(' > ')
+                    ).join(',');
+
+                    combinedCsv += headers + '\n';
+
+                    data.forEach((item: any) => {
+                        const row = config.columns.map(column => {
+                            const value = getNestedValue(item, column);
+                            const stringValue = String(value || '').replace(/"/g, '""');
+                            return `"${stringValue}"`;
+                        }).join(',');
+
+                        combinedCsv += row + '\n';
+                    });
+
+                    combinedCsv += '\n\n';
+                }
+            });
+
+            const blob = new Blob([combinedCsv], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `All_Reports_Combined_${new Date().toISOString().split('T')[0]}.csv`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+
+            console.log('✅ All reports exported successfully');
+            toast({
+                title: 'Export Successful',
+                description: 'All reports combined into a single CSV file',
+                status: 'success',
+                duration: 3000,
+                isClosable: true,
+            });
+        } catch (error) {
+            console.error('Error exporting all reports:', error);
+            toast({
+                title: 'Export Failed',
+                description: 'Failed to export reports',
+                status: 'error',
+                duration: 5000,
+                isClosable: true,
+            });
+        } finally {
+            setAnalyticsLoading(false);
+        }
+    }, [reportConfigs, toast]);
+
+    // Helper to get nested object values
+    const getNestedValue = (obj: any, path: string) => {
+        return path.split('.').reduce((current, key) => {
+            return current ? current[key] : undefined;
+        }, obj);
+    };
+
+    // Update filters and re-filter data for old reports
+    const updateDateRange = (reportTitle: string, newDateRange: { start: string; end: string }) => {
+        setDateRanges(prev => ({ ...prev, [reportTitle]: newDateRange }));
+        setTimeout(() => filterReportData(reportTitle), 0);
+    };
+
+    const updateSelectedSite = (reportTitle: string, site: string) => {
+        setSelectedSites(prev => ({ ...prev, [reportTitle]: site }));
+        setTimeout(() => filterReportData(reportTitle), 0);
+    };
+
+    const updateSearchTerm = (reportTitle: string, term: string) => {
+        setSearchTerms(prev => ({ ...prev, [reportTitle]: term }));
+        setTimeout(() => filterReportData(reportTitle), 0);
+    };
+
+    // Load report data when tab changes (only if not already loaded)
+    useEffect(() => {
+        if (status === 'authenticated' && currentReport) {
+            fetchReportData(currentReport.title);
+        }
+    }, [currentReport, fetchReportData, status]);
+
+    // Load new analytics data on component mount
+    useEffect(() => {
+        if (status === 'authenticated' && activeTab === 0) {
+            console.log('🔍 Loading analytics data on mount...');
             fetchAllData();
         }
-    }, [status, fetchAllData]);
+    }, [status, fetchAllData, activeTab]);
 
     if (status === 'loading') {
         return (
@@ -867,6 +1442,72 @@ export default function ComprehensiveReportsPage() {
         );
     }
 
+    // Helper function to render cell values appropriately for old reports
+    const renderCellValue = (value: any, column: string): React.ReactNode => {
+        if (value == null) return '-';
+
+        if (column.includes('date') || column.includes('Date') || column === 'timestamp' || column === 'createdAt') {
+            try {
+                return new Date(value).toLocaleDateString();
+            } catch {
+                return value;
+            }
+        }
+
+        if (column.includes('amount') || column.includes('cost') || column.includes('price')) {
+            if (typeof value === 'number') {
+                return value.toFixed(2);
+            }
+        }
+
+        if (column === 'status' || column.includes('Status')) {
+            const getStatusColor = (status: string) => {
+                switch (status?.toLowerCase()) {
+                    case 'completed':
+                    case 'approved':
+                    case 'processed':
+                        return 'green';
+                    case 'pending':
+                    case 'draft':
+                    case 'pending-approval':
+                        return 'orange';
+                    case 'cancelled':
+                    case 'rejected':
+                        return 'red';
+                    case 'partially-received':
+                    case 'in-progress':
+                        return 'blue';
+                    default:
+                        return 'gray';
+                }
+            };
+
+            return (
+                <Badge colorScheme={getStatusColor(value)} variant="subtle" fontSize="xs">
+                    {typeof value === 'string' ? value.replace('-', ' ').toUpperCase() : String(value)}
+                </Badge>
+            );
+        }
+
+        if (Array.isArray(value)) {
+            if (value.length === 0) return 'None';
+
+            return value.slice(0, 2).map((item, idx) => (
+                <Text key={idx} fontSize="xs">
+                    {typeof item === 'object' ?
+                        (item.stockItem?.name || item.name || `${item.orderedQuantity || item.receivedQuantity || item.dispatchedQuantity || item.quantity}x item`) :
+                        String(item)}
+                </Text>
+            )).concat(value.length > 2 ? [<Text key="more" fontSize="xs">+{value.length - 2} more</Text>] : []);
+        }
+
+        if (typeof value === 'object') {
+            return value.name || value.title || value.poNumber || value.receiptNumber || value.dispatchNumber || value.transferNumber || 'Object';
+        }
+
+        return String(value);
+    };
+
     return (
         <Box p={{ base: 4, md: 8 }} bg={bgPrimary} minH="100vh">
             <VStack spacing={6} align="stretch">
@@ -874,24 +1515,36 @@ export default function ComprehensiveReportsPage() {
                 <Flex justify="space-between" align={{ base: 'flex-start', md: 'center' }} direction={{ base: 'column', md: 'row' }} gap={4}>
                     <Box>
                         <Heading as="h1" size={{ base: 'xl', md: '2xl' }} color={primaryTextColor} mb={2}>
-                            Comprehensive Analytics & Reports
+                            Analytics & Reports
                         </Heading>
                         <Text color={secondaryTextColor}>
-                            Complete system overview with visual analytics and detailed reporting
+                            Comprehensive analytics and exportable reports with accurate data
                         </Text>
                     </Box>
-                    <Button
-                        leftIcon={<FiDownload />}
-                        colorScheme="green"
-                        onClick={exportToExcel}
-                        isLoading={exportLoading}
-                        size="lg"
-                    >
-                        Export Full Report (Excel)
-                    </Button>
+                    {activeTab === 1 && (
+                        <Button
+                            leftIcon={<FiDownload />}
+                            colorScheme="green"
+                            onClick={exportAllReports}
+                            isLoading={analyticsLoading}
+                        >
+                            Export All Reports
+                        </Button>
+                    )}
+                    {activeTab === 0 && (
+                        <Button
+                            leftIcon={<FiDownload />}
+                            colorScheme="green"
+                            onClick={exportToExcel}
+                            isLoading={exportLoading}
+                            size="lg"
+                        >
+                            Export Full Report (Excel)
+                        </Button>
+                    )}
                 </Flex>
 
-                {/* Main Tabs */}
+                {/* Main Tabs - Analytics and Reports */}
                 <Card bg={bgCard} border="1px" borderColor={borderColor}>
                     <CardBody p={0}>
                         <Tabs variant="enclosed" onChange={setActiveTab} colorScheme="brand" index={activeTab}>
@@ -899,256 +1552,454 @@ export default function ComprehensiveReportsPage() {
                                 <Tab>
                                     <HStack spacing={2}>
                                         <Icon as={FiTrendingUp} />
-                                        <Text>Executive Dashboard</Text>
-                                    </HStack>
-                                </Tab>
-                                <Tab>
-                                    <HStack spacing={2}>
-                                        <Icon as={FiBarChart2} />
-                                        <Text>Visual Analytics</Text>
+                                        <Text>Analytics</Text>
                                     </HStack>
                                 </Tab>
                                 <Tab>
                                     <HStack spacing={2}>
                                         <Icon as={FiDownload} />
-                                        <Text>Data Export</Text>
+                                        <Text>Reports</Text>
                                     </HStack>
                                 </Tab>
                             </TabList>
 
                             <TabPanels>
-                                {/* Executive Dashboard Tab */}
+                                {/* Analytics Tab - COMPLETE ANALYTICS WITH THREE SUBTABS */}
                                 <TabPanel>
-                                    <VStack spacing={6} align="stretch">
-                                        {/* Date Range Controls */}
-                                        <Card>
-                                            <CardBody>
-                                                <VStack align="start" spacing={4}>
-                                                    <HStack wrap="wrap" spacing={4}>
-                                                        <VStack align="start">
-                                                            <Text fontWeight="medium">Analysis Period</Text>
-                                                            <HStack>
-                                                                <Input
-                                                                    type="date"
-                                                                    value={primaryDateRange.start}
-                                                                    onChange={(e) => setPrimaryDateRange(prev => ({ ...prev, start: e.target.value }))}
-                                                                />
-                                                                <Text>to</Text>
-                                                                <Input
-                                                                    type="date"
-                                                                    value={primaryDateRange.end}
-                                                                    onChange={(e) => setPrimaryDateRange(prev => ({ ...prev, end: e.target.value }))}
-                                                                />
-                                                            </HStack>
-                                                        </VStack>
+                                    <Tabs variant="line" onChange={setAnalyticsTab} colorScheme="brand" index={analyticsTab}>
+                                        <TabList>
+                                            <Tab>
+                                                <HStack spacing={2}>
+                                                    <Icon as={FiTrendingUp} />
+                                                    <Text>Executive Dashboard</Text>
+                                                </HStack>
+                                            </Tab>
+                                            <Tab>
+                                                <HStack spacing={2}>
+                                                    <Icon as={FiBarChart2} />
+                                                    <Text>Visual Analytics</Text>
+                                                </HStack>
+                                            </Tab>
+                                            <Tab>
+                                                <HStack spacing={2}>
+                                                    <Icon as={FiDownload} />
+                                                    <Text>Data Export</Text>
+                                                </HStack>
+                                            </Tab>
+                                        </TabList>
 
-                                                        <RadioGroup onChange={(value) => setCompareMode(value === 'true')} value={compareMode ? 'true' : 'false'}>
-                                                            <Stack direction="row">
-                                                                <Radio value="false">Single Period</Radio>
-                                                                <Radio value="true">Compare Periods</Radio>
-                                                            </Stack>
-                                                        </RadioGroup>
-
-                                                        {compareMode && (
-                                                            <VStack align="start">
-                                                                <Text fontWeight="medium">Comparison Period</Text>
-                                                                <HStack>
-                                                                    <Input
-                                                                        type="date"
-                                                                        value={comparisonDateRange.start}
-                                                                        onChange={(e) => setComparisonDateRange(prev => ({ ...prev, start: e.target.value }))}
-                                                                    />
-                                                                    <Text>to</Text>
-                                                                    <Input
-                                                                        type="date"
-                                                                        value={comparisonDateRange.end}
-                                                                        onChange={(e) => setComparisonDateRange(prev => ({ ...prev, end: e.target.value }))}
-                                                                    />
-                                                                </HStack>
-                                                            </VStack>
-                                                        )}
-                                                    </HStack>
-
-                                                    <Button
-                                                        leftIcon={<FiFilter />}
-                                                        onClick={fetchAllData}
-                                                        isLoading={analyticsLoading}
-                                                        colorScheme="brand"
-                                                    >
-                                                        Update Analytics
-                                                    </Button>
-                                                </VStack>
-                                            </CardBody>
-                                        </Card>
-
-                                        {analyticsLoading ? (
-                                            <Flex justify="center" align="center" py={10}>
-                                                <Spinner size="xl" />
-                                            </Flex>
-                                        ) : !analyticsData ? (
-                                            <Alert status="info" borderRadius="md">
-                                                <AlertIcon />
-                                                No analytics data available. Click "Update Analytics" to load data.
-                                            </Alert>
-                                        ) : (
-                                            <>
-                                                {/* Key Metrics Summary */}
-                                                <Card>
-                                                    <CardBody>
-                                                        <Heading size="md" mb={6}>Key Performance Indicators</Heading>
-                                                        <SimpleGrid columns={{ base: 1, md: 2, lg: 4 }} spacing={6}>
-                                                            <Stat>
-                                                                <StatLabel>
-                                                                    <HStack>
-                                                                        <Icon as={FiShoppingCart} />
-                                                                        <Text>Purchase Orders</Text>
-                                                                    </HStack>
-                                                                </StatLabel>
-                                                                <StatNumber>{analyticsData.summary.totalPurchaseOrders}</StatNumber>
-                                                                <StatHelpText>
-                                                                    ${analyticsData.purchaseOrders.totalValue.toLocaleString()} total value
-                                                                </StatHelpText>
-                                                            </Stat>
-                                                            <Stat>
-                                                                <StatLabel>
-                                                                    <HStack>
-                                                                        <Icon as={FiUsers} />
-                                                                        <Text>People Served</Text>
-                                                                    </HStack>
-                                                                </StatLabel>
-                                                                <StatNumber>{(analyticsData.summary.totalPeopleFed).toLocaleString()}</StatNumber>
-                                                                <StatHelpText>
-                                                                    ${analyticsData.dispatches.costPerPerson.toFixed(2)} per person
-                                                                </StatHelpText>
-                                                            </Stat>
-                                                            <Stat>
-                                                                <StatLabel>
-                                                                    <HStack>
-                                                                        <Icon as={FiArchive} />
-                                                                        <Text>Inventory Value</Text>
-                                                                    </HStack>
-                                                                </StatLabel>
-                                                                <StatNumber>E {(analyticsData.summary.totalInventoryValue).toLocaleString()}</StatNumber>
-                                                                <StatHelpText>
-                                                                    {analyticsData.summary.totalStockItems} items
-                                                                </StatHelpText>
-                                                            </Stat>
-                                                            <Stat>
-                                                                <StatLabel>
-                                                                    <HStack>
-                                                                        <Icon as={FiAlertTriangle} />
-                                                                        <Text>Low Stock</Text>
-                                                                    </HStack>
-                                                                </StatLabel>
-                                                                <StatNumber>{analyticsData.summary.lowStockItems}</StatNumber>
-                                                                <StatHelpText>
-                                                                    {analyticsData.summary.criticalStockItems} critical
-                                                                </StatHelpText>
-                                                            </Stat>
-                                                        </SimpleGrid>
-                                                    </CardBody>
-                                                </Card>
-
-                                                {/* Operational Overview */}
-                                                <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={6}>
-                                                    <StatusPieChart
-                                                        data={analyticsData.purchaseOrders.byStatus}
-                                                        title="Purchase Orders by Status"
-                                                        colors={[CHART_COLORS.primary[0], CHART_COLORS.warning[0], CHART_COLORS.success[0], CHART_COLORS.error[0]]}
-                                                    />
-                                                    <BarChartComponent
-                                                        data={analyticsData.purchaseOrders.bySite}
-                                                        title="Purchase Orders by Site"
-                                                        dataKey="value"
-                                                    />
-                                                </SimpleGrid>
-
-                                                {/* Dispatch & Inventory Analytics */}
-                                                <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={6}>
-                                                    <StatusPieChart
-                                                        data={analyticsData.dispatches.byType}
-                                                        title="Dispatches by Type"
-                                                        colors={CHART_COLORS.success}
-                                                    />
-                                                    <StatusPieChart
-                                                        data={analyticsData.inventory.byCategory}
-                                                        title="Inventory by Category"
-                                                        colors={CHART_COLORS.purple}
-                                                    />
-                                                </SimpleGrid>
-
-                                                {/* Financial Metrics */}
-                                                <Card>
-                                                    <CardBody>
-                                                        <Heading size="md" mb={4}>Financial Performance</Heading>
-                                                        <SimpleGrid columns={{ base: 1, md: 3 }} spacing={6}>
-                                                            <Stat>
-                                                                <StatLabel>Total Spending</StatLabel>
-                                                                <StatNumber>${analyticsData.purchaseOrders.totalValue.toLocaleString()}</StatNumber>
-                                                                <StatHelpText>All purchase orders</StatHelpText>
-                                                            </Stat>
-                                                            <Stat>
-                                                                <StatLabel>Avg Order Value</StatLabel>
-                                                                <StatNumber>${analyticsData.purchaseOrders.avgOrderValue.toFixed(2)}</StatNumber>
-                                                                <StatHelpText>Per purchase order</StatHelpText>
-                                                            </Stat>
-                                                            <Stat>
-                                                                <StatLabel>Cost Efficiency</StatLabel>
-                                                                <StatNumber>${analyticsData.dispatches.costPerPerson.toFixed(2)}</StatNumber>
-                                                                <StatHelpText>Cost per person served</StatHelpText>
-                                                            </Stat>
-                                                        </SimpleGrid>
-                                                    </CardBody>
-                                                </Card>
-
-                                                {/* Supplier Performance */}
-                                                {analyticsData.suppliers.performance.length > 0 && (
+                                        <TabPanels>
+                                            {/* Executive Dashboard Tab */}
+                                            <TabPanel>
+                                                <VStack spacing={6} align="stretch">
+                                                    {/* Date Range Controls */}
                                                     <Card>
                                                         <CardBody>
-                                                            <Heading size="md" mb={4}>Top Suppliers</Heading>
-                                                            <TableContainer>
-                                                                <Table variant="simple">
-                                                                    <Thead>
-                                                                        <Tr>
-                                                                            <Th>Supplier</Th>
-                                                                            <Th isNumeric>Orders</Th>
-                                                                            <Th isNumeric>Total Value</Th>
-                                                                        </Tr>
-                                                                    </Thead>
-                                                                    <Tbody>
-                                                                        {analyticsData.suppliers.performance.slice(0, 5).map((supplier, index) => (
-                                                                            <Tr key={supplier.name}>
-                                                                                <Td>{supplier.name}</Td>
-                                                                                <Td isNumeric>{supplier.orders}</Td>
-                                                                                <Td isNumeric>${supplier.value.toLocaleString()}</Td>
-                                                                            </Tr>
-                                                                        ))}
-                                                                    </Tbody>
-                                                                </Table>
-                                                            </TableContainer>
+                                                            <VStack align="start" spacing={4}>
+                                                                <HStack wrap="wrap" spacing={4}>
+                                                                    <VStack align="start">
+                                                                        <Text fontWeight="medium">Analysis Period</Text>
+                                                                        <HStack>
+                                                                            <Input
+                                                                                type="date"
+                                                                                value={primaryDateRange.start}
+                                                                                onChange={(e) => setPrimaryDateRange(prev => ({ ...prev, start: e.target.value }))}
+                                                                            />
+                                                                            <Text>to</Text>
+                                                                            <Input
+                                                                                type="date"
+                                                                                value={primaryDateRange.end}
+                                                                                onChange={(e) => setPrimaryDateRange(prev => ({ ...prev, end: e.target.value }))}
+                                                                            />
+                                                                        </HStack>
+                                                                    </VStack>
+
+                                                                    <RadioGroup onChange={(value) => setCompareMode(value === 'true')} value={compareMode ? 'true' : 'false'}>
+                                                                        <Stack direction="row">
+                                                                            <Radio value="false">Single Period</Radio>
+                                                                            <Radio value="true">Compare Periods</Radio>
+                                                                        </Stack>
+                                                                    </RadioGroup>
+
+                                                                    {compareMode && (
+                                                                        <VStack align="start">
+                                                                            <Text fontWeight="medium">Comparison Period</Text>
+                                                                            <HStack>
+                                                                                <Input
+                                                                                    type="date"
+                                                                                    value={comparisonDateRange.start}
+                                                                                    onChange={(e) => setComparisonDateRange(prev => ({ ...prev, start: e.target.value }))}
+                                                                                />
+                                                                                <Text>to</Text>
+                                                                                <Input
+                                                                                    type="date"
+                                                                                    value={comparisonDateRange.end}
+                                                                                    onChange={(e) => setComparisonDateRange(prev => ({ ...prev, end: e.target.value }))}
+                                                                                />
+                                                                            </HStack>
+                                                                        </VStack>
+                                                                    )}
+                                                                </HStack>
+
+                                                                <Button
+                                                                    leftIcon={<FiFilter />}
+                                                                    onClick={fetchAllData}
+                                                                    isLoading={analyticsLoading}
+                                                                    colorScheme="brand"
+                                                                >
+                                                                    Update Analytics
+                                                                </Button>
+                                                            </VStack>
                                                         </CardBody>
                                                     </Card>
-                                                )}
-                                            </>
-                                        )}
-                                    </VStack>
+
+                                                    {analyticsLoading ? (
+                                                        <Flex justify="center" align="center" py={10}>
+                                                            <Spinner size="xl" />
+                                                            <Text ml={4}>Loading accurate analytics data...</Text>
+                                                        </Flex>
+                                                    ) : !analyticsData ? (
+                                                        <Alert status="info" borderRadius="md">
+                                                            <AlertIcon />
+                                                            No analytics data available. Click "Update Analytics" to load accurate data.
+                                                        </Alert>
+                                                    ) : (
+                                                        <>
+                                                            {/* Key Metrics Summary */}
+                                                            <Card>
+                                                                <CardBody>
+                                                                    <Heading size="md" mb={6}>Key Performance Indicators</Heading>
+                                                                    <SimpleGrid columns={{ base: 1, md: 2, lg: 4 }} spacing={6}>
+                                                                        <Stat>
+                                                                            <StatLabel>
+                                                                                <HStack>
+                                                                                    <Icon as={FiShoppingCart} />
+                                                                                    <Text>Purchase Orders</Text>
+                                                                                </HStack>
+                                                                            </StatLabel>
+                                                                            <StatNumber>{analyticsData.summary.totalPurchaseOrders}</StatNumber>
+                                                                            <StatHelpText>
+                                                                                {analyticsData.purchaseOrders.totalValue.toLocaleString()} total value
+                                                                            </StatHelpText>
+                                                                        </Stat>
+                                                                        <Stat>
+                                                                            <StatLabel>
+                                                                                <HStack>
+                                                                                    <Icon as={FiUsers} />
+                                                                                    <Text>People Served</Text>
+                                                                                </HStack>
+                                                                            </StatLabel>
+                                                                            <StatNumber>{(analyticsData.summary.totalPeopleFed).toLocaleString()}</StatNumber>
+                                                                            <StatHelpText>
+                                                                                {analyticsData.dispatches.costPerPerson.toFixed(2)} per person
+                                                                            </StatHelpText>
+                                                                        </Stat>
+                                                                        <Stat>
+                                                                            <StatLabel>
+                                                                                <HStack>
+                                                                                    <Icon as={FiArchive} />
+                                                                                    <Text>Inventory Value</Text>
+                                                                                </HStack>
+                                                                            </StatLabel>
+                                                                            <StatNumber>{(analyticsData.summary.totalInventoryValue).toLocaleString()}</StatNumber>
+                                                                            <StatHelpText>
+                                                                                {analyticsData.summary.totalStockItems} items
+                                                                            </StatHelpText>
+                                                                        </Stat>
+                                                                        <Stat>
+                                                                            <StatLabel>
+                                                                                <HStack>
+                                                                                    <Icon as={FiAlertTriangle} />
+                                                                                    <Text>Low Stock</Text>
+                                                                                </HStack>
+                                                                            </StatLabel>
+                                                                            <StatNumber>{analyticsData.summary.lowStockItems}</StatNumber>
+                                                                            <StatHelpText>
+                                                                                {analyticsData.summary.criticalStockItems} critical
+                                                                            </StatHelpText>
+                                                                        </Stat>
+                                                                    </SimpleGrid>
+                                                                </CardBody>
+                                                            </Card>
+
+                                                            {/* Operational Overview */}
+                                                            <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={6}>
+                                                                <StatusPieChart
+                                                                    data={analyticsData.purchaseOrders.byStatus}
+                                                                    title="Purchase Orders by Status"
+                                                                    colors={[CHART_COLORS.primary[0], CHART_COLORS.warning[0], CHART_COLORS.success[0], CHART_COLORS.error[0]]}
+                                                                />
+                                                                <BarChartComponent
+                                                                    data={analyticsData.purchaseOrders.bySite}
+                                                                    title="Purchase Orders by Site"
+                                                                    dataKey="value"
+                                                                />
+                                                            </SimpleGrid>
+
+                                                            {/* Dispatch & Inventory Analytics */}
+                                                            <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={6}>
+                                                                <StatusPieChart
+                                                                    data={analyticsData.dispatches.byType}
+                                                                    title="Dispatches by Type"
+                                                                    colors={CHART_COLORS.success}
+                                                                />
+                                                                <StatusPieChart
+                                                                    data={analyticsData.inventory.byCategory}
+                                                                    title="Inventory by Category"
+                                                                    colors={CHART_COLORS.purple}
+                                                                />
+                                                            </SimpleGrid>
+
+                                                            {/* Financial Metrics */}
+                                                            <Card>
+                                                                <CardBody>
+                                                                    <Heading size="md" mb={4}>Financial Performance</Heading>
+                                                                    <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={6}>
+                                                                        <Stat>
+                                                                            <StatLabel>Total Received Goods Value</StatLabel>
+                                                                            <StatNumber>{analyticsData?.financial?.totalReceivedGoodsValue?.toLocaleString() || '0'}</StatNumber>
+                                                                            <StatHelpText>Actual goods received value</StatHelpText>
+                                                                        </Stat>
+                                                                        <Stat>
+                                                                            <StatLabel>Total Dispatch Cost</StatLabel>
+                                                                            <StatNumber>{analyticsData?.dispatches?.totalCost?.toLocaleString() || '0'}</StatNumber>
+                                                                            <StatHelpText>Cost of dispatched goods</StatHelpText>
+                                                                        </Stat>
+                                                                        <Stat>
+                                                                            <StatLabel>Consumption</StatLabel>
+                                                                            <StatNumber>{analyticsData?.financial?.consumption?.toLocaleString() || '0'}</StatNumber>
+                                                                            <StatHelpText>Stock Value - Dispatch Cost</StatHelpText>
+                                                                        </Stat>
+                                                                        <Stat>
+                                                                            <StatLabel>Total Sales</StatLabel>
+                                                                            <StatNumber>{analyticsData?.financial?.totalSales?.toLocaleString() || '0'}</StatNumber>
+                                                                            <StatHelpText>People Fed × Selling Prices</StatHelpText>
+                                                                        </Stat>
+                                                                        <Stat>
+                                                                            <StatLabel>Profit</StatLabel>
+                                                                            <StatNumber color={analyticsData?.financial?.profit >= 0 ? 'green.500' : 'red.500'}>
+                                                                                {analyticsData?.financial?.profit?.toLocaleString() || '0'}
+                                                                            </StatNumber>
+                                                                            <StatHelpText>Sales - Consumption</StatHelpText>
+                                                                        </Stat>
+                                                                        <Stat>
+                                                                            <StatLabel>Profit %</StatLabel>
+                                                                            <StatNumber color={analyticsData?.financial?.profitPercentage >= 0 ? 'green.500' : 'red.500'}>
+                                                                                {analyticsData?.financial?.profitPercentage?.toFixed(1) || '0'}%
+                                                                            </StatNumber>
+                                                                            <StatHelpText>Profit margin</StatHelpText>
+                                                                        </Stat>
+                                                                    </SimpleGrid>
+                                                                </CardBody>
+                                                            </Card>
+
+                                                            {/* Supplier Performance */}
+                                                            {analyticsData.suppliers.performance.length > 0 && (
+                                                                <Card>
+                                                                    <CardBody>
+                                                                        <Heading size="sm" mb={4}>Top Suppliers</Heading>
+                                                                        <TableContainer>
+                                                                            <Table variant="simple">
+                                                                                <Thead>
+                                                                                    <Tr>
+                                                                                        <Th>Supplier</Th>
+                                                                                        <Th isNumeric>Orders</Th>
+                                                                                        <Th isNumeric>Total Value</Th>
+                                                                                    </Tr>
+                                                                                </Thead>
+                                                                                <Tbody>
+                                                                                    {analyticsData.suppliers.performance.slice(0, 5).map((supplier, index) => (
+                                                                                        <Tr key={supplier.name}>
+                                                                                            <Td>{supplier.name}</Td>
+                                                                                            <Td isNumeric>{supplier.orders}</Td>
+                                                                                            <Td isNumeric>{supplier.value.toLocaleString()}</Td>
+                                                                                        </Tr>
+                                                                                    ))}
+                                                                                </Tbody>
+                                                                            </Table>
+                                                                        </TableContainer>
+                                                                    </CardBody>
+                                                                </Card>
+                                                            )}
+                                                        </>
+                                                    )}
+                                                </VStack>
+                                            </TabPanel>
+
+                                            {/* Visual Analytics Tab */}
+                                            <TabPanel>
+                                                <VisualAnalyticsTab
+                                                    analyticsData={analyticsData}
+                                                    loading={analyticsLoading}
+                                                />
+                                            </TabPanel>
+
+                                            {/* Data Export Tab */}
+                                            <TabPanel>
+                                                <DataExportTab
+                                                    exportToExcel={exportToExcel}
+                                                    loading={exportLoading}
+                                                    dataAvailable={!!analyticsData}
+                                                />
+                                            </TabPanel>
+                                        </TabPanels>
+                                    </Tabs>
                                 </TabPanel>
 
-                                {/* Visual Analytics Tab */}
+                                {/* Reports Tab - OLD REPORTS FUNCTIONALITY */}
                                 <TabPanel>
-                                    <VisualAnalyticsTab
-                                        analyticsData={analyticsData}
-                                        loading={analyticsLoading}
-                                    />
-                                </TabPanel>
+                                    <Tabs variant="line" colorScheme="brand">
+                                        <TabList overflowX="auto" whiteSpace="nowrap" py={1}>
+                                            {reportConfigs.map((config, index) => (
+                                                <Tab
+                                                    key={config.title}
+                                                    flexShrink={0}
+                                                    minW="max-content"
+                                                    px={4}
+                                                    py={3}
+                                                >
+                                                    {config.title}
+                                                </Tab>
+                                            ))}
+                                        </TabList>
 
-                                {/* Data Export Tab */}
-                                <TabPanel>
-                                    <DataExportTab
-                                        exportToExcel={exportToExcel}
-                                        loading={exportLoading}
-                                        dataAvailable={!!analyticsData}
-                                    />
+                                        <TabPanels>
+                                            {reportConfigs.map((config) => (
+                                                <TabPanel key={config.title}>
+                                                    <VStack spacing={4} align="stretch">
+                                                        {/* Report Description */}
+                                                        <Text color={secondaryTextColor} fontSize="lg">
+                                                            {config.description}
+                                                        </Text>
+
+                                                        {/* Filters */}
+                                                        {(config.filters?.dateRange || config.filters?.site) && (
+                                                            <Card variant="outline" borderColor={borderColor}>
+                                                                <CardBody>
+                                                                    <Flex direction={{ base: 'column', md: 'row' }} gap={4} align={{ base: 'stretch', md: 'end' }}>
+                                                                        {config.filters?.dateRange && (
+                                                                            <VStack align="start" spacing={2} flex={1}>
+                                                                                <Text fontWeight="medium" fontSize="sm">Date Range</Text>
+                                                                                <HStack>
+                                                                                    <Input
+                                                                                        type="date"
+                                                                                        value={dateRanges[config.title]?.start || ''}
+                                                                                        onChange={(e) => updateDateRange(config.title, {
+                                                                                            ...dateRanges[config.title],
+                                                                                            start: e.target.value
+                                                                                        })}
+                                                                                        size="sm"
+                                                                                    />
+                                                                                    <Text>to</Text>
+                                                                                    <Input
+                                                                                        type="date"
+                                                                                        value={dateRanges[config.title]?.end || ''}
+                                                                                        onChange={(e) => updateDateRange(config.title, {
+                                                                                            ...dateRanges[config.title],
+                                                                                            end: e.target.value
+                                                                                        })}
+                                                                                        size="sm"
+                                                                                    />
+                                                                                </HStack>
+                                                                            </VStack>
+                                                                        )}
+
+                                                                        {config.filters?.site && (
+                                                                            <VStack align="start" spacing={2} flex={1}>
+                                                                                <Text fontWeight="medium" fontSize="sm">Site</Text>
+                                                                                <Select
+                                                                                    value={selectedSites[config.title] || 'all'}
+                                                                                    onChange={(e) => updateSelectedSite(config.title, e.target.value)}
+                                                                                    size="sm"
+                                                                                >
+                                                                                    <option value="all">All Sites</option>
+                                                                                    {sites.map(site => (
+                                                                                        <option key={site._id} value={site._id}>
+                                                                                            {site.name}
+                                                                                        </option>
+                                                                                    ))}
+                                                                                </Select>
+                                                                            </VStack>
+                                                                        )}
+
+                                                                        <Button
+                                                                            leftIcon={<FiDownload />}
+                                                                            onClick={() => exportToCSV(config.title)}
+                                                                            isDisabled={!filteredData[config.title] || filteredData[config.title].length === 0}
+                                                                            colorScheme="green"
+                                                                            size="sm"
+                                                                        >
+                                                                            Export CSV
+                                                                        </Button>
+                                                                    </Flex>
+                                                                </CardBody>
+                                                            </Card>
+                                                        )}
+
+                                                        {/* Search */}
+                                                        <InputGroup maxW="400px">
+                                                            <InputLeftElement pointerEvents="none">
+                                                                <Icon as={FiSearch} color={secondaryTextColor} />
+                                                            </InputLeftElement>
+                                                            <Input
+                                                                placeholder="Search in report..."
+                                                                value={searchTerms[config.title] || ''}
+                                                                onChange={(e) => updateSearchTerm(config.title, e.target.value)}
+                                                                borderColor={borderColor}
+                                                            />
+                                                        </InputGroup>
+
+                                                        {/* Data Table */}
+                                                        {loading[config.title] ? (
+                                                            <Flex justify="center" align="center" py={10}>
+                                                                <Spinner size="xl" />
+                                                                <Text ml={4}>Loading accurate {config.title} data...</Text>
+                                                            </Flex>
+                                                        ) : !filteredData[config.title] || filteredData[config.title].length === 0 ? (
+                                                            <Alert status="info" borderRadius="md">
+                                                                <AlertIcon />
+                                                                No data found for the selected filters.
+                                                            </Alert>
+                                                        ) : (
+                                                            <Box overflowX="auto">
+                                                                <TableContainer border="1px" borderColor={borderColor} borderRadius="md">
+                                                                    <Table variant="simple" size="sm">
+                                                                        <Thead bg={tableHeaderBg}>
+                                                                            <Tr>
+                                                                                {config.columns.map(column => (
+                                                                                    <Th key={column} textTransform="capitalize" borderColor={borderColor}>
+                                                                                        {column.split('.').map(part =>
+                                                                                            part.replace(/([A-Z])/g, ' $1').trim()
+                                                                                        ).join(' > ')}
+                                                                                    </Th>
+                                                                                ))}
+                                                                            </Tr>
+                                                                        </Thead>
+                                                                        <Tbody>
+                                                                            {filteredData[config.title].slice(0, 100).map((row, index) => (
+                                                                                <Tr key={index} _hover={{ bg: tableRowHoverBg }}>
+                                                                                    {config.columns.map(column => (
+                                                                                        <Td key={column} borderColor={borderColor}>
+                                                                                            {renderCellValue(getNestedValue(row, column), column)}
+                                                                                        </Td>
+                                                                                    ))}
+                                                                                </Tr>
+                                                                            ))}
+                                                                        </Tbody>
+                                                                    </Table>
+                                                                </TableContainer>
+                                                                {filteredData[config.title].length > 100 && (
+                                                                    <Text fontSize="sm" color={secondaryTextColor} mt={2} textAlign="center">
+                                                                        Showing first 100 records of {filteredData[config.title].length}. Export to CSV to see all data.
+                                                                    </Text>
+                                                                )}
+                                                            </Box>
+                                                        )}
+                                                    </VStack>
+                                                </TabPanel>
+                                            ))}
+                                        </TabPanels>
+                                    </Tabs>
                                 </TabPanel>
                             </TabPanels>
                         </Tabs>
@@ -1159,12 +2010,87 @@ export default function ComprehensiveReportsPage() {
     );
 }
 
+// Chart Components
+interface PieChartData {
+    name: string;
+    value: number;
+}
+
+const StatusPieChart = ({ data, title, colors = CHART_COLORS.primary }: { data: any[], title: string, colors?: string[] }) => (
+    <Card height="400px">
+        <CardBody>
+            <Text fontWeight="bold" mb={4}>{title}</Text>
+            <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                    <Pie
+                        data={data}
+                        cx="50%"
+                        cy="50%"
+                        labelLine={true}
+                        label={({ name, value }) => {
+                            const total = data.reduce((sum, item) => sum + item.value, 0);
+                            const percentage = (((value as number) / total) * 100).toFixed(0);
+                            return `${name}: ${percentage}%`;
+                        }}
+                        outerRadius={100}
+                        fill="#8884d8"
+                        dataKey="value"
+                    >
+                        {data.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
+                        ))}
+                    </Pie>
+                    <Tooltip formatter={(value) => [value, 'Count']} />
+                    <Legend />
+                </PieChart>
+            </ResponsiveContainer>
+        </CardBody>
+    </Card>
+);
+
+const BarChartComponent = ({ data, title, dataKey, color = CHART_COLORS.primary[0] }: { data: any[], title: string, dataKey: string, color?: string }) => (
+    <Card height="400px">
+        <CardBody>
+            <Text fontWeight="bold" mb={4}>{title}</Text>
+            <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={data}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" />
+                    <YAxis />
+                    <Tooltip />
+                    <Legend />
+                    <Bar dataKey={dataKey} fill={color} />
+                </BarChart>
+            </ResponsiveContainer>
+        </CardBody>
+    </Card>
+);
+
+const LineChartComponent = ({ data, title, dataKey, color = CHART_COLORS.primary[0] }: { data: any[], title: string, dataKey: string, color?: string }) => (
+    <Card height="400px">
+        <CardBody>
+            <Text fontWeight="bold" mb={4}>{title}</Text>
+            <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={data}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" />
+                    <YAxis />
+                    <Tooltip />
+                    <Legend />
+                    <Line type="monotone" dataKey={dataKey} stroke={color} strokeWidth={2} />
+                </LineChart>
+            </ResponsiveContainer>
+        </CardBody>
+    </Card>
+);
+
 // Visual Analytics Tab Component
 const VisualAnalyticsTab = ({ analyticsData, loading }: { analyticsData: EnhancedAnalyticsData | null, loading: boolean }) => {
     if (loading) {
         return (
             <Flex justify="center" align="center" py={10}>
                 <Spinner size="xl" />
+                <Text ml={4}>Loading visual analytics...</Text>
             </Flex>
         );
     }
@@ -1194,7 +2120,7 @@ const VisualAnalyticsTab = ({ analyticsData, loading }: { analyticsData: Enhance
                                 <CartesianGrid strokeDasharray="3 3" />
                                 <XAxis dataKey="month" />
                                 <YAxis />
-                                <Tooltip formatter={(value) => [`$${Number(value).toLocaleString()}`, 'Spending']} />
+                                <Tooltip formatter={(value) => [`${Number(value).toLocaleString()}`, 'Spending']} />
                                 <Area type="monotone" dataKey="spending" stroke={CHART_COLORS.primary[0]} fill={CHART_COLORS.primary[2]} />
                             </AreaChart>
                         </ResponsiveContainer>
@@ -1209,7 +2135,7 @@ const VisualAnalyticsTab = ({ analyticsData, loading }: { analyticsData: Enhance
                                 <CartesianGrid strokeDasharray="3 3" />
                                 <XAxis dataKey="date" />
                                 <YAxis />
-                                <Tooltip formatter={(value) => [`$${Number(value).toFixed(2)}`, 'Cost per Person']} />
+                                <Tooltip formatter={(value) => [`${Number(value).toFixed(2)}`, 'Cost per Person']} />
                                 <Line type="monotone" dataKey="cost" stroke={CHART_COLORS.success[0]} strokeWidth={2} />
                             </LineChart>
                         </ResponsiveContainer>
@@ -1296,7 +2222,7 @@ const VisualAnalyticsTab = ({ analyticsData, loading }: { analyticsData: Enhance
                                         <Tr key={item.name}>
                                             <Td>{item.name}</Td>
                                             <Td isNumeric>{item.quantity}</Td>
-                                            <Td isNumeric>${item.value.toLocaleString()}</Td>
+                                            <Td isNumeric>{item.value.toLocaleString()}</Td>
                                         </Tr>
                                     ))}
                                 </Tbody>
@@ -1322,7 +2248,7 @@ const VisualAnalyticsTab = ({ analyticsData, loading }: { analyticsData: Enhance
                                         <Tr key={item.name}>
                                             <Td>{item.name}</Td>
                                             <Td isNumeric>{item.quantity}</Td>
-                                            <Td isNumeric>${item.cost.toLocaleString()}</Td>
+                                            <Td isNumeric>{item.cost.toLocaleString()}</Td>
                                         </Tr>
                                     ))}
                                 </Tbody>
@@ -1344,7 +2270,7 @@ const DataExportTab = ({ exportToExcel, loading, dataAvailable }: { exportToExce
                     <Heading size="md">Comprehensive Data Export</Heading>
                     <Text>
                         Generate a complete Excel report with multiple sheets containing all system data,
-                        analytics, and visual summaries. The export includes:
+                        analytics, and visual summaries. The export includes accurate data without currency symbols.
                     </Text>
 
                     <SimpleGrid columns={2} spacing={4} width="100%">
@@ -1362,8 +2288,8 @@ const DataExportTab = ({ exportToExcel, loading, dataAvailable }: { exportToExce
 
                     <Alert status="info" borderRadius="md">
                         <AlertIcon />
-                        The exported Excel file will be properly formatted with headers, appropriate data types,
-                        and organized sheets for easy analysis. No [object Object] values will be included.
+                        The exported Excel file contains accurate, real-time data with proper formatting and no currency symbols.
+                        All financial values are exported as pure numbers for easy analysis.
                     </Alert>
 
                     <Button
@@ -1379,7 +2305,7 @@ const DataExportTab = ({ exportToExcel, loading, dataAvailable }: { exportToExce
 
                     {!dataAvailable && (
                         <Text color="orange.500" fontSize="sm">
-                            Please load data from the Executive Dashboard tab first.
+                            Please load data from the Executive Dashboard tab first to ensure accurate exports.
                         </Text>
                     )}
                 </VStack>

@@ -311,7 +311,7 @@ export default function DispatchesPage() {
             isSortable: true,
             cell: (row: any) => {
                 const d: DispatchRecord = row?.original ?? row;
-                return d?.totalCost ? `$${d.totalCost.toFixed(2)}` : '$0.00';
+                return d?.totalCost ? `E {(d.totalCost.toFixed(2)}` : '$0.00';
             },
         },
         {
@@ -329,7 +329,7 @@ export default function DispatchesPage() {
             isSortable: true,
             cell: (row: any) => {
                 const d: DispatchRecord = row?.original ?? row;
-                return d?.costPerPerson ? `$${d.costPerPerson.toFixed(2)}` : 'N/A';
+                return d?.costPerPerson ? `E {(d.costPerPerson.toFixed(2)}` : 'N/A';
             },
         },
         {

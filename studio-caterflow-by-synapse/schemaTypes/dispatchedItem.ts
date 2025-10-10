@@ -52,7 +52,7 @@ export default defineType({
         prepare({ title, subtitle, unit, unitPrice, totalCost }) {
             return {
                 title: title,
-                subtitle: `${subtitle} ${unit} | Unit: $${unitPrice || 0} | Total: $${totalCost || 0}`,
+                subtitle: `${subtitle} ${unit} | Unit: E {(unitPrice || 0} | Total: E {(totalCost || 0}`,
             };
         },
     },

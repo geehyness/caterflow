@@ -76,11 +76,14 @@ export async function GET() {
             notes,
             totalCost,
             costPerPerson,
+            sellingPrice, // ADDED
+            totalSales, // ADDED
             "dispatchType": dispatchType->{
                 _id,
                 name,
                 description,
-                defaultTime
+                defaultTime,
+                sellingPrice // ADDED
             },
             "sourceBin": sourceBin->{
                 _id,
@@ -274,7 +277,7 @@ export async function POST(request: Request) {
         console.log('📝 Logging interaction...');
         await logSanityInteraction(
             'create',
-            `Created new dispatch: ${newDoc.dispatchNumber} with total cost: $${totalCost}`,
+            `Created new dispatch: ${newDoc.dispatchNumber} with total cost: E {(totalCost}`,
             'DispatchLog',
             result._id,
             session.user.id,

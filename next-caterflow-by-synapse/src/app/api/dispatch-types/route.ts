@@ -11,6 +11,7 @@ export async function GET() {
             name,
             description,
             defaultTime,
+            sellingPrice,
             isActive
         }`;
 
@@ -32,7 +33,7 @@ export async function POST(request: Request) {
         }
 
         const body = await request.json();
-        const { name, description, defaultTime, isActive = true } = body;
+        const { name, description, defaultTime, sellingPrice = 0, isActive = true } = body;
 
         if (!name) {
             return NextResponse.json({ error: 'Name is required' }, { status: 400 });
@@ -43,6 +44,7 @@ export async function POST(request: Request) {
             name,
             description,
             defaultTime,
+            sellingPrice,
             isActive,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),

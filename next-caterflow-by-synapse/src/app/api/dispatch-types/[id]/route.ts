@@ -13,6 +13,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
             name,
             description,
             defaultTime,
+            sellingPrice,
             isActive
         }`;
 
@@ -40,7 +41,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
         const { id } = await params;
         const body = await request.json();
-        const { name, description, defaultTime, isActive } = body;
+        const { name, description, defaultTime, sellingPrice = 0, isActive } = body;
 
         if (!name) {
             return NextResponse.json({ error: 'Name is required' }, { status: 400 });
@@ -51,6 +52,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
                 name,
                 description,
                 defaultTime,
+                sellingPrice,
                 isActive,
                 updatedAt: new Date().toISOString()
             });

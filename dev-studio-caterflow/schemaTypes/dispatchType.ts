@@ -25,6 +25,14 @@ export default defineType({
             description: 'Default time for this dispatch type (e.g., "07:00" for Breakfast)',
         }),
         defineField({
+            name: 'sellingPrice',
+            title: 'Selling Price',
+            type: 'number',
+            description: 'Price per person for this dispatch type',
+            validation: (Rule) => Rule.required().min(0),
+            initialValue: 0,
+        }),
+        defineField({
             name: 'isActive',
             title: 'Active',
             type: 'boolean',
@@ -36,11 +44,12 @@ export default defineType({
         select: {
             title: 'name',
             subtitle: 'description',
+            sellingPrice: 'sellingPrice',
         },
-        prepare({ title, subtitle }) {
+        prepare({ title, subtitle, sellingPrice }) {
             return {
                 title: title,
-                subtitle: subtitle || 'No description',
+                subtitle: `${subtitle || 'No description'} | Price: E {(sellingPrice || 0}`,
             };
         },
     },
