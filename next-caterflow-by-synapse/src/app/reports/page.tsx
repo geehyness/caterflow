@@ -603,7 +603,7 @@ export default function ComprehensiveReportsPage() {
         const consumption = totalReceivedGoodsValue - totalDispatchCost;
 
         // Calculate profit and profit percentage - FIXED
-        const profit = totalSales - consumption;
+        const profit = totalSales - (-consumption);
         const profitPercentage = totalSales > 0 ? (profit / totalSales) * 100 : 0;
 
         // Process purchase orders with accurate data
