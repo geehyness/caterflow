@@ -40,6 +40,7 @@ import {
     NumberInputStepper,
     NumberIncrementStepper,
     NumberDecrementStepper,
+    Switch,
 } from '@chakra-ui/react';
 import { FiPlus, FiEdit, FiTrash2, FiSave, FiX } from 'react-icons/fi';
 import { useSession } from 'next-auth/react';
@@ -128,6 +129,22 @@ export default function DispatchTypesPage() {
             return;
         }
 
+        // Handle null/undefined selling price
+        const safeSellingPrice = editingType.sellingPrice !== null && editingType.sellingPrice !== undefined
+            ? Number(editingType.sellingPrice)
+            : 0;
+
+        if (safeSellingPrice < 0) {
+            toast({
+                title: 'Error',
+                description: 'Selling price cannot be negative.',
+                status: 'error',
+                duration: 3000,
+                isClosable: true,
+            });
+            return;
+        }
+
         setIsSubmitting(true);
         try {
             const url = editingType._id ? `/api/dispatch-types/${editingType._id}` : '/api/dispatch-types';
@@ -138,11 +155,19 @@ export default function DispatchTypesPage() {
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify(editingType),
+                body: JSON.stringify({
+                    name: editingType.name.trim(),
+                    description: editingType.description?.trim() || '',
+                    defaultTime: editingType.defaultTime || '',
+                    sellingPrice: safeSellingPrice,
+                    isActive: editingType.isActive !== false
+                }),
             });
 
+            const result = await response.json();
+
             if (!response.ok) {
-                throw new Error('Failed to save dispatch type');
+                throw new Error(result.error || result.message || 'Failed to save dispatch type');
             }
 
             toast({
@@ -156,11 +181,11 @@ export default function DispatchTypesPage() {
             onClose();
             setEditingType(null);
             fetchDispatchTypes();
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error saving dispatch type:', error);
             toast({
                 title: 'Error',
-                description: 'Failed to save dispatch type.',
+                description: error.message || 'Failed to save dispatch type.',
                 status: 'error',
                 duration: 5000,
                 isClosable: true,
@@ -180,29 +205,37 @@ export default function DispatchTypesPage() {
                 method: 'DELETE',
             });
 
+            const result = await response.json();
+
             if (!response.ok) {
-                throw new Error('Failed to delete dispatch type');
+                throw new Error(result.error || result.message || 'Failed to delete dispatch type');
             }
 
             toast({
                 title: 'Success',
-                description: 'Dispatch type deleted.',
+                description: result.message || 'Dispatch type deleted.',
                 status: 'success',
                 duration: 3000,
                 isClosable: true,
             });
 
             fetchDispatchTypes();
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error deleting dispatch type:', error);
             toast({
                 title: 'Error',
-                description: 'Failed to delete dispatch type.',
+                description: error.message || 'Failed to delete dispatch type.',
                 status: 'error',
                 duration: 5000,
                 isClosable: true,
             });
         }
+    };
+
+    // Safe price display with null check
+    const formatPrice = (price: number | null | undefined): string => {
+        const safePrice = price !== null && price !== undefined ? price : 0;
+        return `E ${safePrice.toFixed(2)}`;
     };
 
     if (status === 'loading' || loading) {
@@ -271,7 +304,7 @@ export default function DispatchTypesPage() {
                                                 </Text>
                                             </Td>
                                             <Td>{type.defaultTime || 'Not set'}</Td>
-                                            <Td>${type.sellingPrice.toFixed(2)}</Td>
+                                            <Td>{formatPrice(type.sellingPrice)}</Td>
                                             <Td>
                                                 <Badge colorScheme={type.isActive ? 'green' : 'red'}>
                                                     {type.isActive ? 'Active' : 'Inactive'}
@@ -311,7 +344,7 @@ export default function DispatchTypesPage() {
                 </Card>
 
                 {/* Create/Edit Modal */}
-                <Modal isOpen={isOpen} onClose={onClose}>
+                <Modal isOpen={isOpen} onClose={onClose} size="lg">
                     <ModalOverlay />
                     <ModalContent>
                         <ModalHeader>
@@ -349,7 +382,7 @@ export default function DispatchTypesPage() {
                                 <FormControl isRequired>
                                     <FormLabel>Selling Price per Person</FormLabel>
                                     <NumberInput
-                                        value={editingType?.sellingPrice || 0}
+                                        value={editingType?.sellingPrice ?? 0}
                                         min={0}
                                         step={0.01}
                                         precision={2}
@@ -364,15 +397,16 @@ export default function DispatchTypesPage() {
                                         </NumberInputStepper>
                                     </NumberInput>
                                 </FormControl>
-                                <FormControl>
-                                    <HStack>
-                                        <FormLabel mb={0}>Active</FormLabel>
-                                        <input
-                                            type="checkbox"
-                                            checked={editingType?.isActive ?? true}
-                                            onChange={(e) => setEditingType(prev => prev ? { ...prev, isActive: e.target.checked } : null)}
-                                        />
-                                    </HStack>
+                                <FormControl display="flex" alignItems="center">
+                                    <FormLabel htmlFor="is-active" mb="0">
+                                        Active
+                                    </FormLabel>
+                                    <Switch
+                                        id="is-active"
+                                        isChecked={editingType?.isActive ?? true}
+                                        onChange={(e) => setEditingType(prev => prev ? { ...prev, isActive: e.target.checked } : null)}
+                                        colorScheme="green"
+                                    />
                                 </FormControl>
                             </VStack>
                         </ModalBody>

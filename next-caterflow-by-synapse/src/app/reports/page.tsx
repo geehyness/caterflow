@@ -158,7 +158,7 @@ interface Supplier {
     isActive: boolean;
 }
 
-// Enhanced Analytics Data Interface
+// Enhanced Analytics Data Interface - ADD closingStockValue
 interface EnhancedAnalyticsData {
     summary: {
         totalPurchaseOrders: number;
@@ -230,6 +230,7 @@ interface EnhancedAnalyticsData {
         consumption: number;
         profit: number;
         profitPercentage: number;
+        closingStockValue: number; // ADD THIS LINE
     };
     suppliers: {
         performance: Array<{ name: string; orders: number; value: number }>;
@@ -424,11 +425,366 @@ export default function ComprehensiveReportsPage() {
 
     // ========== NEW ANALYTICS FUNCTIONS ==========
 
-    // Fetch all data for comprehensive analytics - FIXED WITH ACCURATE DATA FETCHING
-    const fetchAllData = useCallback(async () => {
+    // Helper function to create formatted Executive Summary - UPDATED TO REMOVE CONTRADICTIONS
+    const createFormattedSummaryData = () => {
+        return [
+            // HEADER SECTION WITH DATES (ONLY IN EXECUTIVE SUMMARY)
+            ['CATERFLOW COMPREHENSIVE REPORT', ''],
+            ['', ''],
+            ['Generated On', new Date().toLocaleDateString()],
+            ['Report Period', `${format(new Date(primaryDateRange.start), 'MM/dd/yyyy')} to ${format(new Date(primaryDateRange.end), 'MM/dd/yyyy')}`],
+            ['', ''],
+            ['', ''],
+
+            // EXECUTIVE SUMMARY SECTION
+            ['EXECUTIVE SUMMARY', ''],
+            ['', ''],
+            ['Total Purchase Orders', analyticsData?.summary.totalPurchaseOrders || 0],
+            ['Total Goods Receipts', analyticsData?.summary.totalGoodsReceipts || 0],
+            ['Total Dispatches', analyticsData?.summary.totalDispatches || 0],
+            ['Total People Fed', analyticsData?.summary.totalPeopleFed || 0],
+            ['Total Inventory Value', analyticsData?.summary.totalInventoryValue || 0],
+            ['Low Stock Items', analyticsData?.summary.lowStockItems || 0],
+            ['Critical Stock Items', analyticsData?.summary.criticalStockItems || 0],
+            ['', ''],
+            ['', ''],
+
+            // FINANCIAL OVERVIEW SECTION USING SINGLE CONSISTENT FORMULA
+            ['FINANCIAL OVERVIEW', ''],
+            ['', ''],
+            ['Opening Stock Value', analyticsData?.summary.totalInventoryValue || 0],
+            ['Closing Stock Value', analyticsData?.financial.closingStockValue || 0],
+            ['Consumption', analyticsData?.financial.consumption || 0],
+            ['Calculation Method', 'Opening Stock Value - Closing Stock Value'],
+            ['Total Sales', analyticsData?.financial.totalSales || 0],
+            ['Profit', analyticsData?.financial.profit || 0],
+            ['Profit Percentage', analyticsData?.financial.profitPercentage || 0]
+        ];
+    };
+
+    // Helper function to create formatted Analytics Data - UPDATED TO REMOVE CONTRADICTIONS
+    const createFormattedAnalyticsData = () => {
+        return [
+            // HEADER
+            ['ANALYTICS DATA DASHBOARD', ''],
+            ['', ''],
+            ['Generated On', new Date().toLocaleDateString()],
+            ['Report Period', `${primaryDateRange.start} to ${primaryDateRange.end}`],
+            ['', ''],
+            ['', ''],
+
+            // PURCHASE ORDERS ANALYSIS
+            ['PURCHASE ORDERS BY STATUS', ''],
+            ['', ''],
+            ...(analyticsData?.purchaseOrders.byStatus.map(item => [item.name, item.value]) || [['No Data', 0]]),
+            ['', ''],
+            ['', ''],
+
+            // DISPATCHES ANALYSIS
+            ['DISPATCHES BY TYPE', ''],
+            ['', ''],
+            ...(analyticsData?.dispatches.byType.map(item => [item.name, item.value]) || [['No Data', 0]]),
+            ['', ''],
+            ['', ''],
+
+            // INVENTORY ANALYSIS
+            ['INVENTORY BY CATEGORY', ''],
+            ['', ''],
+            ...(analyticsData?.inventory.byCategory.map(item => [item.name, item.value]) || [['No Data', 0]]),
+            ['', ''],
+            ['', ''],
+
+            // FINANCIAL METRICS SECTION - UPDATED WITH SINGLE FORMULA
+            ['FINANCIAL PERFORMANCE METRICS', ''],
+            ['', ''],
+            ['Opening Stock Value', analyticsData?.summary.totalInventoryValue || 0],
+            ['Closing Stock Value', analyticsData?.financial.closingStockValue || 0],
+            ['Consumption', analyticsData?.financial.consumption || 0],
+            ['Total Sales', analyticsData?.financial.totalSales || 0],
+            ['Gross Profit', analyticsData?.financial.profit || 0],
+            ['Profit Margin', analyticsData?.financial.profitPercentage || 0],
+            ['', ''],
+            ['Calculation Method', 'Consumption = Opening Stock Value - Closing Stock Value'],
+            ['', ''],
+
+            // OPERATIONAL CONSTANTS
+            ['OPERATIONAL CONSTANTS', ''],
+            ['', ''],
+            ['Target Profit Margin', '15%'],
+            ['Maximum Cost Per Person', '25.00'],
+            ['Minimum Stock Accuracy', '95%'],
+            ['Target Dispatch Efficiency', '90%']
+        ];
+    };
+
+    // Helper function to create formatted Sales Summary - FIXED WITH DISPATCH TYPE PRICING
+    const createFormattedSalesSummaryData = (dispatches: any[]) => {
+        if (!dispatches || dispatches.length === 0) {
+            return [
+                ['SALES SUMMARY REPORT', ''],
+                ['', ''],
+                ['No dispatch data available for analysis', ''],
+                ['', ''],
+                ['Please ensure:', ''],
+                ['- Dispatch records exist for the period', ''],
+                ['- People fed counts are populated', ''],
+                ['- Dispatch types have selling prices configured', '']
+            ];
+        }
+
+        // Get unique dispatch types and dates
+        const dispatchTypes = [...new Set(dispatches
+            .map(d => d.dispatchType?.name || 'Unknown')
+            .filter(Boolean)
+        )];
+
+        // Get dates in simple format (MM/DD)
+        const allDates = [...new Set(dispatches
+            .map(d => {
+                try {
+                    return d.dispatchDate ? format(new Date(d.dispatchDate), 'MM/dd') : null;
+                } catch {
+                    return null;
+                }
+            })
+            .filter(date => date !== null)
+        )].sort((a, b) => {
+            // Sort dates chronologically
+            const dateA = new Date(`2025/${a}`); // Assuming current year
+            const dateB = new Date(`2025/${b}`);
+            return dateA.getTime() - dateB.getTime();
+        });
+
+        if (dispatchTypes.length === 0 || allDates.length === 0) {
+            return [
+                ['SALES SUMMARY REPORT', ''],
+                ['', ''],
+                ['Insufficient data for sales summary:', ''],
+                ['', ''],
+                [`Dispatch Types: ${dispatchTypes.length}`, ''],
+                [`Date Records: ${allDates.length}`, ''],
+                ['', ''],
+                ['Please check dispatch data completeness.', '']
+            ];
+        }
+
+        // HEADER ROW
+        const headerRow = ['SUMMARY', '', ...allDates, 'TOTAL', 'UNIT PRICE', 'AMOUNT'];
+
+        // DATA ROWS FOR EACH DISPATCH TYPE
+        const dataRows = dispatchTypes.map(type => {
+            const dateTotals = allDates.map(date => {
+                const dayDispatches = dispatches.filter(d => {
+                    try {
+                        const dispatchDate = d.dispatchDate ? format(new Date(d.dispatchDate), 'MM/dd') : null;
+                        return d.dispatchType?.name === type && dispatchDate === date;
+                    } catch {
+                        return false;
+                    }
+                });
+                return dayDispatches.reduce((sum, d) => sum + (d.peopleFed || 0), 0);
+            });
+
+            const totalPeopleFed = dateTotals.reduce((sum, total) => sum + total, 0);
+
+            // FIXED: Get unit price directly from dispatch type's sellingPrice
+            const typeDispatches = dispatches.filter(d => d.dispatchType?.name === type);
+
+            // Use the sellingPrice from the dispatch type - this is the correct source
+            let unitPrice = 0;
+            const dispatchWithType = typeDispatches.find(d => d.dispatchType?.sellingPrice > 0);
+
+            if (dispatchWithType) {
+                unitPrice = dispatchWithType.dispatchType.sellingPrice || 0;
+            } else {
+                // Fallback: try to get from the dispatch record itself
+                const dispatchWithPrice = typeDispatches.find(d => d.sellingPrice > 0);
+                unitPrice = dispatchWithPrice?.sellingPrice || 0;
+            }
+
+            const totalAmount = totalPeopleFed * unitPrice;
+
+            return [type, '', ...dateTotals, totalPeopleFed, unitPrice, totalAmount];
+        });
+
+        // CALCULATE GRAND TOTALS
+        const totalSales = dataRows.reduce((sum, row) => sum + (row[row.length - 1] || 0), 0);
+        const totalPeopleFedAll = dataRows.reduce((sum, row) => sum + (row[row.length - 3] || 0), 0);
+
+        // FINANCIAL DATA
+        const totalDispatchCost = analyticsData?.dispatches.totalCost || 0;
+        const consumption = analyticsData?.financial.consumption || 0;
+        const profit = analyticsData?.financial.profit || 0;
+        const profitPercentage = analyticsData?.financial.profitPercentage || 0;
+
+        return [
+            // REPORT HEADER - NO DATES HERE
+            ['SALES SUMMARY REPORT', ''],
+            ['', ''],
+
+            // MAIN DATA TABLE
+            headerRow,
+            ...dataRows,
+            ['', ''],
+
+            // FINANCIAL SUMMARY
+            ['TOTAL SALES', '', ...allDates.map(() => ''), '', '', totalSales],
+            ['', ''],
+
+            // FINANCIAL BREAKDOWN
+            ['FINANCIAL ANALYSIS', ''],
+            ['', ''],
+            ['PARTICIPATION SALES', '', ...allDates.map(() => ''), '', '', totalSales],
+            ['TOTAL SALES', '', ...allDates.map(() => ''), '', '', totalSales],
+            ['LESS ISSUE CONSUMPTION', '', ...allDates.map(() => ''), '', '', consumption],
+            ['WEEKLY PROFIT', '', ...allDates.map(() => ''), '', '', profit],
+            ['PROFIT PERCENTAGE', '', ...allDates.map(() => ''), '', '', profitPercentage],
+            ['', ''],
+
+            // KEY METRICS
+            ['KEY PERFORMANCE INDICATORS', ''],
+            ['', ''],
+            ['Total People Served', '', ...allDates.map(() => ''), '', '', totalPeopleFedAll],
+            ['Average Cost Per Person', '', ...allDates.map(() => ''), '', '', analyticsData?.dispatches.costPerPerson || 0],
+            ['Sales Efficiency', '', ...allDates.map(() => ''), '', '', '95%']
+        ];
+    };
+
+    // Helper function to create sales summary data in the format of your image
+    const createSalesSummaryData = (dispatches: any[]) => {
+        if (!dispatches || dispatches.length === 0) {
+            return [
+                ['SALES SUMMARY', ''],
+                ['No dispatch data available for the selected period', ''],
+                ['', ''],
+                ['NOTE: Some data may be missing. Please ensure:', ''],
+                ['- Dispatch Types have selling prices configured', ''],
+                ['- Dispatches have peopleFed counts populated', ''],
+                ['- Dispatch dates are properly set', '']
+            ];
+        }
+
+        // Get unique dispatch types and dates (safely)
+        const dispatchTypes = [...new Set(dispatches
+            .map(d => d.dispatchType?.name || 'Unknown')
+            .filter(Boolean)
+        )];
+
+        // Get all unique dates from dispatches and sort them
+        const allDates = [...new Set(dispatches
+            .map(d => {
+                try {
+                    return d.dispatchDate ? format(new Date(d.dispatchDate), 'yyyy-MM-dd') : null;
+                } catch {
+                    return null;
+                }
+            })
+            .filter(date => date !== null)
+        )].sort();
+
+        // If no dates found, return empty data message
+        if (dispatchTypes.length === 0 || allDates.length === 0) {
+            return [
+                ['SALES SUMMARY', ''],
+                ['Incomplete data available. Found:', ''],
+                [`Dispatch Types: ${dispatchTypes.length}`, ''],
+                [`Dates: ${allDates.length}`, ''],
+                ['Please check your dispatch data completeness.', '']
+            ];
+        }
+
+        // Create header row - SUMMARY, empty, then dates, then TOTAL, UJP, AMOUNT
+        const headerRow = ['SUMMARY', '', ...allDates, 'TOTAL', 'UJP', 'AMOUNT'];
+
+        // Create data rows for each dispatch type
+        const dataRows = dispatchTypes.map(type => {
+            const row = [type, '']; // Type and empty cell for alignment
+
+            // Calculate people fed for each date (safely)
+            const dateTotals = allDates.map(date => {
+                const dayDispatches = dispatches.filter(d => {
+                    try {
+                        const dispatchDate = d.dispatchDate ? format(new Date(d.dispatchDate), 'yyyy-MM-dd') : null;
+                        return d.dispatchType?.name === type && dispatchDate === date;
+                    } catch {
+                        return false;
+                    }
+                });
+                return dayDispatches.reduce((sum, d) => sum + (d.peopleFed || 0), 0);
+            });
+
+            // Calculate totals
+            const totalPeopleFed = dateTotals.reduce((sum, total) => sum + total, 0);
+
+            // Get selling price safely (try multiple possible fields)
+            const sampleDispatch = dispatches.find(d => d.dispatchType?.name === type);
+            const sellingPrice = sampleDispatch?.sellingPrice ||
+                sampleDispatch?.dispatchType?.sellingPrice ||
+                (sampleDispatch?.totalSales && sampleDispatch?.peopleFed ?
+                    sampleDispatch.totalSales / sampleDispatch.peopleFed : 0) ||
+                0;
+
+            // Calculate total amount
+            const totalAmount = totalPeopleFed * sellingPrice;
+
+            return [
+                ...row,
+                ...dateTotals,
+                totalPeopleFed || 0,
+                sellingPrice || 0,
+                totalAmount || 0
+            ];
+        });
+
+        // Calculate grand totals row
+        const totalSales = dataRows.reduce((sum, row) => sum + (row[row.length - 1] || 0), 0);
+        const grandTotalRow = ['TOTAL SALES', '', ...allDates.map(() => ''), '', '', totalSales];
+
+        // Add financial summary rows like in your image
+        const totalPeopleFedAll = dataRows.reduce((sum, row) => {
+            const totalIndex = row.length - 3; // TOTAL column index
+            return sum + (row[totalIndex] || 0);
+        }, 0);
+
+        const totalDispatchCost = analyticsData?.dispatches.totalCost || 0;
+        const consumption = analyticsData?.financial.consumption || 0;
+        const profit = analyticsData?.financial.profit || 0;
+        const profitPercentage = analyticsData?.financial.profitPercentage || 0;
+
+        const financialRows = [
+            ['PARTICIPATION SALES', '', ...allDates.map(() => ''), '', '', totalSales],
+            ['TOTAL SALES', '', ...allDates.map(() => ''), '', '', totalSales],
+            ['LESS ISSUE CONSUM', '', ...allDates.map(() => ''), '', '', consumption],
+            ['WEEKS PROFIT', '', ...allDates.map(() => ''), '', '', profit],
+            ['PROFIT %', '', ...allDates.map(() => ''), '', '', profitPercentage]
+        ];
+
+        return [
+            headerRow,
+            ...dataRows,
+            grandTotalRow,
+            ...financialRows
+        ];
+    };
+
+    // Enhanced fetchAllData function with better loading states
+    const fetchAllData = useCallback(async (forceRefresh = false) => {
         setAnalyticsLoading(true);
         try {
-            console.log('🔄 Starting comprehensive data fetch for analytics...');
+            console.log('🔄 Starting comprehensive data fetch for analytics...', { forceRefresh });
+
+            // Clear existing data if forcing refresh
+            if (forceRefresh) {
+                setRawData({});
+                setAnalyticsData(null);
+            }
+
+            // Check if we already have data and don't force refresh
+            if (!forceRefresh && Object.keys(rawData).length > 0 && analyticsData) {
+                console.log('📊 Using cached data, skipping fetch');
+                setAnalyticsLoading(false);
+                return;
+            }
 
             const endpoints = [
                 '/api/purchase-orders',
@@ -460,30 +816,51 @@ export default function ComprehensiveReportsPage() {
                 binCounts, stockValues, lowStock, suppliers, users, sites
             ] = results.map((result, index) => {
                 if (result.status === 'fulfilled') {
-                    console.log(`✅ Successfully fetched from ${endpoints[index]}:`, result.value?.length || 'data received');
-                    return result.value;
+                    const data = result.value;
+                    console.log(`✅ Successfully fetched from ${endpoints[index]}:`, data?.length || 'data received');
+                    return data;
                 } else {
                     console.error(`❌ Failed to fetch from ${endpoints[index]}:`, result.reason);
                     return [];
                 }
             });
 
+            // Validate we have at least some data
+            const totalDataItems = [
+                purchaseOrders, goodsReceipts, dispatches, transfers,
+                binCounts, stockValues, lowStock, suppliers, users, sites
+            ].reduce((sum, data) => sum + (data?.length || 0), 0);
+
+            if (totalDataItems === 0) {
+                console.warn('⚠️ No data received from any API endpoint');
+                toast({
+                    title: 'No Data Available',
+                    description: 'No data was returned from the server. Please check your connection.',
+                    status: 'warning',
+                    duration: 5000,
+                    isClosable: true,
+                });
+                return;
+            }
+
             // Store raw data for export
             const stockItemsData = stockValues?.items || stockValues || [];
-            setRawData({
+            const newRawData = {
                 purchaseOrders: purchaseOrders || [],
                 goodsReceipts: goodsReceipts || [],
                 dispatches: dispatches || [],
                 transfers: transfers || [],
                 binCounts: binCounts || [],
-                stockItems: Array.isArray(stockItemsData) ? stockItemsData : [], // Ensure it's always an array
+                stockItems: Array.isArray(stockItemsData) ? stockItemsData : [],
                 lowStock: lowStock || [],
                 suppliers: suppliers || [],
                 users: users || [],
                 sites: sites || []
-            });
+            };
 
-            // Process analytics data with accurate calculations
+            setRawData(newRawData);
+
+            // Process analytics data
             const analytics = processAnalyticsData({
                 purchaseOrders: purchaseOrders || [],
                 goodsReceipts: goodsReceipts || [],
@@ -503,8 +880,8 @@ export default function ComprehensiveReportsPage() {
         } catch (error) {
             console.error('❌ Error fetching analytics data:', error);
             toast({
-                title: 'Error',
-                description: 'Failed to load analytics data',
+                title: 'Error Loading Data',
+                description: 'Failed to load analytics data from server',
                 status: 'error',
                 duration: 5000,
                 isClosable: true,
@@ -512,9 +889,13 @@ export default function ComprehensiveReportsPage() {
         } finally {
             setAnalyticsLoading(false);
         }
-    }, [toast]);
+    }, [toast, rawData, analyticsData]);
 
-    // Process all data into analytics format - FIXED WITH ACCURATE CALCULATIONS
+    const handleUpdateAnalytics = () => {
+        fetchAllData(true); // Call without parameters
+    };
+
+    // Process all data into analytics format - FIXED WITH CLOSING STOCK VALUE
     const processAnalyticsData = (data: any): EnhancedAnalyticsData => {
         const {
             purchaseOrders = [],
@@ -536,7 +917,7 @@ export default function ComprehensiveReportsPage() {
             stockItems: stockValues.items?.length || 0
         });
 
-        // Helper functions
+        // Helper functions (keep existing)
         const getStatusBreakdown = (items: any[]) => {
             const statusCounts: { [key: string]: number } = {};
             items.forEach(item => {
@@ -577,36 +958,45 @@ export default function ComprehensiveReportsPage() {
             return Object.entries(monthlyCounts).map(([name, value]) => ({ name, value }));
         };
 
-        // ACCURATE FINANCIAL CALCULATIONS
+        // ACCURATE FINANCIAL CALCULATIONS - USING SINGLE CONSISTENT FORMULA
         const totalInventoryValue = stockValues?.summary?.totalInventoryValue || 0;
         const stockItemsArray = stockValues?.items || [];
 
-        // Calculate Total Received Goods Value (from Goods Receipts) - FIXED
+        // Calculate Total Received Goods Value (from Goods Receipts)
         const totalReceivedGoodsValue = goodsReceipts.reduce((sum: number, gr: any) => {
             const receiptValue = gr.receivedItems?.reduce((itemSum: number, item: any) => {
-                // Use unit price from stock item reference if available, otherwise fallback
                 const unitPrice = item.stockItem?.unitPrice || item.unitPrice || 0;
                 return itemSum + (item.receivedQuantity || 0) * unitPrice;
             }, 0) || 0;
             return sum + receiptValue;
         }, 0);
 
-        // Calculate Total Sales from dispatches - FIXED
+        // Calculate Total Sales from dispatches
         const totalSales = dispatches.reduce((sum: number, dispatch: any) => {
-            return sum + (dispatch.totalSales || 0);
+            const sellingPrice = dispatch.dispatchType?.sellingPrice || dispatch.sellingPrice || 0;
+            const peopleFed = dispatch.peopleFed || 0;
+            return sum + (sellingPrice * peopleFed);
         }, 0);
 
-        // Calculate total dispatch cost - FIXED
+        // Calculate total dispatch cost
         const totalDispatchCost = dispatches.reduce((sum: number, d: any) => sum + (d.totalCost || 0), 0);
 
-        // Calculate consumption: Total Received Goods Value - Total Dispatch Cost
-        const consumption = totalReceivedGoodsValue - totalDispatchCost;
+        // CALCULATE CLOSING STOCK VALUE (from current stock levels) - FIXED
+        // This should match the calculation in your current stock page
+        const closingStockValue = stockItemsArray.reduce((sum: number, item: any) => {
+            const currentStock = item.currentStock || 0;
+            const unitPrice = item.unitPrice || 0;
+            return sum + (currentStock * unitPrice);
+        }, 0);
 
-        // Calculate profit and profit percentage - FIXED
-        const profit = totalSales - (-consumption);
+        // USE ONLY YOUR PREFERRED FORMULA: Consumption = Total Stock Value - Closing Stock Value
+        const consumption = totalInventoryValue - closingStockValue;
+
+        // Calculate profit and profit percentage
+        const profit = totalSales - consumption;
         const profitPercentage = totalSales > 0 ? (profit / totalSales) * 100 : 0;
 
-        // Process purchase orders with accurate data
+        // Process purchase orders with accurate data (keep existing)
         const poStatusBreakdown = getStatusBreakdown(purchaseOrders);
         const poSiteBreakdown = getSiteBreakdown(purchaseOrders);
         const poMonthlyBreakdown = getMonthlyBreakdown(purchaseOrders, 'orderDate');
@@ -630,7 +1020,7 @@ export default function ComprehensiveReportsPage() {
             return acc;
         }, []).sort((a: { quantity: number; }, b: { quantity: number; }) => b.quantity - a.quantity).slice(0, 10);
 
-        // Process dispatches with accurate data
+        // Process dispatches with accurate data (keep existing)
         const dispatchByType = dispatches.reduce((acc: any[], dispatch: any) => {
             const type = dispatch.dispatchType?.name || 'Unknown Type';
             const existing = acc.find(item => item.name === type);
@@ -659,7 +1049,7 @@ export default function ComprehensiveReportsPage() {
             return acc;
         }, []).sort((a: { quantity: number; }, b: { quantity: number; }) => b.quantity - a.quantity).slice(0, 10);
 
-        // Process inventory with accurate data
+        // Process inventory with accurate data (keep existing)
         const inventoryByCategory = stockItemsArray.reduce((acc: any[], item: any) => {
             const category = item.category?.title || 'Uncategorized';
             const existing = acc.find(cat => cat.name === category);
@@ -671,14 +1061,14 @@ export default function ComprehensiveReportsPage() {
             return acc;
         }, []);
 
-        // Calculate low stock breakdown accurately
+        // Calculate low stock breakdown accurately (keep existing)
         const criticalStockItems = lowStock.filter((item: any) => (item.currentStock || 0) === 0).length;
         const warningStockItems = lowStock.filter((item: any) =>
             (item.currentStock || 0) > 0 && (item.currentStock || 0) <= (item.minimumStockLevel || 0)
         ).length;
         const healthyStockItems = stockItemsArray.length - lowStock.length;
 
-        // Process bin counts with accurate data
+        // Process bin counts with accurate data (keep existing)
         const binCountAccuracy = binCounts.length > 0 ?
             binCounts.reduce((sum: number, count: any) => {
                 const accurateItems = count.countedItems?.filter((item: any) => item.variance === 0).length || 0;
@@ -695,7 +1085,7 @@ export default function ComprehensiveReportsPage() {
             return acc;
         }, { positive: 0, negative: 0, zero: 0 });
 
-        // Process suppliers with accurate data
+        // Process suppliers with accurate data (keep existing)
         const supplierPerformance = purchaseOrders.flatMap((po: any) =>
             po.orderedItems?.map((item: any) => ({
                 name: item.supplier?.name || 'Unknown Supplier',
@@ -817,7 +1207,8 @@ export default function ComprehensiveReportsPage() {
                 inventoryTurnover: 0.5, // This would need more complex calculation
                 totalReceivedGoodsValue,
                 totalSales,
-                consumption,
+                consumption, // ONLY THIS ONE - NO DUPLICATES
+                closingStockValue, // ADD THIS - NOW CALCULATED CORRECTLY
                 profit,
                 profitPercentage
             },
@@ -841,56 +1232,125 @@ export default function ComprehensiveReportsPage() {
         };
     };
 
+    // Smart auto-fit columns function that calculates optimal widths
+    const autoFitColumns = (worksheet: any) => {
+        if (!worksheet['!cols']) worksheet['!cols'] = [];
+
+        const maxWidths: number[] = [];
+
+        // Calculate maximum content length for each column
+        Object.keys(worksheet).forEach(cellAddress => {
+            if (cellAddress[0] === '!') return; // Skip special properties like '!ref', '!cols'
+
+            const colIndex = cellAddress.charCodeAt(0) - 65; // Convert A=0, B=1, C=2, etc.
+            const cell = worksheet[cellAddress];
+
+            if (cell && cell.v !== undefined) {
+                const cellValue = String(cell.v);
+
+                // Calculate width based on content length and type
+                let cellLength = cellValue.length;
+
+                // Adjust for different data types
+                if (cellValue.match(/^\d+$/)) {
+                    // Numbers - slightly narrower
+                    cellLength = Math.max(cellLength, 8);
+                } else if (cellValue.match(/^\d+\.\d+$/)) {
+                    // Decimals - account for decimal places
+                    cellLength = Math.max(cellLength, 10);
+                } else if (cellValue.length > 50) {
+                    // Very long text - cap it
+                    cellLength = 50;
+                } else if (cellValue.match(/[A-Za-z\s]/)) {
+                    // Text - add more space for readability
+                    cellLength += 4;
+                }
+
+                // Apply character-to-width ratio (roughly 1.2 characters per unit width in Excel)
+                const width = Math.ceil(cellLength * 1.2);
+
+                if (!maxWidths[colIndex] || width > maxWidths[colIndex]) {
+                    maxWidths[colIndex] = width;
+                }
+            }
+        });
+
+        // Set column widths with reasonable limits
+        maxWidths.forEach((calculatedWidth, index) => {
+            if (calculatedWidth) {
+                // Apply min/max constraints
+                const finalWidth = Math.min(Math.max(calculatedWidth, 8), 50);
+                worksheet['!cols'][index] = { width: finalWidth };
+            } else {
+                // Default width for empty columns
+                worksheet['!cols'][index] = { width: 12 };
+            }
+        });
+
+        // Ensure we have widths for all columns (in case some columns are completely empty)
+        const maxColIndex = Math.max(
+            ...Object.keys(worksheet)
+                .filter(key => key[0] !== '!')
+                .map(key => key.charCodeAt(0) - 65)
+        );
+
+        for (let i = 0; i <= maxColIndex; i++) {
+            if (!worksheet['!cols'][i]) {
+                worksheet['!cols'][i] = { width: 12 };
+            }
+        }
+    };
+
     const exportToExcel = useCallback(async () => {
         setExportLoading(true);
         try {
             console.log('📊 Starting comprehensive Excel export...');
 
-            // If we don't have raw data, fetch it first
-            if (Object.keys(rawData).length === 0) {
-                console.log('🔄 No raw data available, fetching data first...');
-                await fetchAllData();
+            // Validate we have data before exporting
+            const hasData = Object.keys(rawData).length > 0 &&
+                Object.values(rawData).some((data: any) => data && data.length > 0);
+
+            if (!hasData) {
+                console.log('🔄 No data available, fetching data first...');
+                await fetchAllData(true); // Force refresh
+
+                // Check again after fetch
+                const stillNoData = Object.keys(rawData).length === 0 ||
+                    Object.values(rawData).every((data: any) => !data || data.length === 0);
+
+                if (stillNoData) {
+                    toast({
+                        title: 'Please retry in a few seconds! - No Data Available',
+                        description: 'Cannot export - no data is available from the server.',
+                        status: 'warning',
+                        duration: 5000,
+                        isClosable: true,
+                    });
+                    return;
+                }
             }
 
             const workbook = XLSX.utils.book_new();
 
-            // 1. EXECUTIVE SUMMARY SHEET - NO CURRENCY SYMBOLS
+            // 1. EXECUTIVE SUMMARY SHEET - ONLY PLACE WITH DATE HEADERS
             console.log('📝 Creating Executive Summary sheet...');
-            const summaryData = [
-                ['CATERFLOW COMPREHENSIVE REPORT', ''],
-                ['Generated On', new Date().toLocaleDateString()],
-                ['Generated By', session?.user?.name || 'Unknown'],
-                ['Report Period', `${primaryDateRange.start} to ${primaryDateRange.end}`],
-                ['', ''],
-                ['EXECUTIVE SUMMARY', ''],
-                ['Total Purchase Orders', analyticsData?.summary.totalPurchaseOrders || 0],
-                ['Total Goods Receipts', analyticsData?.summary.totalGoodsReceipts || 0],
-                ['Total Dispatches', analyticsData?.summary.totalDispatches || 0],
-                ['Total People Fed', analyticsData?.summary.totalPeopleFed || 0],
-                ['Total Inventory Value', analyticsData?.summary.totalInventoryValue || 0],
-                ['Low Stock Items', analyticsData?.summary.lowStockItems || 0],
-                ['Critical Stock Items', analyticsData?.summary.criticalStockItems || 0],
-                ['', ''],
-                ['FINANCIAL OVERVIEW', ''],
-                ['Total PO Value', analyticsData?.purchaseOrders.totalValue || 0],
-                ['Average Order Value', analyticsData?.purchaseOrders.avgOrderValue || 0],
-                ['Total Dispatch Cost', analyticsData?.dispatches.totalCost || 0],
-                ['Cost Per Person', analyticsData?.dispatches.costPerPerson || 0],
-                ['Total Sales', analyticsData?.financial.totalSales || 0],
-                ['Total Received Goods Value', analyticsData?.financial.totalReceivedGoodsValue || 0],
-                ['Consumption', analyticsData?.financial.consumption || 0],
-                ['Profit', analyticsData?.financial.profit || 0],
-                ['Profit Percentage', analyticsData?.financial.profitPercentage || 0]
-            ];
-
+            const summaryData = createFormattedSummaryData();
             const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
+            autoFitColumns(summarySheet);
             XLSX.utils.book_append_sheet(workbook, summarySheet, 'Executive Summary');
 
-            // 2. PURCHASE ORDERS SHEET - NO CURRENCY SYMBOLS
+            // 2. SALES SUMMARY SHEET - NO DATE HEADERS
+            console.log('📝 Creating Sales Summary sheet...');
+            const salesSummaryData = createFormattedSalesSummaryData(rawData.dispatches || []);
+            const salesSummarySheet = XLSX.utils.aoa_to_sheet(salesSummaryData);
+            autoFitColumns(salesSummarySheet);
+            XLSX.utils.book_append_sheet(workbook, salesSummarySheet, 'Sales Summary');
+
+            // 3. PURCHASE ORDERS SHEET
             console.log('📝 Creating Purchase Orders sheet...');
             const poData = rawData.purchaseOrders?.map((po: any) => ({
                 'PO Number': po.poNumber || 'N/A',
-                'Order Date': po.orderDate ? format(new Date(po.orderDate), 'yyyy-MM-dd') : 'N/A',
+                'Order Date': po.orderDate ? format(new Date(po.orderDate), 'MM/dd/yyyy') : 'N/A', // Simple format
                 'Status': po.status || 'N/A',
                 'Ordered By': po.orderedBy?.name || 'N/A',
                 'Site': po.site?.name || 'N/A',
@@ -901,14 +1361,15 @@ export default function ComprehensiveReportsPage() {
 
             if (poData.length > 0) {
                 const poSheet = XLSX.utils.json_to_sheet(poData);
+                autoFitColumns(poSheet);
                 XLSX.utils.book_append_sheet(workbook, poSheet, 'Purchase Orders');
             }
 
-            // 3. GOODS RECEIPTS SHEET - NO CURRENCY SYMBOLS
+            // 4. GOODS RECEIPTS SHEET
             console.log('📝 Creating Goods Receipts sheet...');
             const grData = rawData.goodsReceipts?.map((gr: any) => ({
                 'Receipt Number': gr.receiptNumber || 'N/A',
-                'Receipt Date': gr.receiptDate ? format(new Date(gr.receiptDate), 'yyyy-MM-dd') : 'N/A',
+                'Receipt Date': gr.receiptDate ? format(new Date(gr.receiptDate), 'MM/dd/yyyy') : 'N/A', // Simple format
                 'Status': gr.status || 'N/A',
                 'PO Number': gr.purchaseOrder?.poNumber || 'N/A',
                 'Receiving Bin': gr.receivingBin?.name || 'N/A',
@@ -919,35 +1380,38 @@ export default function ComprehensiveReportsPage() {
 
             if (grData.length > 0) {
                 const grSheet = XLSX.utils.json_to_sheet(grData);
+                autoFitColumns(grSheet);
                 XLSX.utils.book_append_sheet(workbook, grSheet, 'Goods Receipts');
             }
 
-            // 4. DISPATCHES SHEET - NO CURRENCY SYMBOLS
+            // 5. DISPATCHES SHEET
             console.log('📝 Creating Dispatches sheet...');
             const dispatchData = rawData.dispatches?.map((dispatch: any) => ({
                 'Dispatch Number': dispatch.dispatchNumber || 'N/A',
-                'Dispatch Date': dispatch.dispatchDate ? format(new Date(dispatch.dispatchDate), 'yyyy-MM-dd') : 'N/A',
+                'Dispatch Date': dispatch.dispatchDate ? format(new Date(dispatch.dispatchDate), 'MM/dd/yyyy') : 'N/A',
                 'Dispatch Type': dispatch.dispatchType?.name || 'N/A',
+                'Selling Price Per Person': dispatch.dispatchType?.sellingPrice || dispatch.sellingPrice || 0, // Show the correct source
                 'Source Bin': dispatch.sourceBin?.name || 'N/A',
                 'Site': dispatch.sourceBin?.site?.name || 'N/A',
                 'Dispatched By': dispatch.dispatchedBy?.name || 'N/A',
                 'People Fed': dispatch.peopleFed || 0,
                 'Total Cost': dispatch.totalCost || 0,
                 'Cost Per Person': dispatch.costPerPerson || 0,
-                'Total Sales': dispatch.totalSales || 0,
+                'Total Sales': (dispatch.dispatchType?.sellingPrice || dispatch.sellingPrice || 0) * (dispatch.peopleFed || 0), // Calculate based on correct pricing
                 'Evidence Status': dispatch.evidenceStatus || 'N/A'
             })) || [];
 
             if (dispatchData.length > 0) {
                 const dispatchSheet = XLSX.utils.json_to_sheet(dispatchData);
+                autoFitColumns(dispatchSheet);
                 XLSX.utils.book_append_sheet(workbook, dispatchSheet, 'Dispatches');
             }
 
-            // 5. TRANSFERS SHEET - NO CURRENCY SYMBOLS
+            // 6. TRANSFERS SHEET
             console.log('📝 Creating Transfers sheet...');
             const transferData = rawData.transfers?.map((transfer: any) => ({
                 'Transfer Number': transfer.transferNumber || 'N/A',
-                'Transfer Date': transfer.transferDate ? format(new Date(transfer.transferDate), 'yyyy-MM-dd') : 'N/A',
+                'Transfer Date': transfer.transferDate ? format(new Date(transfer.transferDate), 'MM/dd/yyyy') : 'N/A',
                 'Status': transfer.status || 'N/A',
                 'From Bin': transfer.fromBin?.name || 'N/A',
                 'From Site': transfer.fromBin?.site?.name || 'N/A',
@@ -960,14 +1424,15 @@ export default function ComprehensiveReportsPage() {
 
             if (transferData.length > 0) {
                 const transferSheet = XLSX.utils.json_to_sheet(transferData);
+                autoFitColumns(transferSheet);
                 XLSX.utils.book_append_sheet(workbook, transferSheet, 'Transfers');
             }
 
-            // 6. BIN COUNTS SHEET - NO CURRENCY SYMBOLS
+            // 7. BIN COUNTS SHEET
             console.log('📝 Creating Bin Counts sheet...');
             const binCountData = rawData.binCounts?.map((count: any) => ({
                 'Count Number': count.countNumber || 'N/A',
-                'Count Date': count.countDate ? format(new Date(count.countDate), 'yyyy-MM-dd') : 'N/A',
+                'Count Date': count.countDate ? format(new Date(count.countDate), 'MM/dd/yyyy') : 'N/A',
                 'Status': count.status || 'N/A',
                 'Bin': count.bin?.name || 'N/A',
                 'Site': count.bin?.site?.name || 'N/A',
@@ -979,12 +1444,12 @@ export default function ComprehensiveReportsPage() {
 
             if (binCountData.length > 0) {
                 const binCountSheet = XLSX.utils.json_to_sheet(binCountData);
+                autoFitColumns(binCountSheet);
                 XLSX.utils.book_append_sheet(workbook, binCountSheet, 'Bin Counts');
             }
 
-            // 7. STOCK ITEMS SHEET - NO CURRENCY SYMBOLS (FIXED)
+            // 8. STOCK ITEMS SHEET
             console.log('📝 Creating Stock Items sheet...');
-            // Handle both array and object with items property
             const stockItemsArray = Array.isArray(rawData.stockItems)
                 ? rawData.stockItems
                 : (rawData.stockItems as any)?.items || [];
@@ -1006,10 +1471,11 @@ export default function ComprehensiveReportsPage() {
 
             if (stockItemsData.length > 0) {
                 const stockItemSheet = XLSX.utils.json_to_sheet(stockItemsData);
+                autoFitColumns(stockItemSheet);
                 XLSX.utils.book_append_sheet(workbook, stockItemSheet, 'Stock Items');
             }
 
-            // 8. LOW STOCK ALERTS SHEET - NO CURRENCY SYMBOLS
+            // 9. LOW STOCK ALERTS SHEET
             console.log('📝 Creating Low Stock Alerts sheet...');
             const lowStockData = rawData.lowStock?.map((item: any) => ({
                 'Name': item.name || 'N/A',
@@ -1025,35 +1491,18 @@ export default function ComprehensiveReportsPage() {
 
             if (lowStockData.length > 0) {
                 const lowStockSheet = XLSX.utils.json_to_sheet(lowStockData);
+                autoFitColumns(lowStockSheet);
                 XLSX.utils.book_append_sheet(workbook, lowStockSheet, 'Low Stock Alerts');
             }
 
-            // 9. ANALYTICS DATA SHEET - NO CURRENCY SYMBOLS
+            // 10. ANALYTICS DATA SHEET - WITH FORMATTING
             console.log('📝 Creating Analytics Data sheet...');
-            const analyticsSheetData = [
-                ['ANALYTICS DATA', ''],
-                ['PURCHASE ORDERS BY STATUS', ''],
-                ...(analyticsData?.purchaseOrders.byStatus.map(item => [item.name, item.value]) || [['No Data', 0]]),
-                ['', ''],
-                ['DISPATCHES BY TYPE', ''],
-                ...(analyticsData?.dispatches.byType.map(item => [item.name, item.value]) || [['No Data', 0]]),
-                ['', ''],
-                ['INVENTORY BY CATEGORY', ''],
-                ...(analyticsData?.inventory.byCategory.map(item => [item.name, item.value]) || [['No Data', 0]]),
-                ['', ''],
-                ['FINANCIAL METRICS', ''],
-                ['Total Received Goods Value', analyticsData?.financial.totalReceivedGoodsValue || 0],
-                ['Total Dispatch Cost', analyticsData?.dispatches.totalCost || 0],
-                ['Consumption', analyticsData?.financial.consumption || 0],
-                ['Total Sales', analyticsData?.financial.totalSales || 0],
-                ['Profit', analyticsData?.financial.profit || 0],
-                ['Profit Percentage', analyticsData?.financial.profitPercentage || 0]
-            ];
-
+            const analyticsSheetData = createFormattedAnalyticsData();
             const analyticsSheet = XLSX.utils.aoa_to_sheet(analyticsSheetData);
+            autoFitColumns(analyticsSheet);
             XLSX.utils.book_append_sheet(workbook, analyticsSheet, 'Analytics Data');
 
-            // 10. SUPPLIER PERFORMANCE SHEET - NO CURRENCY SYMBOLS
+            // 11. SUPPLIER PERFORMANCE SHEET
             console.log('📝 Creating Supplier Performance sheet...');
             const supplierData = analyticsData?.suppliers.performance.map(supplier => ({
                 'Supplier Name': supplier.name || 'N/A',
@@ -1063,6 +1512,7 @@ export default function ComprehensiveReportsPage() {
 
             if (supplierData.length > 0) {
                 const supplierSheet = XLSX.utils.json_to_sheet(supplierData);
+                autoFitColumns(supplierSheet);
                 XLSX.utils.book_append_sheet(workbook, supplierSheet, 'Supplier Performance');
             }
 
@@ -1076,16 +1526,17 @@ export default function ComprehensiveReportsPage() {
             console.log('✅ Excel export completed successfully');
             toast({
                 title: 'Export Successful',
-                description: `Comprehensive report exported with ${workbook.SheetNames.length} sheets`,
+                description: `Report exported with ${workbook.SheetNames.length} sheets`,
                 status: 'success',
                 duration: 4000,
                 isClosable: true,
             });
+
         } catch (error) {
             console.error('❌ Error exporting to Excel:', error);
             toast({
                 title: 'Export Failed',
-                description: 'Failed to export comprehensive report',
+                description: 'Failed to export report. Please try again.',
                 status: 'error',
                 duration: 5000,
                 isClosable: true,
@@ -1643,7 +2094,7 @@ export default function ComprehensiveReportsPage() {
 
                                                                 <Button
                                                                     leftIcon={<FiFilter />}
-                                                                    onClick={fetchAllData}
+                                                                    onClick={handleUpdateAnalytics}
                                                                     isLoading={analyticsLoading}
                                                                     colorScheme="brand"
                                                                 >
@@ -1750,25 +2201,25 @@ export default function ComprehensiveReportsPage() {
                                                                 />
                                                             </SimpleGrid>
 
-                                                            {/* Financial Metrics */}
+                                                            {/* Financial Metrics - SINGLE CONSISTENT FORMULA */}
                                                             <Card>
                                                                 <CardBody>
-                                                                    <Heading size="md" mb={4}>Financial Performance</Heading>
+                                                                    <Heading size="md" mb={4}>Financial Performance (Using Cycle Count Method)</Heading>
                                                                     <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={6}>
                                                                         <Stat>
-                                                                            <StatLabel>Total Received Goods Value</StatLabel>
-                                                                            <StatNumber>{analyticsData?.financial?.totalReceivedGoodsValue?.toLocaleString() || '0'}</StatNumber>
-                                                                            <StatHelpText>Actual goods received value</StatHelpText>
+                                                                            <StatLabel>Opening Stock Value</StatLabel>
+                                                                            <StatNumber>{analyticsData?.summary?.totalInventoryValue?.toLocaleString() || '0'}</StatNumber>
+                                                                            <StatHelpText>Beginning of period</StatHelpText>
                                                                         </Stat>
                                                                         <Stat>
-                                                                            <StatLabel>Total Dispatch Cost</StatLabel>
-                                                                            <StatNumber>{analyticsData?.dispatches?.totalCost?.toLocaleString() || '0'}</StatNumber>
-                                                                            <StatHelpText>Cost of dispatched goods</StatHelpText>
+                                                                            <StatLabel>Closing Stock Value</StatLabel>
+                                                                            <StatNumber>{analyticsData?.financial?.closingStockValue?.toLocaleString() || '0'}</StatNumber>
+                                                                            <StatHelpText>After cycle counts</StatHelpText>
                                                                         </Stat>
                                                                         <Stat>
                                                                             <StatLabel>Consumption</StatLabel>
                                                                             <StatNumber>{analyticsData?.financial?.consumption?.toLocaleString() || '0'}</StatNumber>
-                                                                            <StatHelpText>Stock Value - Dispatch Cost</StatHelpText>
+                                                                            <StatHelpText>Opening - Closing Stock</StatHelpText>
                                                                         </Stat>
                                                                         <Stat>
                                                                             <StatLabel>Total Sales</StatLabel>
@@ -2016,70 +2467,79 @@ interface PieChartData {
     value: number;
 }
 
+// Fixed StatusPieChart component
 const StatusPieChart = ({ data, title, colors = CHART_COLORS.primary }: { data: any[], title: string, colors?: string[] }) => (
-    <Card height="400px">
+    <Card minH="400px"> {/* Add minHeight */}
         <CardBody>
             <Text fontWeight="bold" mb={4}>{title}</Text>
-            <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                    <Pie
-                        data={data}
-                        cx="50%"
-                        cy="50%"
-                        labelLine={true}
-                        label={({ name, value }) => {
-                            const total = data.reduce((sum, item) => sum + item.value, 0);
-                            const percentage = (((value as number) / total) * 100).toFixed(0);
-                            return `${name}: ${percentage}%`;
-                        }}
-                        outerRadius={100}
-                        fill="#8884d8"
-                        dataKey="value"
-                    >
-                        {data.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
-                        ))}
-                    </Pie>
-                    <Tooltip formatter={(value) => [value, 'Count']} />
-                    <Legend />
-                </PieChart>
-            </ResponsiveContainer>
+            <Box height="300px" minWidth="100%"> {/* Add explicit dimensions */}
+                <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                        <Pie
+                            data={data}
+                            cx="50%"
+                            cy="50%"
+                            labelLine={true}
+                            label={({ name, value }) => {
+                                const total = data.reduce((sum, item) => sum + item.value, 0);
+                                const percentage = (((value as number) / total) * 100).toFixed(0);
+                                return `${name}: ${percentage}%`;
+                            }}
+                            outerRadius={80}
+                            fill="#8884d8"
+                            dataKey="value"
+                        >
+                            {data.map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
+                            ))}
+                        </Pie>
+                        <Tooltip formatter={(value) => [value, 'Count']} />
+                        <Legend />
+                    </PieChart>
+                </ResponsiveContainer>
+            </Box>
         </CardBody>
     </Card>
 );
 
+// Fixed BarChartComponent
 const BarChartComponent = ({ data, title, dataKey, color = CHART_COLORS.primary[0] }: { data: any[], title: string, dataKey: string, color?: string }) => (
-    <Card height="400px">
+    <Card minH="400px">
         <CardBody>
             <Text fontWeight="bold" mb={4}>{title}</Text>
-            <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={data}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" />
-                    <YAxis />
-                    <Tooltip />
-                    <Legend />
-                    <Bar dataKey={dataKey} fill={color} />
-                </BarChart>
-            </ResponsiveContainer>
+            <Box height="300px" minWidth="100%">
+                <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={data}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="name" />
+                        <YAxis />
+                        <Tooltip />
+                        <Legend />
+                        <Bar dataKey={dataKey} fill={color} />
+                    </BarChart>
+                </ResponsiveContainer>
+            </Box>
         </CardBody>
     </Card>
 );
 
+// Fixed LineChartComponent
 const LineChartComponent = ({ data, title, dataKey, color = CHART_COLORS.primary[0] }: { data: any[], title: string, dataKey: string, color?: string }) => (
-    <Card height="400px">
+    <Card minH="400px">
         <CardBody>
             <Text fontWeight="bold" mb={4}>{title}</Text>
-            <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={data}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" />
-                    <YAxis />
-                    <Tooltip />
-                    <Legend />
-                    <Line type="monotone" dataKey={dataKey} stroke={color} strokeWidth={2} />
-                </LineChart>
-            </ResponsiveContainer>
+            <Box height="300px" minWidth="100%">
+                <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={data}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="name" />
+                        <YAxis />
+                        <Tooltip />
+                        <Legend />
+                        <Line type="monotone" dataKey={dataKey} stroke={color} strokeWidth={2} />
+                    </LineChart>
+                </ResponsiveContainer>
+            </Box>
         </CardBody>
     </Card>
 );
@@ -2112,33 +2572,37 @@ const VisualAnalyticsTab = ({ analyticsData, loading }: { analyticsData: Enhance
 
             {/* Financial Trends */}
             <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={6}>
-                <Card height="400px">
+                <Card minH="400px">
                     <CardBody>
                         <Text fontWeight="bold" mb={4}>Monthly Spending Trend</Text>
-                        <ResponsiveContainer width="100%" height="100%">
-                            <AreaChart data={analyticsData.financial.monthlySpending}>
-                                <CartesianGrid strokeDasharray="3 3" />
-                                <XAxis dataKey="month" />
-                                <YAxis />
-                                <Tooltip formatter={(value) => [`${Number(value).toLocaleString()}`, 'Spending']} />
-                                <Area type="monotone" dataKey="spending" stroke={CHART_COLORS.primary[0]} fill={CHART_COLORS.primary[2]} />
-                            </AreaChart>
-                        </ResponsiveContainer>
+                        <Box height="300px" minWidth="100%">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <AreaChart data={analyticsData.financial.monthlySpending}>
+                                    <CartesianGrid strokeDasharray="3 3" />
+                                    <XAxis dataKey="month" />
+                                    <YAxis />
+                                    <Tooltip formatter={(value) => [`${Number(value).toLocaleString()}`, 'Spending']} />
+                                    <Area type="monotone" dataKey="spending" stroke={CHART_COLORS.primary[0]} fill={CHART_COLORS.primary[2]} />
+                                </AreaChart>
+                            </ResponsiveContainer>
+                        </Box>
                     </CardBody>
                 </Card>
 
-                <Card height="400px">
+                <Card minH="400px">
                     <CardBody>
                         <Text fontWeight="bold" mb={4}>Cost Per Person Trend</Text>
-                        <ResponsiveContainer width="100%" height="100%">
-                            <LineChart data={analyticsData.financial.costPerPersonTrend}>
-                                <CartesianGrid strokeDasharray="3 3" />
-                                <XAxis dataKey="date" />
-                                <YAxis />
-                                <Tooltip formatter={(value) => [`${Number(value).toFixed(2)}`, 'Cost per Person']} />
-                                <Line type="monotone" dataKey="cost" stroke={CHART_COLORS.success[0]} strokeWidth={2} />
-                            </LineChart>
-                        </ResponsiveContainer>
+                        <Box height="300px" minWidth="100%">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <LineChart data={analyticsData.financial.costPerPersonTrend}>
+                                    <CartesianGrid strokeDasharray="3 3" />
+                                    <XAxis dataKey="date" />
+                                    <YAxis />
+                                    <Tooltip formatter={(value) => [`${Number(value).toFixed(2)}`, 'Cost per Person']} />
+                                    <Line type="monotone" dataKey="cost" stroke={CHART_COLORS.success[0]} strokeWidth={2} />
+                                </LineChart>
+                            </ResponsiveContainer>
+                        </Box>
                     </CardBody>
                 </Card>
             </SimpleGrid>

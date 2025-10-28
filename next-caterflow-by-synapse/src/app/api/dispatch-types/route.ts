@@ -3,6 +3,7 @@ import { client, writeClient } from '@/lib/sanity';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 
+
 // GET all dispatch types
 export async function GET() {
     try {

@@ -30,6 +30,8 @@ export default defineConfig({
                     S.documentTypeListItem('Site').title('Sites'),
                     S.documentTypeListItem('Bin').title('Storage Bins'),
                     S.documentTypeListItem('Category').title('Categories'),
+                    S.documentTypeListItem('DispatchType').title('Dispatch Type'),
+
                     // --- START MODIFICATION FOR STOCKITEM FILTERING ---
                     S.listItem() // This creates the "All Stock Items" + "Stock Items by Category" group
                       .title('Stock Items')

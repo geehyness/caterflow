@@ -31,6 +31,13 @@ export default defineType({
             initialValue: true,
             description: 'Whether this dispatch type is currently active',
         }),
+        defineField({
+            name: 'sellingPrice',
+            title: 'Selling Price',
+            type: 'number',
+            description: 'Price per person for this dispatch type',
+            validation: (Rule) => Rule.min(0),
+        }),
     ],
     preview: {
         select: {
