@@ -1,3 +1,0 @@
-- change to dev-cf
-	- tokens and links
-- deploy

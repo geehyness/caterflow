@@ -38,9 +38,11 @@ import {
     Th,
     Td,
     TableContainer,
-    useColorModeValue
+    useColorModeValue,
+    Icon
 } from '@chakra-ui/react';
-import { FiPlus, FiTrash2 } from 'react-icons/fi';
+import { FiFileText, FiPlus, FiTrash2, FiChevronUp, FiChevronDown } from 'react-icons/fi';
+import { SimpleGrid, Image } from '@chakra-ui/react'; // ADD Image and SimpleGrid
 import StockItemSelectorModal from './StockItemSelectorModal';
 import FileUploadModal from './FileUploadModal';
 import { nanoid } from 'nanoid';
@@ -112,9 +114,18 @@ interface DispatchModalProps {
     onClose: () => void;
     dispatch?: Dispatch | null;
     onSave: () => void;
+    onToggleEvidence?: (dispatchId: string) => void;
+    isEvidenceExpanded?: boolean;
 }
 
-export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: DispatchModalProps) {
+export default function DispatchModal({
+    isOpen,
+    onClose,
+    dispatch,
+    onSave,
+    onToggleEvidence,
+    isEvidenceExpanded
+}: DispatchModalProps) {
     const [loading, setLoading] = useState(false);
     const [dispatchTypes, setDispatchTypes] = useState<DispatchType[]>([]);
     const [allBins, setAllBins] = useState<Bin[]>([]);
@@ -132,6 +143,7 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
     const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
     const [savedDispatchId, setSavedDispatchId] = useState<string>('');
     const [selectedDispatchType, setSelectedDispatchType] = useState<DispatchType | null>(null); // ADDED
+    const [isExporting, setIsExporting] = useState(false);
 
     const toast = useToast();
     const { data: session, status: sessionStatus } = useSession();
@@ -623,6 +635,228 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
         }
     };
 
+    const exportDispatchPDF = () => {
+        if (isExporting) return;
+
+        setIsExporting(true);
+        try {
+            const htmlContent = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Dispatch - ${dispatch?.dispatchNumber || 'New Dispatch'}</title>
+        <style>
+            body { 
+                font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; 
+                margin: 40px; 
+                color: #151515;
+                background: #F5F7FA;
+            }
+            .header-container {
+                display: flex;
+                align-items: center;
+                margin-bottom: 30px;
+                border-bottom: 2px solid #E2E8F0;
+                padding-bottom: 20px;
+                gap: 20px;
+            }
+            .logo {
+                height: 80px;
+                width: auto;
+                opacity: 0.8;
+            }
+            .header-content {
+                text-align: left;
+                flex-grow: 1;
+            }
+            .header-content h1 { 
+                margin: 0; 
+                color: #0067FF;
+                font-size: 28px;
+                font-weight: 600;
+            }
+            .info-section { 
+                margin-bottom: 30px;
+                background: #FFFFFF;
+                padding: 20px;
+                border-radius: 12px;
+                border: 1px solid #E2E8F0;
+            }
+            .info-grid {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 20px;
+            }
+            .info-item {
+                margin-bottom: 10px;
+            }
+            .info-label {
+                font-weight: 600;
+                color: #4A5568;
+                font-size: 14px;
+            }
+            .table {
+                width: 100%;
+                border-collapse: collapse;
+                margin: 20px 0;
+                background: #FFFFFF;
+                border-radius: 12px;
+                overflow: hidden;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.03);
+                border: 1px solid #E2E8F0;
+            }
+            .table th {
+                background-color: #F7FAFC;
+                border: 1px solid #E2E8F0;
+                padding: 12px 16px;
+                text-align: left;
+                font-weight: 600;
+                color: #2D3748;
+                font-size: 14px;
+            }
+            .table td {
+                border: 1px solid #E2E8F0;
+                padding: 12px 16px;
+                color: #4A5568;
+                font-size: 14px;
+            }
+            .summary-section {
+                background: #F0FFF4;
+                border: 1px solid #9AE6B4;
+                border-radius: 8px;
+                padding: 20px;
+                margin: 20px 0;
+            }
+            .footer {
+                margin-top: 40px;
+                padding-top: 20px;
+                border-top: 1px solid #E2E8F0;
+                font-size: 12px;
+                color: #718096;
+                text-align: center;
+            }
+            @media print {
+                body { margin: 25px; background: white; }
+                .no-print { display: none; }
+            }
+        </style>
+    </head>
+    <body>
+        <div class="header-container">
+            <div class="logo-container">
+                <img src="/icon-512x512.png" alt="Caterflow" class="logo" />
+            </div>
+            <div class="header-content">
+                <h1>DISPATCH RECORD</h1>
+                <p style="font-size: 16px; margin: 5px 0;">Dispatch Number: <strong>${dispatch?.dispatchNumber || 'New'}</strong></p>
+                <p style="font-size: 14px; margin: 5px 0;">Date: ${new Date(dispatchDate).toLocaleDateString()}</p>
+            </div>
+        </div>
+    
+        <div class="info-section">
+            <div class="info-grid">
+                <div>
+                    <div class="info-item">
+                        <span class="info-label">Dispatch Type:</span>
+                        <span> ${dispatchTypes.find(t => t._id === dispatchType)?.name || 'N/A'}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Source Bin:</span>
+                        <span> ${sourceBin?.name || 'N/A'} (${sourceBin?.site?.name || 'N/A'})</span>
+                    </div>
+                </div>
+                <div>
+                    <div class="info-item">
+                        <span class="info-label">People Fed:</span>
+                        <span> ${peopleFed || 'N/A'}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Dispatched By:</span>
+                        <span> ${user?.name || 'Current User'}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Item</th>
+                    <th>Quantity</th>
+                    <th>Unit Price</th>
+                    <th>Total Cost</th>
+                    <th>Unit</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${dispatchedItems.map(item => `
+                    <tr>
+                        <td><strong>${item.stockItem.name}</strong></td>
+                        <td>${item.dispatchedQuantity}</td>
+                        <td>E ${(item.unitPrice || 0).toFixed(2)}</td>
+                        <td>E ${(item.totalCost || 0).toFixed(2)}</td>
+                        <td>${item.stockItem.unitOfMeasure}</td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
+    
+        <div class="summary-section">
+            <h3 style="margin: 0 0 15px 0; color: #22543D;">Cost Summary</h3>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                <div>
+                    <strong>Grand Total Cost:</strong>
+                </div>
+                <div>
+                    <strong>E ${calculateGrandTotal().toFixed(2)}</strong>
+                </div>
+                ${peopleFed && peopleFed > 0 ? `
+                    <div>Cost per Person:</div>
+                    <div>E ${calculateCostPerPerson().toFixed(2)}</div>
+                    <div>People Fed:</div>
+                    <div>${peopleFed}</div>
+                ` : ''}
+            </div>
+        </div>
+    
+        ${notes ? `
+            <div class="info-section">
+                <h3 style="margin: 0 0 12px 0; color: #2D3748; font-size: 16px;">Notes:</h3>
+                <p style="margin: 0; color: #4A5568; line-height: 1.5;">${notes}</p>
+            </div>
+        ` : ''}
+    
+        <div class="footer">
+            <p>Generated by Caterflow Dispatch Management System</p>
+        </div>
+    
+        <div class="no-print" style="text-align: center; margin-top: 20px;">
+            <button onclick="window.print()" style="background: #0067FF; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer;">
+                Print / Save as PDF
+            </button>
+        </div>
+    </body>
+    </html>`;
+
+            const exportWindow = window.open('', '_blank');
+            if (exportWindow) {
+                exportWindow.document.write(htmlContent);
+                exportWindow.document.close();
+                exportWindow.document.title = `Dispatch - ${dispatch?.dispatchNumber || 'New Dispatch'}`;
+
+                // Reset exporting state after a short delay
+                setTimeout(() => setIsExporting(false), 1000);
+            } else {
+                setIsExporting(false);
+            }
+        } catch (error) {
+            console.error('Export failed:', error);
+            setIsExporting(false);
+        }
+    };
+
+
+
     const filteredBins = userRole === 'admin'
         ? allBins
         : allBins.filter(bin => bin.site._id === userSite?._id);
@@ -667,7 +901,7 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
                                                 >
                                                     {dispatchTypes.map((type) => (
                                                         <option key={type._id} value={type._id}>
-                                                            {type.name} (${type.sellingPrice}/person)
+                                                            {type.name} (E{type.sellingPrice}/person)
                                                         </option>
                                                     ))}
                                                 </Select>
@@ -879,17 +1113,52 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
                                             </VStack>
                                         )}
 
+                                        {dispatch?.attachments && dispatch.attachments.length > 0 && (
+                                            <Box mt={4}>
+                                                <Button
+                                                    variant="ghost"
+                                                    onClick={() => dispatch?._id && onToggleEvidence?.(dispatch._id)}
+                                                    width="full"
+                                                    justifyContent="space-between"
+                                                >
+                                                    <Text>Evidence Photos ({dispatch.attachments.length})</Text>
+                                                    <Icon as={isEvidenceExpanded ? FiChevronUp : FiChevronDown} />
+                                                </Button>
+
+                                                {isEvidenceExpanded && (
+                                                    <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={4} mt={4}>
+                                                        {dispatch.attachments.map((attachment) => (
+                                                            <Box key={attachment._id} borderWidth="1px" borderRadius="lg" overflow="hidden">
+                                                                <Image
+                                                                    src={attachment.url}
+                                                                    alt={attachment.name || 'Evidence photo'}
+                                                                    objectFit="cover"
+                                                                    width="100%"
+                                                                    height="200px"
+                                                                />
+                                                                <Box p={2}>
+                                                                    <Text fontSize="sm" noOfLines={1}>
+                                                                        {attachment.name || 'Evidence'}
+                                                                    </Text>
+                                                                </Box>
+                                                            </Box>
+                                                        ))}
+                                                    </SimpleGrid>
+                                                )}
+                                            </Box>
+                                        )}
+
                                         {selectedDispatchType && peopleFed && peopleFed > 0 && (
                                             <VStack align="stretch" mt={4} p={4} borderRadius="md" bg="green.50" border="1px" borderColor="green.200">
                                                 <HStack justify="space-between">
                                                     <Text fontWeight="bold" color="green.800">Estimated Sales:</Text>
                                                     <Text fontWeight="bold" fontSize="lg" color="green.800">
-                                                        ${calculateTotalSales().toFixed(2)}
+                                                        E{calculateTotalSales().toFixed(2)}
                                                     </Text>
                                                 </HStack>
                                                 <HStack justify="space-between">
                                                     <Text fontSize="sm" color="green.700">Selling Price:</Text>
-                                                    <Text fontSize="sm" color="green.700">${selectedDispatchType.sellingPrice}/person</Text>
+                                                    <Text fontSize="sm" color="green.700">E{selectedDispatchType.sellingPrice}/person</Text>
                                                 </HStack>
                                                 <HStack justify="space-between">
                                                     <Text fontSize="sm" color="green.700">People Fed:</Text>
@@ -915,6 +1184,17 @@ export default function DispatchModal({ isOpen, onClose, dispatch, onSave }: Dis
                             <ModalFooter>
                                 <Button variant="outline" mr={3} onClick={onClose} isDisabled={isSaving || loading}>
                                     Cancel
+                                </Button>
+                                <Button
+                                    colorScheme="blue"
+                                    variant="outline"
+                                    onClick={exportDispatchPDF}
+                                    isDisabled={dispatchedItems.length === 0 || isExporting || isSaving || loading}
+                                    isLoading={isExporting}
+                                    loadingText="Exporting..."
+                                    leftIcon={<FiFileText />}
+                                >
+                                    Export PDF
                                 </Button>
                                 {isEditable ? (
                                     <>

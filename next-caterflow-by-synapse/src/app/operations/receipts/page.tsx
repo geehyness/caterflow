@@ -340,8 +340,14 @@ export default function GoodsReceiptsPage() {
         {
             accessorKey: 'totalAmount',
             header: 'Total Amount',
-            isSortable: true, // Enable sorting for amounts
-            cell: (row: any) => <Text color={primaryTextColor}>E {(row.totalAmount || 0).toFixed(2)}</Text>
+            isSortable: true,
+            cell: (row: any) => {
+                const total = row.receivedItems?.reduce((sum: number, item: any) => {
+                    const itemTotal = item.totalPrice || ((item.unitPrice || 0) * item.receivedQuantity);
+                    return sum + itemTotal;
+                }, 0) || 0;
+                return <Text color={primaryTextColor}>E {total.toFixed(2)}</Text>
+            }
         },
         {
             accessorKey: 'orderedItems',

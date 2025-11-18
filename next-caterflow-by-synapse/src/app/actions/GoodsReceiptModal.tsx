@@ -36,7 +36,7 @@ import {
     Box,
     useColorModeValue,
 } from '@chakra-ui/react';
-import { FiCheck, FiSave, FiX, FiCheckCircle } from 'react-icons/fi';
+import { FiCheck, FiSave, FiX, FiCheckCircle, FiFileText } from 'react-icons/fi';
 import FileUploadModal from '@/components/FileUploadModal';
 import BinSelectorModal from '@/components/BinSelectorModal';
 
@@ -48,9 +48,12 @@ interface ReceivedItemData {
         name: string;
         sku?: string;
         unitOfMeasure?: string;
+        unitPrice?: number; // ADD THIS
     };
     orderedQuantity?: number;
     receivedQuantity: number;
+    totalPrice?: number; // ADD THIS - total for received quantity
+    unitPrice?: number; // ADD THIS - calculated unit price
     batchNumber?: string;
     expiryDate?: string;
     condition: string;
@@ -132,6 +135,8 @@ export default function GoodsReceiptModal({
     const [availableBins, setAvailableBins] = useState<Bin[]>([]);
     const [savedReceiptId, setSavedReceiptId] = useState<string>('');
 
+    const [totalPrices, setTotalPrices] = useState<{ [key: string]: number | undefined }>({});
+
     const isNewReceipt = !receipt || receipt._id.startsWith('temp-');
 
     const modalBg = useColorModeValue('neutral.light.bg-card', 'neutral.dark.bg-card');
@@ -181,6 +186,11 @@ export default function GoodsReceiptModal({
                     const response = await fetch(`/api/goods-receipts/${receipt._id}`);
                     if (!response.ok) throw new Error('Failed to fetch receipt details');
                     const fullReceiptData: GoodsReceiptData = await response.json();
+
+                    // Fetch current stock item prices for accurate calculations
+                    const itemsWithCurrentPrices = await fetchCurrentStockItemPrices(fullReceiptData.receivedItems || []);
+                    fullReceiptData.receivedItems = itemsWithCurrentPrices;
+
                     setFormData(fullReceiptData);
                     setSavedReceiptId(fullReceiptData._id);
                     if (fullReceiptData.purchaseOrder?.site?._id) {
@@ -204,20 +214,28 @@ export default function GoodsReceiptModal({
                     if (!poResponse.ok) throw new Error('Failed to fetch PO details');
                     const poData = await poResponse.json();
 
-                    const initialItems: ReceivedItemData[] = (poData.orderedItems || []).map((item: any) => ({
-                        _key: item._key || Math.random().toString(36).substr(2, 9),
-                        stockItem: {
-                            _id: item.stockItem?._id || '',
-                            name: item.stockItem?.name || 'Unknown Item',
-                            sku: item.stockItem?.sku,
-                            unitOfMeasure: item.stockItem?.unitOfMeasure
-                        },
-                        orderedQuantity: item.orderedQuantity || 0,
-                        receivedQuantity: 0,
-                        condition: 'good',
-                        batchNumber: '',
-                        expiryDate: ''
-                    }));
+                    const initialItems: ReceivedItemData[] = (poData.orderedItems || []).map((item: any) => {
+                        const unitPrice = item.unitPrice || item.stockItem?.unitPrice || 0;
+                        const receivedQuantity = 0;
+
+                        return {
+                            _key: item._key || Math.random().toString(36).substr(2, 9),
+                            stockItem: {
+                                _id: item.stockItem?._id || '',
+                                name: item.stockItem?.name || 'Unknown Item',
+                                sku: item.stockItem?.sku,
+                                unitOfMeasure: item.stockItem?.unitOfMeasure,
+                                unitPrice: unitPrice
+                            },
+                            orderedQuantity: item.orderedQuantity || 0,
+                            receivedQuantity: receivedQuantity,
+                            totalPrice: receivedQuantity * unitPrice,
+                            unitPrice: unitPrice,
+                            condition: 'good',
+                            batchNumber: '',
+                            expiryDate: ''
+                        };
+                    });
 
                     setFormData({
                         ...initialFormData,
@@ -259,9 +277,23 @@ export default function GoodsReceiptModal({
 
         setFormData(prev => ({
             ...prev,
-            receivedItems: (prev.receivedItems || []).map(item =>
-                item._key === key ? { ...item, [field]: processedValue } : item
-            ),
+            receivedItems: (prev.receivedItems || []).map(item => {
+                if (item._key === key) {
+                    const updatedItem = { ...item, [field]: processedValue };
+
+                    // Auto-calculate total price when received quantity changes
+                    if (field === 'receivedQuantity') {
+                        // Use the current unit price (could be from PO or manually set)
+                        const currentUnitPrice = item.unitPrice || item.stockItem.unitPrice || 0;
+                        updatedItem.totalPrice = processedValue * currentUnitPrice;
+                        // Also update the unit price field to match
+                        updatedItem.unitPrice = currentUnitPrice;
+                    }
+
+                    return updatedItem;
+                }
+                return item;
+            }),
         }));
     };
 
@@ -285,11 +317,31 @@ export default function GoodsReceiptModal({
         }
 
         try {
+            // First, update stock item prices if unit prices are provided
+            for (const item of formData.receivedItems || []) {
+                if (item.unitPrice && item.unitPrice > 0) {
+                    try {
+                        await fetch(`/api/stock-items/${item.stockItem._id}`, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                updates: { unitPrice: item.unitPrice }
+                            }),
+                        });
+                        console.log(`Updated unit price for ${item.stockItem.name} to E ${item.unitPrice}`);
+                    } catch (error) {
+                        console.warn(`Failed to update price for ${item.stockItem.name}:`, error);
+                    }
+                }
+            }
+
             const itemsToSave = (formData.receivedItems || []).map(item => ({
                 _key: item._key,
                 stockItem: { _type: 'reference', _ref: item.stockItem._id },
                 orderedQuantity: item.orderedQuantity || 0,
                 receivedQuantity: item.receivedQuantity,
+                totalPrice: item.totalPrice || 0,
+                unitPrice: item.unitPrice || 0,
                 condition: item.condition,
                 batchNumber: item.batchNumber || '',
                 expiryDate: item.expiryDate || '',
@@ -362,7 +414,7 @@ export default function GoodsReceiptModal({
         });
     };
 
-    const isFullyReceived = (formData.receivedItems || []).every(item => item.receivedQuantity >= (item.orderedQuantity || 0));
+    const isFullyReceived = true; // (formData.receivedItems || []).every(item => item.receivedQuantity >= (item.orderedQuantity || 0));
 
     const handleCompleteReceipt = async () => {
         if (!isFullyReceived) {
@@ -409,8 +461,28 @@ export default function GoodsReceiptModal({
         }
     };
 
-    // Replace the current handleFinalizeReceipt function with this:
+    const handleTotalPriceChange = (key: string, value: string) => {
+        const valueAsNumber = handleNumberInput(value);
 
+        setFormData(prev => ({
+            ...prev,
+            receivedItems: (prev.receivedItems || []).map(item => {
+                if (item._key === key) {
+                    const totalPrice = valueAsNumber;
+                    // Calculate unit price based on received quantity and total price
+                    const unitPrice = item.receivedQuantity > 0 ? totalPrice / item.receivedQuantity : 0;
+                    return {
+                        ...item,
+                        totalPrice,
+                        unitPrice // This will be saved and used to update stock item
+                    };
+                }
+                return item;
+            }),
+        }));
+    };
+
+    // Replace the current handleFinalizeReceipt function with this:
     const handleFinalizeReceipt = async (attachmentIds: string[]) => {
         setIsUploadModalOpen(false);
         try {
@@ -419,13 +491,31 @@ export default function GoodsReceiptModal({
 
             if (!receiptIdToUse) throw new Error('No receipt ID available for completion');
 
+            // Update stock item prices (same logic as saveReceipt)
+            for (const item of formData.receivedItems || []) {
+                if (item.unitPrice && item.unitPrice > 0) {
+                    try {
+                        await fetch(`/api/stock-items/${item.stockItem._id}`, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                updates: { unitPrice: item.unitPrice }
+                            }),
+                        });
+                        console.log(`Finalized: Updated unit price for ${item.stockItem.name} to E ${item.unitPrice}`);
+                    } catch (error) {
+                        console.warn(`Failed to update price for ${item.stockItem.name}:`, error);
+                    }
+                }
+            }
+
             const completeResponse = await fetch('/api/complete-goods-receipt', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     receiptId: receiptIdToUse,
                     poId: formData.purchaseOrder?._id,
-                    attachmentIds // Changed from attachmentId to attachmentIds (array)
+                    attachmentIds
                 }),
             });
 
@@ -479,6 +569,237 @@ export default function GoodsReceiptModal({
         const num = parseFloat(value);
         return isNaN(num) ? 0 : num;
     };
+
+    // Add this function to fetch current stock item prices
+    // Update the fetchCurrentStockItemPrices function:
+    const fetchCurrentStockItemPrices = async (items: any[]) => {
+        const itemsWithCurrentPrices = await Promise.all(
+            items.map(async (item) => {
+                try {
+                    // Use the correct endpoint: /api/stock-items/[id]
+                    const response = await fetch(`/api/stock-items/${item.stockItem._id}`);
+                    if (response.ok) {
+                        const currentStockItem = await response.json();
+                        return {
+                            ...item,
+                            stockItem: {
+                                ...item.stockItem,
+                                unitPrice: currentStockItem.unitPrice || 0
+                            },
+                            unitPrice: currentStockItem.unitPrice || item.unitPrice || 0,
+                            totalPrice: item.receivedQuantity * (currentStockItem.unitPrice || item.unitPrice || 0)
+                        };
+                    }
+                } catch (error) {
+                    console.warn(`Failed to fetch current price for ${item.stockItem.name}:`, error);
+                }
+                return item;
+            })
+        );
+        return itemsWithCurrentPrices;
+    };
+
+    // Update the loadInitialData function for existing receipts
+
+
+    // Add this function to GoodsReceiptModal component
+    const exportGoodsReceiptPDF = () => {
+        if (!formData.purchaseOrder || !formData.receivingBin) return;
+
+        const htmlContent = `
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Goods Receipt - ${formData.receiptNumber || 'Draft'}</title>
+    <style>
+        body { 
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; 
+            margin: 40px; 
+            color: #151515;
+            background: #F5F7FA;
+        }
+        .header-container {
+            display: flex;
+            align-items: center;
+            margin-bottom: 30px;
+            border-bottom: 2px solid #E2E8F0;
+            padding-bottom: 20px;
+            gap: 20px;
+        }
+        .logo {
+            height: 80px;
+            width: auto;
+            opacity: 0.8;
+        }
+        .header-content {
+            text-align: left;
+            flex-grow: 1;
+        }
+        .header-content h1 { 
+            margin: 0; 
+            color: #0067FF;
+            font-size: 28px;
+            font-weight: 600;
+        }
+        .info-section { 
+            margin-bottom: 30px;
+            background: #FFFFFF;
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid #E2E8F0;
+        }
+        .info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        .info-item {
+            margin-bottom: 10px;
+        }
+        .info-label {
+            font-weight: 600;
+            color: #4A5568;
+            font-size: 14px;
+        }
+        .table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background: #FFFFFF;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.03);
+            border: 1px solid #E2E8F0;
+        }
+        .table th {
+            background-color: #F7FAFC;
+            border: 1px solid #E2E8F0;
+            padding: 12px 16px;
+            text-align: left;
+            font-weight: 600;
+            color: #2D3748;
+            font-size: 14px;
+        }
+        .table td {
+            border: 1px solid #E2E8F0;
+            padding: 12px 16px;
+            color: #4A5568;
+            font-size: 14px;
+        }
+        .footer {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #E2E8F0;
+            font-size: 12px;
+            color: #718096;
+            text-align: center;
+        }
+        @media print {
+            body { margin: 25px; background: white; }
+            .no-print { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header-container">
+        <div class="logo-container">
+            <img src="/icon-512x512.png" alt="Caterflow" class="logo" />
+        </div>
+        <div class="header-content">
+            <h1>GOODS RECEIPT</h1>
+            <p style="font-size: 16px; margin: 5px 0;">Receipt Number: <strong>${formData.receiptNumber || 'Draft'}</strong></p>
+            <p style="font-size: 14px; margin: 5px 0;">Date: ${new Date(formData.receiptDate || new Date()).toLocaleDateString()}</p>
+        </div>
+    </div>
+
+    <div class="info-section">
+        <div class="info-grid">
+            <div>
+                <div class="info-item">
+                    <span class="info-label">Purchase Order:</span>
+                    <span> ${formData.purchaseOrder.poNumber}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Supplier:</span>
+                    <span> ${formData.purchaseOrder.supplier?.name || 'N/A'}</span>
+                </div>
+            </div>
+            <div>
+                <div class="info-item">
+                    <span class="info-label">Receiving Bin:</span>
+                    <span> ${formData.receivingBin.name}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Site:</span>
+                    <span> ${formData.purchaseOrder.site?.name || 'N/A'}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Item</th>
+                <th>Ordered</th>
+                <th>Received</th>
+                <th>Total Price</th> 
+                <th>Unit Price</th> 
+                <th>Unit</th>
+                <th>Condition</th>
+                <th>Batch Number</th>
+            </tr>
+        </thead>
+        <tbody>
+            ${(formData.receivedItems || []).map(item => {
+            // Use the current stock item unit price for calculations
+            const displayUnitPrice = item.stockItem.unitPrice || 0;
+            const displayTotalPrice = item.receivedQuantity * displayUnitPrice;
+
+            return `
+                <tr>
+                    <td><strong>${item.stockItem.name}</strong></td>
+                    <td>${item.orderedQuantity || 0}</td>
+                    <td>${item.receivedQuantity}</td>
+                    <td>E ${displayTotalPrice.toFixed(2)}</td>
+                    <td>E ${displayUnitPrice.toFixed(2)}</td>
+                    <td>${item.stockItem.unitOfMeasure}</td>
+                    <td>${item.condition}</td>
+                    <td>${item.batchNumber || 'N/A'}</td>
+                </tr>
+                `;
+        }).join('')}
+        </tbody>
+    </table>
+
+    ${formData.notes ? `
+        <div class="info-section">
+            <h3 style="margin: 0 0 12px 0; color: #2D3748; font-size: 16px;">Notes:</h3>
+            <p style="margin: 0; color: #4A5568; line-height: 1.5;">${formData.notes}</p>
+        </div>
+    ` : ''}
+
+    <div class="footer">
+        <p>Generated by Caterflow Inventory Management System</p>
+    </div>
+
+    <div class="no-print" style="text-align: center; margin-top: 20px;">
+        <button onclick="window.print()" style="background: #0067FF; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer;">
+            Print / Save as PDF
+        </button>
+    </div>
+</body>
+</html>`;
+
+        const exportWindow = window.open('', '_blank');
+        if (exportWindow) {
+            exportWindow.document.write(htmlContent);
+            exportWindow.document.close();
+            exportWindow.document.title = `Goods Receipt - ${formData.receiptNumber || 'Draft'}`;
+        }
+    };
+
+
 
     const modalTitle = !isNewReceipt ? `Goods Receipt: ${formData.receiptNumber}` : 'New Goods Receipt';
     const isEditable = formData.status !== 'completed';
@@ -614,6 +935,8 @@ export default function GoodsReceiptModal({
                                                     <Th color={secondaryTextColor} borderColor={borderColor}>Item</Th>
                                                     <Th isNumeric color={secondaryTextColor} borderColor={borderColor}>Ordered</Th>
                                                     <Th isNumeric color={secondaryTextColor} borderColor={borderColor}>Received</Th>
+                                                    <Th isNumeric color={secondaryTextColor} borderColor={borderColor}>Total Price (E)</Th>
+                                                    <Th isNumeric color={secondaryTextColor} borderColor={borderColor}>Unit Price (E)</Th>
                                                     <Th color={secondaryTextColor} borderColor={borderColor}>Condition</Th>
                                                     <Th color={secondaryTextColor} borderColor={borderColor}>Batch No.</Th>
                                                     <Th color={secondaryTextColor} borderColor={borderColor}>Expiry Date</Th>
@@ -640,10 +963,44 @@ export default function GoodsReceiptModal({
                                                             />
                                                         </Td>
                                                         <Td borderColor={borderColor}>
+                                                            <Input
+                                                                value={item.totalPrice === 0 || item.totalPrice === undefined ? '' : item.totalPrice}
+                                                                onChange={(e) => handleTotalPriceChange(item._key, e.target.value)}
+                                                                type="number"
+                                                                step="0.01"
+                                                                min="0"
+                                                                size="sm"
+                                                                width="100px"
+                                                                isDisabled={!isEditable}
+                                                                bg={inputBg}
+                                                                borderColor={borderColor}
+                                                                placeholder="0.00"
+                                                            />
+                                                            {item.receivedQuantity > 0 && (
+                                                                <Text fontSize="xs" color={secondaryTextColor} mt={1}>
+                                                                    Auto: E {((item.stockItem.unitPrice || 0) * item.receivedQuantity).toFixed(2)}
+                                                                </Text>
+                                                            )}
+                                                        </Td>
+                                                        <Td isNumeric borderColor={borderColor}>
+                                                            <Text fontSize="sm">
+                                                                E {(item.stockItem.unitPrice || 0).toFixed(2)}
+                                                            </Text>
+                                                            <Text fontSize="xs" color={secondaryTextColor}>
+                                                                per {item.stockItem.unitOfMeasure}
+                                                            </Text>
+                                                            {item.unitPrice && item.unitPrice !== (item.stockItem.unitPrice || 0) && (
+                                                                <Text fontSize="xs" color="orange.500">
+                                                                    Saved: E {(item.unitPrice || 0).toFixed(2)}
+                                                                </Text>
+                                                            )}
+                                                        </Td>
+                                                        <Td borderColor={borderColor}>
                                                             <Select
                                                                 value={item.condition}
                                                                 onChange={(e) => handleItemChange(item._key, 'condition', e.target.value)}
-                                                                size="sm" isDisabled={!isEditable}
+                                                                size="sm"
+                                                                isDisabled={!isEditable}
                                                                 bg={inputBg}
                                                                 borderColor={borderColor}
                                                             >
@@ -656,7 +1013,8 @@ export default function GoodsReceiptModal({
                                                                 type="text"
                                                                 value={item.batchNumber || ''}
                                                                 onChange={(e) => handleItemChange(item._key, 'batchNumber', e.target.value)}
-                                                                size="sm" isDisabled={!isEditable}
+                                                                size="sm"
+                                                                isDisabled={!isEditable}
                                                                 bg={inputBg}
                                                                 borderColor={borderColor}
                                                             />
@@ -666,7 +1024,8 @@ export default function GoodsReceiptModal({
                                                                 type="date"
                                                                 value={item.expiryDate || ''}
                                                                 onChange={(e) => handleItemChange(item._key, 'expiryDate', e.target.value)}
-                                                                size="sm" isDisabled={!isEditable}
+                                                                size="sm"
+                                                                isDisabled={!isEditable}
                                                                 bg={inputBg}
                                                                 borderColor={borderColor}
                                                             />
@@ -676,6 +1035,18 @@ export default function GoodsReceiptModal({
                                             </Tbody>
                                         </Table>
                                     </TableContainer>
+
+                                    <Box p={4} borderWidth={1} borderColor={borderColor} borderRadius="md" mt={4}>
+                                        <HStack justify="space-between">
+                                            <Text fontWeight="bold">Total Receipt Value:</Text>
+                                            <Text fontWeight="bold" fontSize="lg">
+                                                E {(formData.receivedItems || []).reduce((total, item) => {
+                                                    const itemTotal = item.totalPrice || ((item.stockItem.unitPrice || 0) * item.receivedQuantity);
+                                                    return total + itemTotal;
+                                                }, 0).toFixed(2)}
+                                            </Text>
+                                        </HStack>
+                                    </Box>
                                 </Box>
                             </VStack>
                         )}
@@ -683,6 +1054,15 @@ export default function GoodsReceiptModal({
                     <ModalFooter borderTopWidth="1px" borderColor={borderColor}>
                         <Button colorScheme="gray" mr={3} onClick={onClose} isDisabled={isSaving || isLoading} variant="outline">
                             Cancel
+                        </Button>
+                        <Button
+                            colorScheme="blue"
+                            variant="outline"
+                            onClick={exportGoodsReceiptPDF}
+                            isDisabled={!formData.purchaseOrder || (formData.receivedItems || []).length === 0}
+                            leftIcon={<FiFileText />}
+                        >
+                            Export PDF
                         </Button>
                         {isEditable && (
                             <>
@@ -694,9 +1074,10 @@ export default function GoodsReceiptModal({
                                     Save Draft
                                 </Button>
                                 <Button
-                                    colorScheme="green" onClick={handleCompleteReceipt}
+                                    colorScheme="green"
+                                    onClick={handleCompleteReceipt}
                                     isLoading={isSaving}
-                                    isDisabled={!isFullyReceived || !formData.purchaseOrder || (formData.receivedItems || []).length === 0 || !formData.receivingBin}
+                                    isDisabled={!formData.purchaseOrder || (formData.receivedItems || []).length === 0 || !formData.receivingBin}
                                     leftIcon={<FiCheckCircle />}
                                 >
                                     {isNewReceipt ? 'Save & Upload Evidence' : 'Upload Evidence & Complete'}

@@ -521,14 +521,23 @@ export default function ProcurementPage() {
         });
     };
 
-    const canProcessPO = () => {
+    {/*const canProcessPO = () => {
         if (!selectedPO) return false;
         return selectedPO.orderedItems.every(item => {
             const supplier = editedSuppliers[item._key] ?? item.supplier?._id;
             const totalPrice = editedPrices[item._key];
             return Boolean(supplier) && typeof totalPrice === 'number' && totalPrice > 0;
         });
+    };*/}
+
+    const canProcessPO = () => {
+        if (!selectedPO) return false;
+        return selectedPO.orderedItems.every(item => {
+            const supplier = editedSuppliers[item._key] ?? item.supplier?._id;
+            return Boolean(supplier); // Only require supplier, price is optional
+        });
     };
+
 
     const getRowError = (item: any) => {
         const supplier = editedSuppliers[item._key] ?? item.supplier?._id;
@@ -538,10 +547,17 @@ export default function ProcurementPage() {
         return null;
     };
 
-    const getRowWarning = (item: any) => {
+    {/*const getRowWarning = (item: any) => {
         const totalPrice = editedPrices[item._key];
         if (totalPrice === undefined || totalPrice === null) return 'No price entered (required for processing)';
         if (typeof totalPrice !== 'number' || totalPrice <= 0) return 'Enter a valid price (required for processing)';
+        return null;
+    };*/}
+
+    const getRowWarning = (item: any) => {
+        const totalPrice = editedPrices[item._key];
+        if (totalPrice === undefined || totalPrice === null) return 'No price entered - will use stored unit price';
+        if (typeof totalPrice !== 'number' || totalPrice <= 0) return 'Enter a valid price or leave empty to use stored price';
         return null;
     };
 
@@ -1150,6 +1166,7 @@ export default function ProcurementPage() {
                 }
             }
 
+            {/*}
             // Then, update purchase order items with supplier and price information
             const updates = selectedPO.orderedItems.map(item => {
                 const supplierId = editedSuppliers[item._key] ?? item.supplier?._id;
@@ -1160,7 +1177,22 @@ export default function ProcurementPage() {
                     supplierId: supplierId,
                     newPrice: totalPrice ? totalPrice / item.orderedQuantity : undefined
                 };
-            }).filter(update => update.supplierId && update.newPrice);
+            }).filter(update => update.supplierId && update.newPrice);*/}
+
+            const updates = selectedPO.orderedItems.map(item => {
+                const supplierId = editedSuppliers[item._key] ?? item.supplier?._id;
+                const totalPrice = editedPrices[item._key];
+
+                // Use stored unit price if no new price provided
+                const unitPrice = totalPrice ? totalPrice / item.orderedQuantity : (item.unitPrice || 0);
+
+                return {
+                    itemKey: item._key,
+                    supplierId: supplierId,
+                    newPrice: unitPrice
+                };
+            }).filter(update => update.supplierId); // Only require supplier
+
 
             // Update the purchase order items
             await updatePurchaseOrderItems(selectedPO._id, updates);

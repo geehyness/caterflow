@@ -22,7 +22,7 @@ import {
     HStack,
     VStack,
 } from '@chakra-ui/react';
-import { FiPlus, FiSearch, FiEye, FiFilter, FiEdit } from 'react-icons/fi';
+import { FiPlus, FiSearch, FiEye, FiFilter, FiEdit, FiChevronUp, FiChevronDown } from 'react-icons/fi'; // ADDED missing icons
 import DataTable from '@/components/DataTable';
 import { useSession } from 'next-auth/react'
 import DispatchModal from '@/components/DispatchModal';
@@ -34,8 +34,8 @@ interface DispatchRecord {
     evidenceStatus: 'pending' | 'partial' | 'complete';
     peopleFed?: number;
     notes?: string;
-    totalCost?: number; // ADD THIS
-    costPerPerson?: number; // ADD THIS
+    totalCost?: number;
+    costPerPerson?: number;
     dispatchType?: {
         _id: string;
         name: string;
@@ -63,7 +63,7 @@ interface DispatchRecord {
             unitOfMeasure?: string;
         };
         dispatchedQuantity: number;
-        unitPrice?: number; // ADD THIS
+        unitPrice?: number;
         totalCost?: number;
         notes?: string;
     }>;
@@ -87,6 +87,7 @@ export default function DispatchesPage() {
     const { isOpen, onOpen, onClose } = useDisclosure();
     const toast = useToast();
     const [viewMode, setViewMode] = useState<'actionRequired' | 'all'>('all');
+    const [expandedDispatchId, setExpandedDispatchId] = useState<string | null>(null); // MOVED up with other state
 
     // Theming props
     const bgPrimary = useColorModeValue('neutral.light.bg-primary', 'neutral.dark.bg-primary');
@@ -215,11 +216,16 @@ export default function DispatchesPage() {
         return items.join(', ') + (dispatch.dispatchedItems.length > 3 ? '...' : '');
     };
 
+    const toggleEvidenceSection = (dispatchId: string) => {
+        setExpandedDispatchId(expandedDispatchId === dispatchId ? null : dispatchId);
+    };
+
+    // FIXED: Currency formatting - removed the extra {
     const columns = useMemo(() => [
         {
             accessorKey: 'workflowAction',
             header: 'Action',
-            isSortable: false, // Explicitly set to false for clarity
+            isSortable: false,
             cell: (row: any) => {
                 const d: DispatchRecord = row?.original ?? row;
                 const isComplete = d?.evidenceStatus === 'complete';
@@ -311,7 +317,7 @@ export default function DispatchesPage() {
             isSortable: true,
             cell: (row: any) => {
                 const d: DispatchRecord = row?.original ?? row;
-                return d?.totalCost ? `E {(d.totalCost.toFixed(2)}` : '$0.00';
+                return d?.totalCost ? `E ${d.totalCost.toFixed(2)}` : 'E 0.00'; // FIXED: removed extra {
             },
         },
         {
@@ -329,7 +335,7 @@ export default function DispatchesPage() {
             isSortable: true,
             cell: (row: any) => {
                 const d: DispatchRecord = row?.original ?? row;
-                return d?.costPerPerson ? `E {(d.costPerPerson.toFixed(2)}` : 'N/A';
+                return d?.costPerPerson ? `E ${d.costPerPerson.toFixed(2)}` : 'N/A'; // FIXED: removed extra {
             },
         },
         {
@@ -418,6 +424,8 @@ export default function DispatchesPage() {
                     onClose={onClose}
                     dispatch={selectedDispatch as any}
                     onSave={handleSaveSuccess}
+                    onToggleEvidence={toggleEvidenceSection}
+                    isEvidenceExpanded={expandedDispatchId === selectedDispatch?._id}
                 />
             </VStack>
         </Box>
