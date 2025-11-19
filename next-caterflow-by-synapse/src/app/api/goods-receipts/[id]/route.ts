@@ -79,8 +79,19 @@ export async function GET(
     evidenceStatus,
     attachments[]->{
         _id,
-        name,
-        url
+        fileName,
+        fileType,
+        description,
+        uploadedAt,
+        "file": file{
+            "asset": asset->{
+                _id,
+                _type,
+                url,
+                originalFilename,
+                mimeType
+            }
+        }
     }
 }`;
 

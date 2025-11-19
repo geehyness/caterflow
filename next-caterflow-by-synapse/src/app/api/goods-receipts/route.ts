@@ -96,7 +96,18 @@ export async function GET() {
             attachments[]->{
                 _id,
                 fileName,
-                fileType
+                fileType,
+                description,
+                uploadedAt,
+                "file": file{
+                    "asset": asset->{
+                        _id,
+                        _type,
+                        url,
+                        originalFilename,
+                        mimeType
+                    }
+                }
             }
         }`;
 

@@ -266,39 +266,51 @@ export default function TransferModal({ isOpen, onClose, transfer, onSave }: Tra
         }
     };
 
-    // Enhanced stock item selection with immediate stock check
-    const handleStockItemSelect = (item: any) => {
-        const availableStock = fromBin ? (stockLevels[item._id] || 0) : 0;
-
-        const newItem: TransferredItem = {
-            _key: nanoid(),
-            stockItem: {
-                _id: item._id,
-                name: item.name,
-                sku: item.sku,
-                unitOfMeasure: item.unitOfMeasure,
-                currentStock: availableStock,
-            },
-            transferredQuantity: Math.min(1, availableStock), // Auto-set to available stock if possible
-            notes: '',
-        };
+    // In TransferModal.tsx - Update the handleStockItemSelect function
+    const handleStockItemSelect = (items: any[]) => {
+        const newItems: TransferredItem[] = items.map(item => {
+            const availableStock = fromBin ? (stockLevels[item._id] || 0) : 0;
+            return {
+                _key: nanoid(),
+                stockItem: {
+                    _id: item._id,
+                    name: item.name,
+                    sku: item.sku,
+                    unitOfMeasure: item.unitOfMeasure,
+                    currentStock: availableStock,
+                },
+                transferredQuantity: Math.min(1, availableStock),
+                notes: '',
+            };
+        });
 
         setTransferredItems(prevItems => {
             const updatedItems = [...prevItems];
             if (editingIndex !== null) {
-                updatedItems[editingIndex] = newItem;
+                updatedItems[editingIndex] = newItems[0]; // For edit mode, use first item
                 setEditingIndex(null);
             } else {
-                updatedItems.push(newItem);
+                updatedItems.push(...newItems);
             }
             return updatedItems;
         });
 
         setIsStockItemModalOpen(false);
 
-        // Refresh stock levels for the newly added item
+        // Refresh stock levels for newly added items
         if (fromBin?._id) {
-            refreshStockLevels(fromBin._id, [item._id]);
+            const newItemIds = items.map(item => item._id);
+            refreshStockLevels(fromBin._id, newItemIds);
+        }
+
+        if (items.length > 1) {
+            toast({
+                title: 'Items added',
+                description: `${items.length} items added to transfer`,
+                status: 'success',
+                duration: 2000,
+                isClosable: true,
+            });
         }
     };
 

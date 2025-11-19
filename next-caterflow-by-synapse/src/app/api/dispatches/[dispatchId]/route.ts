@@ -83,10 +83,19 @@ export async function GET(request: Request, { params }: { params: Promise<{ disp
             }, []),
             "attachments": coalesce(attachments[]->{
                 _id,
-                name,
-                url,
+                fileName,
+                fileType,
                 description,
-                uploadDate
+                uploadedAt,
+                "file": file{
+                    "asset": asset->{
+                        _id,
+                        _type,
+                        url,
+                        originalFilename,
+                        mimeType
+                    }
+                }
             }, [])
         }`;
 

@@ -35,10 +35,18 @@ import {
     Flex,
     Box,
     useColorModeValue,
+    Icon, // Add this
+    SimpleGrid, // Add this
+    Image // Add this
 } from '@chakra-ui/react';
 import { FiCheck, FiSave, FiX, FiCheckCircle, FiFileText } from 'react-icons/fi';
 import FileUploadModal from '@/components/FileUploadModal';
 import BinSelectorModal from '@/components/BinSelectorModal';
+
+
+// Add these imports at the top
+import { FiChevronUp, FiChevronDown, FiTrash2 } from 'react-icons/fi';
+import { urlFor } from '@/lib/sanity';
 
 // Interfaces for the data
 interface ReceivedItemData {
@@ -59,6 +67,7 @@ interface ReceivedItemData {
     condition: string;
 }
 
+// Update your GoodsReceiptData interface to include proper attachments
 interface GoodsReceiptData {
     _id: string;
     receiptNumber: string;
@@ -84,7 +93,22 @@ interface GoodsReceiptData {
         name: string;
     };
     receivedItems: ReceivedItemData[];
-    attachments?: any[];
+    attachments?: {
+        _id: string;
+        fileName?: string;
+        fileType?: string;
+        description?: string;
+        uploadedAt?: string;
+        file?: {
+            asset?: {
+                _id: string;
+                _type: string;
+                url?: string;
+                originalFilename?: string;
+                mimeType?: string;
+            };
+        };
+    }[];
 }
 
 interface GoodsReceiptModalProps {
@@ -134,6 +158,9 @@ export default function GoodsReceiptModal({
     const [formData, setFormData] = useState<Partial<GoodsReceiptData>>(initialFormData);
     const [availableBins, setAvailableBins] = useState<Bin[]>([]);
     const [savedReceiptId, setSavedReceiptId] = useState<string>('');
+
+    // Add this state with your other state declarations
+    const [isEvidenceExpanded, setIsEvidenceExpanded] = useState(false);
 
     const [totalPrices, setTotalPrices] = useState<{ [key: string]: number | undefined }>({});
 
@@ -599,8 +626,55 @@ export default function GoodsReceiptModal({
         return itemsWithCurrentPrices;
     };
 
-    // Update the loadInitialData function for existing receipts
 
+
+    const getAttachmentUrl = (attachment: any): { url: string | undefined, type: 'image' | 'file' | 'unknown' } => {
+        console.log('Attachment data:', attachment);
+
+        // If it's a Sanity file reference with asset
+        if (attachment.file?.asset) {
+            const asset = attachment.file.asset;
+
+            try {
+                console.log('Asset found:', asset);
+
+                // Check if it's an image asset (can use urlFor)
+                if (asset._type === 'sanity.imageAsset') {
+                    const url = urlFor(asset).url();
+                    console.log('Generated image URL:', url);
+                    return { url, type: 'image' };
+                }
+                // Check if it's a file asset (PDF, document, etc.)
+                else if (asset._type === 'sanity.fileAsset') {
+                    // For file assets, use the direct download URL
+                    const fileUrl = asset.url;
+                    console.log('File asset URL:', fileUrl);
+                    return { url: fileUrl, type: 'file' };
+                }
+                // Handle case where we have a direct URL in the asset
+                else if (asset.url) {
+                    console.log('Using asset URL:', asset.url);
+                    return { url: asset.url, type: asset._type === 'sanity.imageAsset' ? 'image' : 'file' };
+                }
+            } catch (error) {
+                console.error('Error processing asset:', error);
+                // Fallback to any available URL
+                if (asset.url) {
+                    console.log('Fallback to asset URL:', asset.url);
+                    return { url: asset.url, type: 'file' };
+                }
+            }
+        }
+
+        // Fallback to direct URL if available
+        if (attachment.url) {
+            console.log('Using direct URL:', attachment.url);
+            return { url: attachment.url, type: attachment.url.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? 'image' : 'file' };
+        }
+
+        console.log('No URL found for attachment');
+        return { url: undefined, type: 'unknown' };
+    };
 
     // Add this function to GoodsReceiptModal component
     const exportGoodsReceiptPDF = () => {
@@ -1048,6 +1122,124 @@ export default function GoodsReceiptModal({
                                         </HStack>
                                     </Box>
                                 </Box>
+
+                                {formData.attachments && formData.attachments.length > 0 && (
+                                    <Box mt={4}>
+                                        <Button
+                                            variant="ghost"
+                                            onClick={() => setIsEvidenceExpanded(!isEvidenceExpanded)}
+                                            width="full"
+                                            justifyContent="space-between"
+                                            bg="gray.50"
+                                            _hover={{ bg: "gray.100" }}
+                                        >
+                                            <HStack>
+                                                <Text fontWeight="medium">Evidence Files</Text>
+                                                <Badge colorScheme="green" variant="solid">
+                                                    {formData.attachments.length}
+                                                </Badge>
+                                            </HStack>
+                                            <Icon as={isEvidenceExpanded ? FiChevronUp : FiChevronDown} />
+                                        </Button>
+
+                                        {isEvidenceExpanded && (
+                                            <VStack spacing={4} mt={4} p={4} bg="gray.50" borderRadius="md">
+                                                <Text fontSize="sm" color={secondaryTextColor} alignSelf="flex-start">
+                                                    Proof of goods receipt
+                                                </Text>
+                                                <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={4} w="100%">
+                                                    {formData.attachments.map((attachment) => {
+                                                        const { url: fileUrl, type } = getAttachmentUrl(attachment);
+                                                        const isImage = type === 'image';
+                                                        const isFile = type === 'file';
+                                                        const fileExtension = attachment.fileName?.split('.').pop()?.toLowerCase() || 'file';
+                                                        const isPDF = fileExtension === 'pdf';
+                                                        const isDocument = ['doc', 'docx', 'txt'].includes(fileExtension);
+
+                                                        return (
+                                                            <Box
+                                                                key={attachment._id}
+                                                                borderWidth="1px"
+                                                                borderRadius="lg"
+                                                                overflow="hidden"
+                                                                bg="white"
+                                                                boxShadow="sm"
+                                                                position="relative"
+                                                            >
+                                                                {isImage && fileUrl ? (
+                                                                    // Show image preview
+                                                                    <Image
+                                                                        src={fileUrl}
+                                                                        alt={attachment.fileName || 'Evidence photo'}
+                                                                        objectFit="cover"
+                                                                        width="100%"
+                                                                        height="200px"
+                                                                        loading="lazy"
+                                                                        onError={(e) => {
+                                                                            console.error('Image failed to load:', fileUrl);
+                                                                            // If image fails to load, show file preview instead
+                                                                            e.currentTarget.style.display = 'none';
+                                                                            // You might want to set a state to show file preview instead
+                                                                        }}
+                                                                    />
+                                                                ) : (
+                                                                    // Show file preview
+                                                                    <Box
+                                                                        height="200px"
+                                                                        bg={isPDF ? "red.50" : isDocument ? "blue.50" : "gray.100"}
+                                                                        display="flex"
+                                                                        alignItems="center"
+                                                                        justifyContent="center"
+                                                                        cursor={fileUrl ? "pointer" : "default"}
+                                                                        onClick={() => fileUrl && window.open(fileUrl, '_blank')}
+                                                                        borderBottom="1px solid"
+                                                                        borderColor="gray.200"
+                                                                        _hover={fileUrl ? { bg: isPDF ? "red.100" : isDocument ? "blue.100" : "gray.200" } : {}}
+                                                                    >
+                                                                        <VStack spacing={2}>
+                                                                            <Icon
+                                                                                as={FiFileText}
+                                                                                boxSize={8}
+                                                                                color={isPDF ? "red.400" : isDocument ? "blue.400" : secondaryTextColor}
+                                                                            />
+                                                                            <Text fontSize="sm" fontWeight="medium" textAlign="center">
+                                                                                {attachment.fileName || 'Document'}
+                                                                            </Text>
+                                                                            <Badge
+                                                                                colorScheme={isPDF ? "red" : isDocument ? "blue" : "gray"}
+                                                                                variant="subtle"
+                                                                            >
+                                                                                {fileExtension.toUpperCase()}
+                                                                            </Badge>
+                                                                            {fileUrl && (
+                                                                                <Text fontSize="xs" color="blue.500" mt={2}>
+                                                                                    Click to open
+                                                                                </Text>
+                                                                            )}
+                                                                        </VStack>
+                                                                    </Box>
+                                                                )}
+                                                                <Box p={3}>
+                                                                    <Text fontSize="sm" fontWeight="medium" noOfLines={1}>
+                                                                        {attachment.fileName || 'Evidence File'}
+                                                                    </Text>
+                                                                    <Text fontSize="xs" color={secondaryTextColor} mt={1}>
+                                                                        {isImage ? 'Photo' : `${fileExtension.toUpperCase()} File`}
+                                                                    </Text>
+                                                                    {fileUrl && !isImage && (
+                                                                        <Text fontSize="xs" color="blue.500" mt={1}>
+                                                                            Click preview to download
+                                                                        </Text>
+                                                                    )}
+                                                                </Box>
+                                                            </Box>
+                                                        );
+                                                    })}
+                                                </SimpleGrid>
+                                            </VStack>
+                                        )}
+                                    </Box>
+                                )}
                             </VStack>
                         )}
                     </ModalBody>

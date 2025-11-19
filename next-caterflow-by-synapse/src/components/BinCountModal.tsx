@@ -308,7 +308,8 @@ export default function BinCountModal({ isOpen, onClose, binCount, onSave }: Bin
         setIsBinModalOpen(false);
     };
 
-    const handleStockItemsSelect = async (item: StockItemForSelector) => {
+    // In BinCountModal.tsx - Update the handleStockItemsSelect function
+    const handleStockItemsSelect = async (items: StockItemForSelector[]) => {
         setIsStockItemModalOpen(false);
 
         if (!selectedBin) {
@@ -322,12 +323,14 @@ export default function BinCountModal({ isOpen, onClose, binCount, onSave }: Bin
             return;
         }
 
-        // Check for duplicates
+        // Filter out duplicates
         const existingItemIds = new Set(countedItems.map(i => i.stockItem._id));
-        if (existingItemIds.has(item._id)) {
+        const newItems = items.filter(item => !existingItemIds.has(item._id));
+
+        if (newItems.length === 0) {
             toast({
-                title: "Item already added",
-                description: `${item.name} is already in your bin count.`,
+                title: "All items already added",
+                description: "The selected items are already in your bin count.",
                 status: "warning",
                 duration: 3000,
                 isClosable: true,
@@ -338,38 +341,60 @@ export default function BinCountModal({ isOpen, onClose, binCount, onSave }: Bin
         setLoading(true);
 
         try {
-            let systemQuantity = 0;
+            // Fetch system quantities for all new items in parallel
+            const itemsWithQuantities = await Promise.all(
+                newItems.map(async (item) => {
+                    let systemQuantity = 0;
+                    try {
+                        const systemQuantityRes = await fetch(
+                            `/api/stock-items/${item._id}/in-bin/${selectedBin._id}`
+                        );
+                        if (systemQuantityRes.ok) {
+                            const { inStock } = await systemQuantityRes.json();
+                            systemQuantity = inStock || 0;
+                        }
+                    } catch (error) {
+                        console.warn(`Could not fetch system quantity for ${item.name}:`, error);
+                    }
 
-            // Try to fetch current system quantity
-            try {
-                const systemQuantityRes = await fetch(
-                    `/api/stock-items/${item._id}/in-bin/${selectedBin._id}`
-                );
-                if (systemQuantityRes.ok) {
-                    const { inStock } = await systemQuantityRes.json();
-                    systemQuantity = inStock || 0;
-                }
-            } catch (error) {
-                console.warn(`Could not fetch system quantity for ${item.name}:`, error);
+                    return {
+                        _key: nanoid(),
+                        stockItem: {
+                            _id: item._id,
+                            name: item.name,
+                            sku: item.sku || 'N/A'
+                        },
+                        countedQuantity: 0,
+                        systemQuantityAtCountTime: systemQuantity,
+                    };
+                })
+            );
+
+            setCountedItems(prev => [...prev, ...itemsWithQuantities]);
+
+            if (itemsWithQuantities.length < items.length) {
+                toast({
+                    title: 'Some items skipped',
+                    description: `${items.length - itemsWithQuantities.length} items were already in the count`,
+                    status: 'info',
+                    duration: 3000,
+                    isClosable: true,
+                });
+            } else {
+                toast({
+                    title: 'Items added',
+                    description: `${itemsWithQuantities.length} items added to bin count`,
+                    status: 'success',
+                    duration: 2000,
+                    isClosable: true,
+                });
             }
 
-            // Batch the state update
-            setCountedItems(prev => [...prev, {
-                _key: nanoid(),
-                stockItem: {
-                    _id: item._id,
-                    name: item.name,
-                    sku: item.sku || 'N/A'
-                },
-                countedQuantity: 0,
-                systemQuantityAtCountTime: systemQuantity,
-            }]);
-
         } catch (error: any) {
-            console.error("Error adding stock item:", error);
+            console.error("Error adding stock items:", error);
             toast({
                 title: 'Error',
-                description: 'Failed to add item. Please try again.',
+                description: 'Failed to add items. Please try again.',
                 status: 'error',
                 duration: 5000,
                 isClosable: true,

@@ -1,3 +1,4 @@
+// Updated StockItemSelectorModal.tsx
 import React, { useState, useEffect, useCallback } from 'react';
 import {
     Modal,
@@ -21,9 +22,12 @@ import {
     InputGroup,
     InputLeftElement,
     Spinner,
-    useColorModeValue, // Added this import
+    useColorModeValue,
+    Checkbox,
+    Flex,
+    Icon,
 } from '@chakra-ui/react';
-import { FiSearch } from 'react-icons/fi';
+import { FiSearch, FiCheck } from 'react-icons/fi';
 
 interface StockItem {
     _id: string;
@@ -47,18 +51,27 @@ interface Category {
 interface StockItemSelectorModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onSelect: (item: StockItem) => void;
+    onSelect: (items: StockItem[]) => void; // Updated to accept array
     existingItemIds: string[];
     sourceBinId?: string;
+    multiSelect?: boolean; // New prop to enable multi-select
 }
 
-export default function StockItemSelectorModal({ isOpen, onClose, onSelect, existingItemIds, sourceBinId }: StockItemSelectorModalProps) {
+export default function StockItemSelectorModal({ 
+    isOpen, 
+    onClose, 
+    onSelect, 
+    existingItemIds, 
+    sourceBinId,
+    multiSelect = true // Default to true for better UX
+}: StockItemSelectorModalProps) {
     const [stockItems, setStockItems] = useState<StockItem[]>([]);
     const [filteredItems, setFilteredItems] = useState<StockItem[]>([]);
     const [categories, setCategories] = useState<Category[]>([]);
     const [selectedCategory, setSelectedCategory] = useState<string>('');
     const [searchTerm, setSearchTerm] = useState('');
     const [loading, setLoading] = useState(true);
+    const [selectedItems, setSelectedItems] = useState<StockItem[]>([]); // New state for multi-select
     const toast = useToast();
 
     // Theme-aware colors
@@ -67,7 +80,7 @@ export default function StockItemSelectorModal({ isOpen, onClose, onSelect, exis
     const listItemHoverBg = useColorModeValue('neutral.light.bg-secondary', 'neutral.dark.bg-card-hover');
     const listItemBorderColor = useColorModeValue('neutral.light.border-color', 'neutral.dark.border-color');
     const footerBorderColor = useColorModeValue('neutral.light.border-color', 'neutral.dark.border-color');
-
+    const selectedItemBg = useColorModeValue('blue.50', 'blue.900');
 
     const fetchStockItems = useCallback(async () => {
         setLoading(true);
@@ -104,6 +117,7 @@ export default function StockItemSelectorModal({ isOpen, onClose, onSelect, exis
     useEffect(() => {
         if (isOpen) {
             fetchStockItems();
+            setSelectedItems([]); // Reset selection when modal opens
         }
     }, [isOpen, fetchStockItems]);
 
@@ -120,19 +134,63 @@ export default function StockItemSelectorModal({ isOpen, onClose, onSelect, exis
     }, [searchTerm, selectedCategory, stockItems, existingItemIds]);
 
     const handleItemSelect = (item: StockItem) => {
-        onSelect(item);
+        if (multiSelect) {
+            setSelectedItems(prev => {
+                const isAlreadySelected = prev.some(selected => selected._id === item._id);
+                if (isAlreadySelected) {
+                    return prev.filter(selected => selected._id !== item._id);
+                } else {
+                    return [...prev, item];
+                }
+            });
+        } else {
+            onSelect([item]);
+            onClose();
+        }
+    };
+
+    const handleConfirmSelection = () => {
+        if (selectedItems.length === 0) {
+            toast({
+                title: 'No items selected',
+                description: 'Please select at least one item.',
+                status: 'warning',
+                duration: 3000,
+                isClosable: true,
+            });
+            return;
+        }
+        onSelect(selectedItems);
         onClose();
+    };
+
+    const isItemSelected = (itemId: string) => {
+        return selectedItems.some(item => item._id === itemId);
     };
 
     const getItemTypeColor = (itemType: 'food' | 'nonFood') => {
         return itemType === 'food' ? 'orange' : 'teal';
     };
 
+    const clearFilters = () => {
+        setSearchTerm('');
+        setSelectedCategory('');
+    };
+
     return (
         <Modal isOpen={isOpen} onClose={onClose} size="xl">
             <ModalOverlay />
             <ModalContent>
-                <ModalHeader>Select Stock Item</ModalHeader>
+                <ModalHeader>
+                    <VStack align="start" spacing={2}>
+                        <Text>Select Stock Items</Text>
+                        {multiSelect && (
+                            <Text fontSize="sm" color="gray.600">
+                                {selectedItems.length} item(s) selected
+                            </Text>
+                        )}
+                    </VStack>
+                </ModalHeader>
                 <ModalCloseButton />
                 <ModalBody>
                     <VStack spacing={4} align="stretch">
@@ -141,23 +199,35 @@ export default function StockItemSelectorModal({ isOpen, onClose, onSelect, exis
                                 <FiSearch color={searchIconColor} />
                             </InputLeftElement>
                             <Input
-                                placeholder="Search items..."
+                                placeholder="Search items by name, SKU, or description..."
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
                             />
                         </InputGroup>
-                        <Select
-                            placeholder="Filter by Category"
-                            value={selectedCategory}
-                            onChange={(e) => setSelectedCategory(e.target.value)}
-                        >
-                            <option value="">All Categories</option>
-                            {categories.map(category => (
-                                <option key={category._id} value={category._id}>
-                                    {category.title}
-                                </option>
-                            ))}
-                        </Select>
+                        
+                        <HStack spacing={3}>
+                            <Select
+                                placeholder="All Categories"
+                                value={selectedCategory}
+                                onChange={(e) => setSelectedCategory(e.target.value)}
+                                flex="1"
+                            >
+                                {categories.map(category => (
+                                    <option key={category._id} value={category._id}>
+                                        {category.title}
+                                    </option>
+                                ))}
+                            </Select>
+                            <Button 
+                                size="sm" 
+                                variant="outline" 
+                                onClick={clearFilters}
+                                isDisabled={!searchTerm && !selectedCategory}
+                            >
+                                Clear
+                            </Button>
+                        </HStack>
+
                         <Box maxHeight="400px" overflowY="auto">
                             {loading ? (
                                 <Box textAlign="center" py={10}>
@@ -165,37 +235,58 @@ export default function StockItemSelectorModal({ isOpen, onClose, onSelect, exis
                                 </Box>
                             ) : filteredItems.length === 0 ? (
                                 <Text textAlign="center" color={noItemsTextColor} mt={4}>
-                                    No stock items found.
+                                    {searchTerm || selectedCategory ? 'No items match your search.' : 'No stock items available.'}
                                 </Text>
                             ) : (
-                                <List spacing={3}>
-                                    {filteredItems.map((item) => (
-                                        <ListItem
-                                            key={item._id}
-                                            p={3}
-                                            borderWidth="1px"
-                                            borderColor={listItemBorderColor}
-                                            borderRadius="md"
-                                            _hover={{ bg: listItemHoverBg, cursor: 'pointer' }}
-                                            onClick={() => handleItemSelect(item)}
-                                        >
-                                            <VStack align="start" spacing={1}>
-                                                <HStack>
-                                                    <Text fontWeight="bold">{item.name}</Text>
-                                                    <Badge colorScheme={getItemTypeColor(item.itemType)}>
-                                                        {item.itemType}
-                                                    </Badge>
+                                <List spacing={2}>
+                                    {filteredItems.map((item) => {
+                                        const isSelected = isItemSelected(item._id);
+                                        return (
+                                            <ListItem
+                                                key={item._id}
+                                                p={3}
+                                                borderWidth="1px"
+                                                borderColor={listItemBorderColor}
+                                                borderRadius="md"
+                                                bg={isSelected ? selectedItemBg : 'transparent'}
+                                                _hover={{ bg: isSelected ? selectedItemBg : listItemHoverBg, cursor: 'pointer' }}
+                                                onClick={() => handleItemSelect(item)}
+                                            >
+                                                <HStack align="start" spacing={3}>
+                                                    {multiSelect && (
+                                                        <Checkbox
+                                                            isChecked={isSelected}
+                                                            onChange={() => handleItemSelect(item)}
+                                                            onClick={(e) => e.stopPropagation()}
+                                                        />
+                                                    )}
+                                                    <VStack align="start" spacing={1} flex="1">
+                                                        <HStack>
+                                                            <Text fontWeight="bold">{item.name}</Text>
+                                                            <Badge colorScheme={getItemTypeColor(item.itemType)} size="sm">
+                                                                {item.itemType}
+                                                            </Badge>
+                                                        </HStack>
+                                                        <Text fontSize="sm">SKU: {item.sku}</Text>
+                                                        <Text fontSize="sm">Unit: {item.unitOfMeasure}</Text>
+                                                        {item.description && (
+                                                            <Text fontSize="sm" noOfLines={2}>
+                                                                {item.description}
+                                                            </Text>
+                                                        )}
+                                                        {sourceBinId && (
+                                                            <Text fontSize="sm" color="gray.600">
+                                                                Current stock: {item.currentStock}
+                                                            </Text>
+                                                        )}
+                                                    </VStack>
+                                                    {isSelected && multiSelect && (
+                                                        <Icon as={FiCheck} color="green.500" />
+                                                    )}
                                                 </HStack>
-                                                <Text fontSize="sm">SKU: {item.sku}</Text>
-                                                <Text fontSize="sm">Unit: {item.unitOfMeasure}</Text>
-                                                {item.description && (
-                                                    <Text fontSize="sm" isTruncated maxWidth="100%">
-                                                        Description: {item.description}
-                                                    </Text>
-                                                )}
-                                            </VStack>
-                                        </ListItem>
-                                    ))}
+                                            </ListItem>
+                                        );
+                                    })}
                                 </List>
                             )}
                         </Box>
@@ -205,9 +296,21 @@ export default function StockItemSelectorModal({ isOpen, onClose, onSelect, exis
                     borderTop="1px solid"
                     borderColor={footerBorderColor}
                 >
-                    <Button variant="ghost" onClick={onClose}>
-                        Cancel
-                    </Button>
+                    <HStack spacing={3}>
+                        <Button variant="ghost" onClick={onClose}>
+                            Cancel
+                        </Button>
+                        {multiSelect && (
+                            <Button
+                                colorScheme="blue"
+                                onClick={handleConfirmSelection}
+                                isDisabled={selectedItems.length === 0}
+                                leftIcon={<FiCheck />}
+                            >
+                                Add {selectedItems.length} Item(s)
+                            </Button>
+                        )}
+                    </HStack>
                 </ModalFooter>
             </ModalContent>
         </Modal>

@@ -1,4 +1,4 @@
-// src/components/CreatePurchaseOrderModal.tsx
+// Enhanced CreatePurchaseOrderModal.tsx with Multi-Select
 import React, { useState, useEffect } from 'react';
 import {
     Modal,
@@ -25,8 +25,11 @@ import {
     NumberInputStepper,
     NumberIncrementStepper,
     NumberDecrementStepper,
+    Checkbox,
+    Badge,
+    useColorModeValue,
 } from '@chakra-ui/react';
-import { FiPlus, FiX } from 'react-icons/fi';
+import { FiPlus, FiX, FiCheck } from 'react-icons/fi';
 import { StockItem, Supplier, Site } from '@/lib/sanityTypes';
 import { client } from '@/lib/sanity';
 import { groq } from 'next-sanity';
@@ -87,7 +90,12 @@ export default function CreatePurchaseOrderModal({
     const [selectedSite, setSelectedSite] = useState<string>(selectedSiteId || '');
     const [isCreatingOrder, setIsCreatingOrder] = useState(false);
     const [isAddingItems, setIsAddingItems] = useState(false);
+    const [selectedItemsToAdd, setSelectedItemsToAdd] = useState<StockItemWithExpandedCategory[]>([]); // New state for multi-select
     const toast = useToast();
+
+    // Theme-aware colors
+    const selectedItemBg = useColorModeValue('blue.50', 'blue.900');
+    const listItemHoverBg = useColorModeValue('gray.50', 'gray.700');
 
     useEffect(() => {
         if (isOpen && selectedItems.length > 0) {
@@ -154,6 +162,7 @@ export default function CreatePurchaseOrderModal({
         setIsAddingItems(true);
         try {
             await Promise.all([fetchAvailableItems(), fetchCategories()]);
+            setSelectedItemsToAdd([]); // Reset selection when modal opens
             setIsAddItemModalOpen(true);
         } catch (error) {
             console.error('Failed to open add item modal:', error);
@@ -162,16 +171,40 @@ export default function CreatePurchaseOrderModal({
         }
     };
 
-    const handleAddItems = (items: any[]) => {
+    // Enhanced multi-select handler
+    const handleItemSelection = (item: StockItemWithExpandedCategory) => {
+        setSelectedItemsToAdd(prev => {
+            const isAlreadySelected = prev.some(selected => selected._id === item._id);
+            if (isAlreadySelected) {
+                return prev.filter(selected => selected._id !== item._id);
+            } else {
+                return [...prev, item];
+            }
+        });
+    };
+
+    // Enhanced bulk add handler
+    const handleBulkAddItems = () => {
+        if (selectedItemsToAdd.length === 0) {
+            toast({
+                title: 'No items selected',
+                description: 'Please select at least one item to add.',
+                status: 'warning',
+                duration: 3000,
+                isClosable: true,
+            });
+            return;
+        }
+
         // Prevent duplicates by checking if item already exists in orderItems
-        const newItems = items.filter(newItem =>
-            !orderItems.some(existingItem => existingItem.stockItem === newItem.item._id)
+        const newItems = selectedItemsToAdd.filter(newItem =>
+            !orderItems.some(existingItem => existingItem.stockItem === newItem._id)
         );
 
         if (newItems.length === 0) {
             toast({
-                title: 'Item already added',
-                description: 'This item is already in the purchase order',
+                title: 'Items already added',
+                description: 'All selected items are already in the purchase order',
                 status: 'warning',
                 duration: 3000,
                 isClosable: true,
@@ -180,21 +213,21 @@ export default function CreatePurchaseOrderModal({
         }
 
         const newOrderItems: OrderItem[] = newItems.map(item => ({
-            stockItem: item.item._id,
-            supplier: item.item.primarySupplier?._ref ||
-                (item.item.suppliers && item.item.suppliers.length > 0 ? item.item.suppliers[0]._ref : ''),
-            orderedQuantity: item.quantity,
-            unitPrice: item.price,
+            stockItem: item._id,
+            supplier: item.primarySupplier?._id ||
+                (item.suppliers && item.suppliers.length > 0 ? item.suppliers[0]._id : ''),
+            orderedQuantity: 1,
+            unitPrice: item.unitPrice || 0,
             _key: Math.random().toString(36).substr(2, 9)
         }));
 
         setOrderItems(prev => [...prev, ...newOrderItems]);
 
-        if (newItems.length < items.length) {
+        if (newItems.length < selectedItemsToAdd.length) {
             toast({
-                title: 'Some items skipped',
-                description: `${items.length - newItems.length} items were already in the order`,
-                status: 'info',
+                title: 'Items added',
+                description: `${newItems.length} items added (${selectedItemsToAdd.length - newItems.length} were already in the order)`,
+                status: 'success',
                 duration: 3000,
                 isClosable: true,
             });
@@ -208,7 +241,34 @@ export default function CreatePurchaseOrderModal({
             });
         }
 
+        setSelectedItemsToAdd([]);
         setIsAddItemModalOpen(false);
+    };
+
+    // Select all/deselect all functionality
+    const handleSelectAll = () => {
+        const filteredAvailableItems = availableItems.filter(item => {
+            const matchesSearch = searchTerm === '' ||
+                item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                item.sku.toLowerCase().includes(searchTerm.toLowerCase());
+            const matchesCategory = selectedCategory === '' ||
+                (item.category && item.category.title === selectedCategory);
+            const isAlreadyInOrder = orderItems.some(orderItem => orderItem.stockItem === item._id);
+
+            return matchesSearch && matchesCategory && !isAlreadyInOrder;
+        });
+
+        if (selectedItemsToAdd.length === filteredAvailableItems.length) {
+            // Deselect all
+            setSelectedItemsToAdd([]);
+        } else {
+            // Select all
+            setSelectedItemsToAdd(filteredAvailableItems);
+        }
+    };
+
+    const isItemSelected = (itemId: string) => {
+        return selectedItemsToAdd.some(item => item._id === itemId);
     };
 
     const updateItemSupplier = (index: number, supplierId: string) => {
@@ -297,7 +357,26 @@ export default function CreatePurchaseOrderModal({
     };
 
     const handleCloseAddItemModal = () => {
+        setSelectedItemsToAdd([]);
         setIsAddItemModalOpen(false);
+    };
+
+    // Get filtered items for display
+    const filteredItems = availableItems.filter(item => {
+        const matchesSearch = searchTerm === '' ||
+            item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            item.sku.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesCategory = selectedCategory === '' ||
+            (item.category && item.category.title === selectedCategory);
+        const isAlreadyInOrder = orderItems.some(orderItem => orderItem.stockItem === item._id);
+
+        return matchesSearch && matchesCategory && !isAlreadyInOrder;
+    });
+
+    // Clear filters
+    const clearFilters = () => {
+        setSearchTerm('');
+        setSelectedCategory('');
     };
 
     return (
@@ -411,22 +490,40 @@ export default function CreatePurchaseOrderModal({
                 </ModalContent>
             </Modal>
 
-            {/* Add Item Modal */}
+            {/* Enhanced Add Item Modal with Multi-Select */}
             <Modal isOpen={isAddItemModalOpen} onClose={handleCloseAddItemModal} size="4xl">
                 <ModalOverlay />
                 <ModalContent>
-                    <ModalHeader>Add Items to Purchase Order</ModalHeader>
+                    <ModalHeader>
+                        <VStack align="start" spacing={2}>
+                            <Text>Add Items to Purchase Order</Text>
+                            <HStack>
+                                <Badge colorScheme="blue" variant="subtle">
+                                    {selectedItemsToAdd.length} item(s) selected
+                                </Badge>
+                                {filteredItems.length > 0 && (
+                                    <Button
+                                        size="xs"
+                                        variant="ghost"
+                                        onClick={handleSelectAll}
+                                    >
+                                        {selectedItemsToAdd.length === filteredItems.length ? 'Deselect All' : 'Select All'}
+                                    </Button>
+                                )}
+                            </HStack>
+                        </VStack>
+                    </ModalHeader>
                     <ModalCloseButton />
                     <ModalBody>
                         <VStack spacing={4} align="stretch">
                             <HStack>
                                 <Input
-                                    placeholder="Search by name or SKU"
+                                    placeholder="Search by name or SKU..."
                                     value={searchTerm}
                                     onChange={(e) => setSearchTerm(e.target.value)}
                                 />
                                 <Select
-                                    placeholder="Filter by Category"
+                                    placeholder="All Categories"
                                     value={selectedCategory}
                                     onChange={(e) => setSelectedCategory(e.target.value)}
                                 >
@@ -436,56 +533,84 @@ export default function CreatePurchaseOrderModal({
                                         </option>
                                     ))}
                                 </Select>
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={clearFilters}
+                                    isDisabled={!searchTerm && !selectedCategory}
+                                >
+                                    Clear
+                                </Button>
                             </HStack>
 
                             {loadingItems ? (
                                 <Flex justifyContent="center" alignItems="center" h="200px">
                                     <Spinner />
                                 </Flex>
-                            ) : availableItems.length === 0 ? (
-                                <Text>No items to display.</Text>
+                            ) : filteredItems.length === 0 ? (
+                                <Text textAlign="center" color="gray.500" py={8}>
+                                    {searchTerm || selectedCategory ? 'No items match your search.' : 'No items available to add.'}
+                                </Text>
                             ) : (
-                                <Box overflowY="auto" maxH="300px">
+                                <Box overflowY="auto" maxH="400px">
                                     <VStack spacing={2} align="stretch">
-                                        {availableItems
-                                            .filter(item => {
-                                                const matchesSearch = searchTerm === '' ||
-                                                    item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                                                    item.sku.toLowerCase().includes(searchTerm.toLowerCase());
-                                                const matchesCategory = selectedCategory === '' ||
-                                                    (item.category && item.category.title === selectedCategory);
-                                                const isAlreadyInOrder = orderItems.some(orderItem => orderItem.stockItem === item._id);
-
-                                                return matchesSearch && matchesCategory && !isAlreadyInOrder;
-                                            })
-                                            .map(item => (
+                                        {filteredItems.map((item) => {
+                                            const isSelected = isItemSelected(item._id);
+                                            return (
                                                 <Flex
                                                     key={item._id}
                                                     alignItems="center"
-                                                    justifyContent="space-between"
-                                                    p={2}
-                                                    cursor="pointer"
-                                                    onClick={() => handleAddItems([{ item, quantity: 1, price: item.unitPrice || 0 }])}
+                                                    p={3}
+                                                    borderWidth="1px"
+                                                    borderRadius="md"
+                                                    bg={isSelected ? selectedItemBg : 'transparent'}
+                                                    _hover={{ bg: isSelected ? selectedItemBg : listItemHoverBg, cursor: 'pointer' }}
+                                                    onClick={() => handleItemSelection(item)}
                                                 >
-                                                    <Box>
-                                                        <Text fontWeight="bold">{item.name}</Text>
-                                                        <Text fontSize="sm">SKU: {item.sku}</Text>
-                                                        <Text fontSize="sm" color="gray.600">
-                                                            Category: {item.category?.title || 'Uncategorized'}
-                                                        </Text>
+                                                    <Checkbox
+                                                        isChecked={isSelected}
+                                                        onChange={() => handleItemSelection(item)}
+                                                        mr={3}
+                                                    />
+                                                    <Box flex="1">
+                                                        <HStack align="start" justify="space-between">
+                                                            <VStack align="start" spacing={1}>
+                                                                <Text fontWeight="bold">{item.name}</Text>
+                                                                <Text fontSize="sm">SKU: {item.sku}</Text>
+                                                                <Text fontSize="sm" color="gray.600">
+                                                                    Category: {item.category?.title || 'Uncategorized'} • Unit: {item.unitOfMeasure}
+                                                                </Text>
+                                                                <Text fontSize="sm" color="blue.600" fontWeight="medium">
+                                                                    Price: ${item.unitPrice || 0}
+                                                                </Text>
+                                                            </VStack>
+                                                            {isSelected && (
+                                                                <FiCheck color="green" />
+                                                            )}
+                                                        </HStack>
                                                     </Box>
-                                                    <Button size="sm" colorScheme="blue">Add</Button>
                                                 </Flex>
-                                            ))}
+                                            );
+                                        })}
                                     </VStack>
                                 </Box>
                             )}
                         </VStack>
                     </ModalBody>
                     <ModalFooter>
-                        <Button variant="ghost" ml={3} onClick={handleCloseAddItemModal}>
-                            Close
-                        </Button>
+                        <HStack spacing={3}>
+                            <Button variant="ghost" onClick={handleCloseAddItemModal}>
+                                Cancel
+                            </Button>
+                            <Button
+                                colorScheme="blue"
+                                onClick={handleBulkAddItems}
+                                isDisabled={selectedItemsToAdd.length === 0}
+                                leftIcon={<FiPlus />}
+                            >
+                                Add {selectedItemsToAdd.length} Item(s)
+                            </Button>
+                        </HStack>
                     </ModalFooter>
                 </ModalContent>
             </Modal>

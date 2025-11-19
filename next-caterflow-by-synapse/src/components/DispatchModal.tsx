@@ -39,14 +39,15 @@ import {
     Td,
     TableContainer,
     useColorModeValue,
-    Icon
+    Icon, Image, SimpleGrid, Badge
 } from '@chakra-ui/react';
 import { FiFileText, FiPlus, FiTrash2, FiChevronUp, FiChevronDown } from 'react-icons/fi';
-import { SimpleGrid, Image } from '@chakra-ui/react'; // ADD Image and SimpleGrid
 import StockItemSelectorModal from './StockItemSelectorModal';
 import FileUploadModal from './FileUploadModal';
 import { nanoid } from 'nanoid';
 import { useSession } from 'next-auth/react';
+
+import { urlFor } from '@/lib/sanity';
 
 interface DispatchedItem {
     _key: string;
@@ -106,7 +107,22 @@ interface Dispatch {
     peopleFed?: number;
     evidenceStatus?: 'pending' | 'partial' | 'complete';
     status?: string;
-    attachments?: { _id: string; url?: string; name?: string }[];
+    attachments?: {
+        _id: string;
+        fileName?: string;
+        fileType?: string;
+        description?: string;
+        uploadedAt?: string;
+        file?: {
+            asset?: {
+                _id: string;
+                _type: string;
+                url?: string;
+                originalFilename?: string;
+                mimeType?: string;
+            };
+        };
+    }[];
 }
 
 interface DispatchModalProps {
@@ -156,6 +172,13 @@ export default function DispatchModal({
     const tableBg = useColorModeValue('neutral.light.bg-card', 'neutral.dark.bg-card');
     const textSecondaryColor = useColorModeValue('neutral.light.text-secondary', 'neutral.dark.text-secondary');
     const tableBoxShadow = useColorModeValue('md', 'dark-md');
+
+    // Add these right after your existing useColorModeValue hooks (around line 85)
+    const evidenceButtonBg = useColorModeValue('gray.50', 'gray.700');
+    const evidenceButtonHoverBg = useColorModeValue('gray.100', 'gray.600');
+    const evidenceSectionBg = useColorModeValue('gray.50', 'gray.800');
+    const evidenceCardBg = useColorModeValue('white', 'gray.700');
+    const fallbackBg = useColorModeValue('gray.100', 'gray.600');
 
     const existingItemIds = dispatchedItems.filter(item => item.stockItem).map(item => item.stockItem._id);
 
@@ -396,36 +419,49 @@ export default function DispatchModal({
     };
 
     // Stock item selection
-    const handleStockItemSelect = (item: any) => {
-        const unitPrice = safeNumber(item.unitPrice || 0);
-        const newItem: DispatchedItem = {
-            _key: nanoid(),
-            stockItem: {
-                _id: item._id,
-                name: item.name,
-                sku: item.sku,
-                unitOfMeasure: item.unitOfMeasure,
-                currentStock: item.currentStock,
+    // In DispatchModal.tsx - Update the handleStockItemSelect function
+    const handleStockItemSelect = (items: any[]) => {
+        const newItems: DispatchedItem[] = items.map(item => {
+            const unitPrice = safeNumber(item.unitPrice || 0);
+            return {
+                _key: nanoid(),
+                stockItem: {
+                    _id: item._id,
+                    name: item.name,
+                    sku: item.sku,
+                    unitOfMeasure: item.unitOfMeasure,
+                    currentStock: item.currentStock,
+                    unitPrice: unitPrice,
+                },
+                dispatchedQuantity: 1,
                 unitPrice: unitPrice,
-            },
-            dispatchedQuantity: 1,
-            unitPrice: unitPrice,
-            totalCost: unitPrice * 1,
-            notes: '',
-        };
+                totalCost: unitPrice * 1,
+                notes: '',
+            };
+        });
 
         setDispatchedItems(prevItems => {
             const updatedItems = [...prevItems];
             if (editingIndex !== null) {
-                updatedItems[editingIndex] = newItem;
+                updatedItems[editingIndex] = newItems[0]; // For edit mode, use first item
                 setEditingIndex(null);
             } else {
-                updatedItems.push(newItem);
+                updatedItems.push(...newItems);
             }
             return updatedItems;
         });
 
         setIsStockItemModalOpen(false);
+
+        if (items.length > 1) {
+            toast({
+                title: 'Items added',
+                description: `${items.length} items added to dispatch`,
+                status: 'success',
+                duration: 2000,
+                isClosable: true,
+            });
+        }
     };
 
     const handleRemoveItem = (key: string) => {
@@ -547,7 +583,10 @@ export default function DispatchModal({
     };
 
     // Check all items dispatched (used to enable complete action)
-    const isFullyDispatched = dispatchedItems.length > 0 && dispatchedItems.every(item => item.dispatchedQuantity > 0);
+    // Replace the existing isFullyDispatched function with:
+    const isFullyDispatched = dispatchedItems.length > 0 &&
+        dispatchedItems.every(item => item.dispatchedQuantity > 0) &&
+        (peopleFed || 0) > 0; // ADD THIS LINE
 
     // Trigger the complete flow: ensure saved, then open upload modal
     const handleCompleteDispatch = async () => {
@@ -555,6 +594,18 @@ export default function DispatchModal({
             toast({
                 title: 'Incomplete dispatch',
                 description: 'You must set dispatched quantities for all items before completing.',
+                status: 'error',
+                duration: 5000,
+                isClosable: true,
+            });
+            return;
+        }
+
+        // This is the new validation for people fed
+        if (!peopleFed || peopleFed <= 0) {
+            toast({
+                title: 'People fed required',
+                description: 'You must specify how many people were fed before completing the dispatch.',
                 status: 'error',
                 duration: 5000,
                 isClosable: true,
@@ -855,6 +906,38 @@ export default function DispatchModal({
         }
     };
 
+    const getAttachmentUrl = (attachment: any): string | undefined => {
+        console.log('Attachment data:', attachment);
+
+        // If it's a Sanity file reference with asset
+        if (attachment.file?.asset) {
+            try {
+                console.log('Asset found:', attachment.file.asset);
+
+                // Check if it's an image asset
+                if (attachment.file.asset._type === 'sanity.imageAsset') {
+                    const url = urlFor(attachment.file.asset).url();
+                    console.log('Generated image URL:', url);
+                    return url;
+                } else if (attachment.file.asset.url) {
+                    // Use direct URL if available
+                    console.log('Using asset URL:', attachment.file.asset.url);
+                    return attachment.file.asset.url;
+                }
+            } catch (error) {
+                console.error('Error generating image URL:', error);
+            }
+        }
+
+        // Fallback to direct URL if available
+        if (attachment.url) {
+            console.log('Using direct URL:', attachment.url);
+            return attachment.url;
+        }
+
+        console.log('No URL found for attachment');
+        return undefined;
+    };
 
 
     const filteredBins = userRole === 'admin'
@@ -974,7 +1057,7 @@ export default function DispatchModal({
                                                     min={0}
                                                     onChange={handlePeopleFedChange}
                                                     isDisabled={!isEditable || loading}
-                                                    precision={2}
+                                                    precision={0}
                                                     step={1}
                                                 >
                                                     <NumberInputField />
@@ -1120,30 +1203,82 @@ export default function DispatchModal({
                                                     onClick={() => dispatch?._id && onToggleEvidence?.(dispatch._id)}
                                                     width="full"
                                                     justifyContent="space-between"
+                                                    bg="gray.50"
+                                                    _hover={{ bg: "gray.100" }}
                                                 >
-                                                    <Text>Evidence Photos ({dispatch.attachments.length})</Text>
+                                                    <HStack>
+                                                        <Text fontWeight="medium">Evidence Photos</Text>
+                                                        <Badge colorScheme="green" variant="solid">
+                                                            {dispatch.attachments.length}
+                                                        </Badge>
+                                                    </HStack>
                                                     <Icon as={isEvidenceExpanded ? FiChevronUp : FiChevronDown} />
                                                 </Button>
 
                                                 {isEvidenceExpanded && (
-                                                    <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={4} mt={4}>
-                                                        {dispatch.attachments.map((attachment) => (
-                                                            <Box key={attachment._id} borderWidth="1px" borderRadius="lg" overflow="hidden">
-                                                                <Image
-                                                                    src={attachment.url}
-                                                                    alt={attachment.name || 'Evidence photo'}
-                                                                    objectFit="cover"
-                                                                    width="100%"
-                                                                    height="200px"
-                                                                />
-                                                                <Box p={2}>
-                                                                    <Text fontSize="sm" noOfLines={1}>
-                                                                        {attachment.name || 'Evidence'}
-                                                                    </Text>
-                                                                </Box>
-                                                            </Box>
-                                                        ))}
-                                                    </SimpleGrid>
+                                                    <VStack spacing={4} mt={4} p={4} bg="gray.50" borderRadius="md">
+                                                        <Text fontSize="sm" color={textSecondaryColor} alignSelf="flex-start">
+                                                            Proof of dispatch completion
+                                                        </Text>
+                                                        <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={4} w="100%">
+                                                            {dispatch.attachments.map((attachment) => {
+                                                                const imageUrl = getAttachmentUrl(attachment);
+                                                                const isImage = imageUrl !== undefined;
+
+                                                                return (
+                                                                    <Box
+                                                                        key={attachment._id}
+                                                                        borderWidth="1px"
+                                                                        borderRadius="lg"
+                                                                        overflow="hidden"
+                                                                        bg="white"
+                                                                        boxShadow="sm"
+                                                                    >
+                                                                        {isImage ? (
+                                                                            <Image
+                                                                                src={imageUrl}
+                                                                                alt={'Evidence photo'}
+                                                                                objectFit="cover"
+                                                                                width="100%"
+                                                                                height="200px"
+                                                                                onError={(e) => {
+                                                                                    console.error('Image failed to load:', imageUrl);
+                                                                                    e.currentTarget.style.display = 'none';
+                                                                                }}
+                                                                                onLoad={() => console.log('Image loaded successfully:', imageUrl)}
+                                                                            />
+                                                                        ) : (
+                                                                            <Box
+                                                                                height="200px"
+                                                                                bg="gray.100"
+                                                                                display="flex"
+                                                                                alignItems="center"
+                                                                                justifyContent="center"
+                                                                            >
+                                                                                <VStack spacing={2}>
+                                                                                    <Icon as={FiFileText} boxSize={8} color={textSecondaryColor} />
+                                                                                    <Text fontSize="sm" color={textSecondaryColor}>
+                                                                                        {'Document'}
+                                                                                    </Text>
+                                                                                    <Text fontSize="xs" color={textSecondaryColor}>
+                                                                                        {'File'}
+                                                                                    </Text>
+                                                                                </VStack>
+                                                                            </Box>
+                                                                        )}
+                                                                        <Box p={3}>
+                                                                            <Text fontSize="sm" fontWeight="medium" noOfLines={1}>
+                                                                                {'Evidence File'}
+                                                                            </Text>
+                                                                            <Text fontSize="xs" color={textSecondaryColor} mt={1}>
+                                                                                {isImage ? 'Photo' : 'Document'}
+                                                                            </Text>
+                                                                        </Box>
+                                                                    </Box>
+                                                                );
+                                                            })}
+                                                        </SimpleGrid>
+                                                    </VStack>
                                                 )}
                                             </Box>
                                         )}
