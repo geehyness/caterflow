@@ -38,7 +38,13 @@ export async function GET() {
                 "stockItem": stockItem->{
                     _id,
                     name,
-                    sku
+                    sku,
+                    unitPrice, // ADD THIS LINE
+                    unitOfMeasure,
+                    "category": category->{
+                        _id,
+                        title
+                    }
                 },
                 countedQuantity,
                 systemQuantityAtCountTime,

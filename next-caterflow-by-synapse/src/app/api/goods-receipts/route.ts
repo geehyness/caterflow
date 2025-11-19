@@ -66,9 +66,22 @@ export async function GET() {
                 poNumber,
                 status,
                 orderDate,
+                totalAmount,
                 "supplier": supplier->{
                     _id,
                     name
+                },
+                "orderedItems": orderedItems[]{
+                    _key,
+                    orderedQuantity,
+                    unitPrice,
+                    totalPrice,
+                    "stockItem": stockItem->{
+                        _id,
+                        name,
+                        sku,
+                        unitPrice
+                    }
                 }
             },
             "receivingBin": receivingBin->{
@@ -86,11 +99,17 @@ export async function GET() {
                 batchNumber,
                 expiryDate,
                 condition,
+                unitPrice,
                 "stockItem": stockItem->{
                     _id,
                     name,
                     sku,
-                    unitOfMeasure
+                    unitOfMeasure,
+                    unitPrice,
+                    "category": category->{
+                        _id,
+                        title
+                    }
                 }
             },
             attachments[]->{
