@@ -723,8 +723,9 @@ export default function ComprehensiveReportsPage() {
         // 6. CLOSING STOCK = Opening + Purchases - Consumption + Variances
         const closingStockValue = openingStockValue + periodPurchasesValue - periodConsumption + netVariancesValue;
 
-        // 7. PROFIT CALCULATIONS
-        const profit = periodSales - periodConsumption;
+        // NEW (correct) calculation:
+        const COGS = openingStockValue + periodPurchasesValue - closingStockValue;
+        const profit = periodSales - COGS;
         const profitPercentage = periodSales > 0 ? (profit / periodSales) * 100 : 0;
 
         console.log('💰 Final financial calculations:', {
@@ -2304,13 +2305,13 @@ export default function ComprehensiveReportsPage() {
                                                         </SimpleGrid>
 
                                                         {/* Add calculation explanation */}
-                                                        <Box mt={4} p={3} bg="gray.50" borderRadius="md">
+                                                        <Box mt={4} p={3} borderRadius="md">
                                                             <Text fontSize="sm" fontWeight="medium">Calculation Method:</Text>
                                                             <Text fontSize="sm">• Opening Stock: Reconstructed from transaction history</Text>
                                                             <Text fontSize="sm">• Goods Received: Actual receipts in period ({analyticsData?.financial?.periodPurchases?.toLocaleString()})</Text>
-                                                            <Text fontSize="sm">• Dispatch Consumption: Actual dispatches in period ({analyticsData?.financial?.periodConsumption?.toLocaleString()})</Text>
-                                                            <Text fontSize="sm">• Closing Stock: Opening + Received - Consumption + Variances</Text>
-                                                            <Text fontSize="sm">• Gross Profit: Sales - Consumption</Text>
+                                                            <Text fontSize="sm">• Closing Stock: Calculated value ({analyticsData?.financial?.closingStockValue?.toLocaleString()})</Text>
+                                                            <Text fontSize="sm">• COGS: Opening Stock + Purchases - Closing Stock</Text>
+                                                            <Text fontSize="sm">• Gross Profit: Sales - COGS</Text>
                                                         </Box>
                                                     </CardBody>
                                                 </Card>
