@@ -49,10 +49,16 @@ export async function POST(request: NextRequest) {
         }
 
         const formData = await request.formData();
-        const file = formData.get('file') as File | null; // Change from Blob to File
+        const file = formData.get('file') as File | null;
         const relatedToId = formData.get('relatedTo');
         const fileType = formData.get('fileType');
         const description = formData.get('description');
+
+        // Invoice-specific fields
+        const invoiceNumber = formData.get('invoiceNumber');
+        const invoiceDate = formData.get('invoiceDate');
+        const invoiceAmount = formData.get('invoiceAmount');
+        const supplier = formData.get('supplier');
 
         // **Log the received form data**
         console.log('--- Server-side Received Data ---');
@@ -60,6 +66,10 @@ export async function POST(request: NextRequest) {
         console.log('Received Related To ID:', relatedToId);
         console.log('Received File Type:', fileType);
         console.log('Received Description:', description);
+        console.log('Invoice Number:', invoiceNumber);
+        console.log('Invoice Date:', invoiceDate);
+        console.log('Invoice Amount:', invoiceAmount);
+        console.log('Supplier:', supplier);
         console.log('---------------------------------');
 
         if (!file || !relatedToId) {
@@ -86,6 +96,22 @@ export async function POST(request: NextRequest) {
             );
         }
 
+        // Validate invoice-specific fields if fileType is 'invoice'
+        if (fileType === 'invoice') {
+            if (!invoiceNumber || typeof invoiceNumber !== 'string' || !invoiceNumber.trim()) {
+                return NextResponse.json(
+                    { error: 'Invoice number is required for invoice tracking' },
+                    { status: 400 }
+                );
+            }
+            if (!invoiceDate || typeof invoiceDate !== 'string' || !invoiceDate.trim()) {
+                return NextResponse.json(
+                    { error: 'Invoice date is required for invoice tracking' },
+                    { status: 400 }
+                );
+            }
+        }
+
         // Upload file to Sanity
         console.log('Uploading file to Sanity...');
         const fileAsset = await writeClient.assets.upload('file', file, {
@@ -93,6 +119,24 @@ export async function POST(request: NextRequest) {
             contentType: file.type,
         });
         console.log('Sanity asset upload successful:', fileAsset._id);
+
+        // Build description with invoice metadata
+        let finalDescription = description as string || '';
+
+        if (fileType === 'invoice') {
+            const invoiceMetadata = {
+                isInvoice: true,
+                invoiceNumber: invoiceNumber,
+                invoiceDate: invoiceDate,
+                invoiceAmount: invoiceAmount ? parseFloat(invoiceAmount as string) : 0,
+                supplier: supplier,
+                // Add the original description if it exists
+                userDescription: description || ''
+            };
+
+            // Store as JSON string in the description field
+            finalDescription = JSON.stringify(invoiceMetadata);
+        }
 
         // Create a new FileAttachment document
         console.log('Creating new FileAttachment document...');
@@ -112,7 +156,7 @@ export async function POST(request: NextRequest) {
                 _ref: user._id,
             },
             uploadedAt: new Date().toISOString(),
-            description: description,
+            description: finalDescription,
             relatedTo: {
                 _type: 'reference',
                 _ref: relatedToId,
@@ -121,21 +165,10 @@ export async function POST(request: NextRequest) {
         });
         console.log('FileAttachment document created:', newAttachment._id);
 
-
-        // Validate types
-        if (!file || !relatedToId || typeof relatedToId !== 'string') {
-            console.log('Missing file or related document ID');
-            return NextResponse.json(
-                { error: 'File and related document ID are required' },
-                { status: 400 }
-            );
-        }
-
-
         // Link the attachment to the related document
         console.log(`Patching document ${relatedToId} to add attachment reference...`);
         await writeClient
-            .patch(relatedToId)
+            .patch(relatedToId.toString())
             .setIfMissing({ attachments: [] })
             .insert('after', 'attachments[-1]', [
                 {

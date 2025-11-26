@@ -39,9 +39,10 @@ import {
     SimpleGrid, // Add this
     Image // Add this
 } from '@chakra-ui/react';
-import { FiCheck, FiSave, FiX, FiCheckCircle, FiFileText } from 'react-icons/fi';
+import { FiCheck, FiSave, FiX, FiCheckCircle, FiFileText, FiDollarSign } from 'react-icons/fi';
 import FileUploadModal from '@/components/FileUploadModal';
 import BinSelectorModal from '@/components/BinSelectorModal';
+import { parseInvoiceMetadata, isInvoiceAttachment, getInvoiceDisplayInfo } from '@/lib/invoiceUtils';
 
 
 // Add these imports at the top
@@ -163,6 +164,9 @@ export default function GoodsReceiptModal({
     const [isEvidenceExpanded, setIsEvidenceExpanded] = useState(false);
 
     const [totalPrices, setTotalPrices] = useState<{ [key: string]: number | undefined }>({});
+
+    const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
+
 
     const isNewReceipt = !receipt || receipt._id.startsWith('temp-');
 
@@ -624,6 +628,38 @@ export default function GoodsReceiptModal({
             })
         );
         return itemsWithCurrentPrices;
+    };
+
+    // Add this function to handle invoice upload completion
+    // Add this function to handle invoice upload completion
+    const handleInvoiceUploadComplete = async (attachmentIds: string[]) => {
+        try {
+            toast({
+                title: 'Invoice uploaded successfully',
+                description: 'Invoice has been tracked and linked to this receipt.',
+                status: 'success',
+                duration: 5000,
+                isClosable: true,
+            });
+
+            // Refresh the receipt data to show the new invoice
+            if (formData._id) {
+                const response = await fetch(`/api/goods-receipts/${formData._id}`);
+                if (response.ok) {
+                    const updatedReceipt = await response.json();
+                    setFormData(updatedReceipt);
+                }
+            }
+        } catch (error) {
+            console.error('Error handling invoice upload:', error);
+            toast({
+                title: 'Error',
+                description: 'Failed to refresh receipt data after invoice upload.',
+                status: 'error',
+                duration: 5000,
+                isClosable: true,
+            });
+        }
     };
 
 
@@ -1134,7 +1170,7 @@ export default function GoodsReceiptModal({
                                             _hover={{ bg: "gray.100" }}
                                         >
                                             <HStack>
-                                                <Text fontWeight="medium">Evidence Files</Text>
+                                                <Text fontWeight="medium">Evidence Files & Invoices</Text>
                                                 <Badge colorScheme="green" variant="solid">
                                                     {formData.attachments.length}
                                                 </Badge>
@@ -1145,97 +1181,182 @@ export default function GoodsReceiptModal({
                                         {isEvidenceExpanded && (
                                             <VStack spacing={4} mt={4} p={4} bg="gray.50" borderRadius="md">
                                                 <Text fontSize="sm" color={secondaryTextColor} alignSelf="flex-start">
-                                                    Proof of goods receipt
+                                                    Proof of goods receipt and supplier invoices
                                                 </Text>
-                                                <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={4} w="100%">
-                                                    {formData.attachments.map((attachment) => {
-                                                        const { url: fileUrl, type } = getAttachmentUrl(attachment);
-                                                        const isImage = type === 'image';
-                                                        const isFile = type === 'file';
-                                                        const fileExtension = attachment.fileName?.split('.').pop()?.toLowerCase() || 'file';
-                                                        const isPDF = fileExtension === 'pdf';
-                                                        const isDocument = ['doc', 'docx', 'txt'].includes(fileExtension);
 
-                                                        return (
-                                                            <Box
-                                                                key={attachment._id}
-                                                                borderWidth="1px"
-                                                                borderRadius="lg"
-                                                                overflow="hidden"
-                                                                bg="white"
-                                                                boxShadow="sm"
-                                                                position="relative"
-                                                            >
-                                                                {isImage && fileUrl ? (
-                                                                    // Show image preview
-                                                                    <Image
-                                                                        src={fileUrl}
-                                                                        alt={attachment.fileName || 'Evidence photo'}
-                                                                        objectFit="cover"
-                                                                        width="100%"
-                                                                        height="200px"
-                                                                        loading="lazy"
-                                                                        onError={(e) => {
-                                                                            console.error('Image failed to load:', fileUrl);
-                                                                            // If image fails to load, show file preview instead
-                                                                            e.currentTarget.style.display = 'none';
-                                                                            // You might want to set a state to show file preview instead
-                                                                        }}
-                                                                    />
-                                                                ) : (
-                                                                    // Show file preview
-                                                                    <Box
-                                                                        height="200px"
-                                                                        bg={isPDF ? "red.50" : isDocument ? "blue.50" : "gray.100"}
-                                                                        display="flex"
-                                                                        alignItems="center"
-                                                                        justifyContent="center"
-                                                                        cursor={fileUrl ? "pointer" : "default"}
-                                                                        onClick={() => fileUrl && window.open(fileUrl, '_blank')}
-                                                                        borderBottom="1px solid"
-                                                                        borderColor="gray.200"
-                                                                        _hover={fileUrl ? { bg: isPDF ? "red.100" : isDocument ? "blue.100" : "gray.200" } : {}}
-                                                                    >
-                                                                        <VStack spacing={2}>
-                                                                            <Icon
-                                                                                as={FiFileText}
-                                                                                boxSize={8}
-                                                                                color={isPDF ? "red.400" : isDocument ? "blue.400" : secondaryTextColor}
-                                                                            />
-                                                                            <Text fontSize="sm" fontWeight="medium" textAlign="center">
-                                                                                {attachment.fileName || 'Document'}
-                                                                            </Text>
-                                                                            <Badge
-                                                                                colorScheme={isPDF ? "red" : isDocument ? "blue" : "gray"}
-                                                                                variant="subtle"
+                                                {/* Separate invoices from other attachments */}
+                                                {formData.attachments.filter(attachment =>
+                                                    isInvoiceAttachment(attachment.description || "")
+                                                ).length > 0 && (
+                                                        <Box w="100%">
+                                                            <Text fontWeight="bold" mb={3} color="green.600">
+                                                                Tracked Invoices
+                                                            </Text>
+                                                            <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4} w="100%">
+                                                                {formData.attachments
+                                                                    .filter(attachment => isInvoiceAttachment(attachment.description || ""))
+                                                                    .map((attachment) => {
+                                                                        const invoiceInfo = getInvoiceDisplayInfo(attachment.description || "");
+                                                                        const { url: fileUrl, type } = getAttachmentUrl(attachment);
+
+                                                                        return (
+                                                                            <Box
+                                                                                key={attachment._id}
+                                                                                borderWidth="2px"
+                                                                                borderColor="green.200"
+                                                                                borderRadius="lg"
+                                                                                overflow="hidden"
+                                                                                bg="green.50"
+                                                                                boxShadow="sm"
                                                                             >
-                                                                                {fileExtension.toUpperCase()}
-                                                                            </Badge>
-                                                                            {fileUrl && (
-                                                                                <Text fontSize="xs" color="blue.500" mt={2}>
-                                                                                    Click to open
-                                                                                </Text>
-                                                                            )}
-                                                                        </VStack>
-                                                                    </Box>
-                                                                )}
-                                                                <Box p={3}>
-                                                                    <Text fontSize="sm" fontWeight="medium" noOfLines={1}>
-                                                                        {attachment.fileName || 'Evidence File'}
-                                                                    </Text>
-                                                                    <Text fontSize="xs" color={secondaryTextColor} mt={1}>
-                                                                        {isImage ? 'Photo' : `${fileExtension.toUpperCase()} File`}
-                                                                    </Text>
-                                                                    {fileUrl && !isImage && (
-                                                                        <Text fontSize="xs" color="blue.500" mt={1}>
-                                                                            Click preview to download
-                                                                        </Text>
-                                                                    )}
-                                                                </Box>
-                                                            </Box>
-                                                        );
-                                                    })}
-                                                </SimpleGrid>
+                                                                                <Box p={4} borderBottom="1px solid" borderColor="green.200">
+                                                                                    <HStack align="start" spacing={3}>
+                                                                                        <Icon as={FiDollarSign} color="green.500" mt={1} />
+                                                                                        <VStack align="start" spacing={1} flex="1">
+                                                                                            <Text fontWeight="bold" fontSize="sm">
+                                                                                                Invoice: {invoiceInfo.metadata?.invoiceNumber}
+                                                                                            </Text>
+                                                                                            <Text fontSize="xs">Supplier: {invoiceInfo.metadata?.supplier}</Text>
+                                                                                            <Text fontSize="xs">
+                                                                                                Amount: E {invoiceInfo.metadata?.invoiceAmount?.toFixed(2)}
+                                                                                            </Text>
+                                                                                            <Text fontSize="xs">
+                                                                                                Date: {new Date(invoiceInfo.metadata?.invoiceDate || '').toLocaleDateString()}
+                                                                                            </Text>
+                                                                                            {invoiceInfo.metadata?.userDescription && (
+                                                                                                <Text fontSize="xs" mt={1}>
+                                                                                                    {invoiceInfo.metadata.userDescription}
+                                                                                                </Text>
+                                                                                            )}
+                                                                                        </VStack>
+                                                                                    </HStack>
+                                                                                </Box>
+                                                                                <Box p={3}>
+                                                                                    <HStack justify="space-between">
+                                                                                        <Text fontSize="xs" color={secondaryTextColor}>
+                                                                                            {attachment.fileName}
+                                                                                        </Text>
+                                                                                        {fileUrl && (
+                                                                                            <Button
+                                                                                                size="xs"
+                                                                                                colorScheme="green"
+                                                                                                variant="outline"
+                                                                                                as="a"
+                                                                                                href={fileUrl}
+                                                                                                target="_blank"
+                                                                                            >
+                                                                                                View
+                                                                                            </Button>
+                                                                                        )}
+                                                                                    </HStack>
+                                                                                </Box>
+                                                                            </Box>
+                                                                        );
+                                                                    })}
+                                                            </SimpleGrid>
+                                                        </Box>
+                                                    )}
+
+                                                {/* Regular evidence files */}
+                                                {formData.attachments.filter(attachment =>
+                                                    !isInvoiceAttachment(attachment.description || "")
+                                                ).length > 0 && (
+                                                        <Box w="100%">
+                                                            <Text fontWeight="bold" mb={3} color="blue.600">
+                                                                Evidence Files
+                                                            </Text>
+                                                            <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={4} w="100%">
+                                                                {formData.attachments
+                                                                    .filter(attachment => !isInvoiceAttachment(attachment.description || ""))
+                                                                    .map((attachment) => {
+                                                                        const { url: fileUrl, type } = getAttachmentUrl(attachment);
+                                                                        const isImage = type === 'image';
+                                                                        const isFile = type === 'file';
+                                                                        const fileExtension = attachment.fileName?.split('.').pop()?.toLowerCase() || 'file';
+                                                                        const isPDF = fileExtension === 'pdf';
+                                                                        const isDocument = ['doc', 'docx', 'txt'].includes(fileExtension);
+
+                                                                        return (
+                                                                            <Box
+                                                                                key={attachment._id}
+                                                                                borderWidth="1px"
+                                                                                borderRadius="lg"
+                                                                                overflow="hidden"
+                                                                                bg="white"
+                                                                                boxShadow="sm"
+                                                                                position="relative"
+                                                                            >
+                                                                                {isImage && fileUrl ? (
+                                                                                    <Image
+                                                                                        src={fileUrl}
+                                                                                        alt={attachment.fileName || 'Evidence photo'}
+                                                                                        objectFit="cover"
+                                                                                        width="100%"
+                                                                                        height="200px"
+                                                                                        loading="lazy"
+                                                                                        onError={(e) => {
+                                                                                            console.error('Image failed to load:', fileUrl);
+                                                                                            e.currentTarget.style.display = 'none';
+                                                                                        }}
+                                                                                    />
+                                                                                ) : (
+                                                                                    <Box
+                                                                                        height="200px"
+                                                                                        bg={isPDF ? "red.50" : isDocument ? "blue.50" : "gray.100"}
+                                                                                        display="flex"
+                                                                                        alignItems="center"
+                                                                                        justifyContent="center"
+                                                                                        cursor={fileUrl ? "pointer" : "default"}
+                                                                                        onClick={() => fileUrl && window.open(fileUrl, '_blank')}
+                                                                                        borderBottom="1px solid"
+                                                                                        borderColor="gray.200"
+                                                                                        _hover={fileUrl ? { bg: isPDF ? "red.100" : isDocument ? "blue.100" : "gray.200" } : {}}
+                                                                                    >
+                                                                                        <VStack spacing={2}>
+                                                                                            <Icon
+                                                                                                as={FiFileText}
+                                                                                                boxSize={8}
+                                                                                                color={isPDF ? "red.400" : isDocument ? "blue.400" : secondaryTextColor}
+                                                                                            />
+                                                                                            <Text fontSize="sm" fontWeight="medium" textAlign="center">
+                                                                                                {attachment.fileName || 'Document'}
+                                                                                            </Text>
+                                                                                            <Badge
+                                                                                                colorScheme={isPDF ? "red" : isDocument ? "blue" : "gray"}
+                                                                                                variant="subtle"
+                                                                                            >
+                                                                                                {fileExtension.toUpperCase()}
+                                                                                            </Badge>
+                                                                                            {fileUrl && (
+                                                                                                <Text fontSize="xs" color="blue.500" mt={2}>
+                                                                                                    Click to open
+                                                                                                </Text>
+                                                                                            )}
+                                                                                        </VStack>
+                                                                                    </Box>
+                                                                                )}
+                                                                                <Box p={3}>
+                                                                                    <Text fontSize="sm" fontWeight="medium" noOfLines={1}>
+                                                                                        {attachment.fileName || 'Evidence File'}
+                                                                                    </Text>
+                                                                                    <Text fontSize="xs" color={secondaryTextColor} mt={1}>
+                                                                                        {attachment.description && !isInvoiceAttachment(attachment.description)
+                                                                                            ? attachment.description
+                                                                                            : (isImage ? 'Photo' : `${fileExtension.toUpperCase()} File`)
+                                                                                        }
+                                                                                    </Text>
+                                                                                    {fileUrl && !isImage && (
+                                                                                        <Text fontSize="xs" color="blue.500" mt={1}>
+                                                                                            Click preview to download
+                                                                                        </Text>
+                                                                                    )}
+                                                                                </Box>
+                                                                            </Box>
+                                                                        );
+                                                                    })}
+                                                            </SimpleGrid>
+                                                        </Box>
+                                                    )}
                                             </VStack>
                                         )}
                                     </Box>
@@ -1255,6 +1376,15 @@ export default function GoodsReceiptModal({
                             leftIcon={<FiFileText />}
                         >
                             Export PDF
+                        </Button>
+                        <Button
+                            colorScheme="green"
+                            variant="outline"
+                            onClick={() => setIsInvoiceModalOpen(true)}
+                            leftIcon={<FiDollarSign />}
+                            isDisabled={!formData.purchaseOrder}
+                        >
+                            Track Invoice
                         </Button>
                         {isEditable && (
                             <>
@@ -1292,6 +1422,20 @@ export default function GoodsReceiptModal({
                 fileType="receipt"
                 title="Upload Receipt Evidence"
                 description="Please upload photos or documents as evidence before completing the receipt. This will also mark the purchase order as completed."
+            />
+
+            <FileUploadModal
+                isOpen={isInvoiceModalOpen}
+                onClose={() => setIsInvoiceModalOpen(false)}
+                onUploadComplete={handleInvoiceUploadComplete}
+                relatedToId={savedReceiptId || formData._id || ''}
+                fileType="invoice"
+                title="Track Invoice"
+                description="Upload supplier invoice for this goods receipt"
+                invoiceData={{
+                    supplier: formData.purchaseOrder?.supplier?.name,
+                    // You can pre-populate other invoice data here
+                }}
             />
 
             <BinSelectorModal

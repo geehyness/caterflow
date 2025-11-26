@@ -1126,7 +1126,7 @@ export default function DispatchModal({
                                                                         min="0"
                                                                         size="sm"
                                                                         width="100px"
-                                                                        isDisabled={!isEditable}
+                                                                        isDisabled={true}
                                                                     />
                                                                 </Td>
 

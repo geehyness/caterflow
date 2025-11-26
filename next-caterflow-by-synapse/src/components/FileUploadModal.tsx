@@ -30,9 +30,11 @@ import {
     Flex,
     Alert,
     AlertIcon,
-    useColorModeValue // Import useColorModeValue for theme-based colors
+    useColorModeValue,
+    Grid,
+    GridItem
 } from '@chakra-ui/react';
-import { FiUpload, FiXCircle, FiCamera, FiFolder, FiTrash2 } from 'react-icons/fi';
+import { FiUpload, FiXCircle, FiCamera, FiFolder, FiTrash2, FiDollarSign } from 'react-icons/fi';
 
 interface FileUploadModalProps {
     isOpen: boolean;
@@ -42,6 +44,13 @@ interface FileUploadModalProps {
     fileType: 'invoice' | 'receipt' | 'photo' | 'contract' | 'delivery-note' | 'quality-check' | 'other';
     title: string;
     description?: string;
+    // Add invoice-specific props
+    invoiceData?: {
+        invoiceNumber?: string;
+        invoiceDate?: string;
+        invoiceAmount?: number;
+        supplier?: string;
+    };
 }
 
 interface FileWithPreview extends File {
@@ -55,13 +64,20 @@ export default function FileUploadModal({
     relatedToId,
     fileType,
     title,
-    description
+    description,
+    invoiceData
 }: FileUploadModalProps) {
     const [selectedFiles, setSelectedFiles] = useState<FileWithPreview[]>([]);
     const [fileDescription, setFileDescription] = useState<string>('');
     const [isUploading, setIsUploading] = useState(false);
     const [uploadProgress, setUploadProgress] = useState(0);
-    const [isCapturing, setIsCapturing] = useState(false);
+
+    // Invoice-specific state
+    const [invoiceNumber, setInvoiceNumber] = useState(invoiceData?.invoiceNumber || '');
+    const [invoiceDate, setInvoiceDate] = useState(invoiceData?.invoiceDate || '');
+    const [invoiceAmount, setInvoiceAmount] = useState(invoiceData?.invoiceAmount?.toString() || '');
+    const [supplier, setSupplier] = useState(invoiceData?.supplier || '');
+
     const toast = useToast();
     const fileInputRef = useRef<HTMLInputElement>(null);
     const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -154,6 +170,30 @@ export default function FileUploadModal({
             return;
         }
 
+        // Validate invoice-specific fields
+        if (fileType === 'invoice') {
+            if (!invoiceNumber.trim()) {
+                toast({
+                    title: 'Invoice number required',
+                    description: 'Please enter an invoice number for invoice tracking.',
+                    status: 'warning',
+                    duration: 3000,
+                    isClosable: true,
+                });
+                return;
+            }
+            if (!invoiceDate) {
+                toast({
+                    title: 'Invoice date required',
+                    description: 'Please select the invoice date.',
+                    status: 'warning',
+                    duration: 3000,
+                    isClosable: true,
+                });
+                return;
+            }
+        }
+
         setIsUploading(true);
         setUploadProgress(0);
 
@@ -167,7 +207,18 @@ export default function FileUploadModal({
                 formData.append('file', file);
                 formData.append('relatedTo', relatedToId);
                 formData.append('fileType', fileType);
-                formData.append('description', fileDescription || description || '');
+
+                // For invoices, send user description separately
+                // For regular files, send description as is
+                if (fileType === 'invoice') {
+                    formData.append('description', fileDescription || '');
+                    formData.append('invoiceNumber', invoiceNumber);
+                    formData.append('invoiceDate', invoiceDate);
+                    formData.append('invoiceAmount', invoiceAmount || '0');
+                    formData.append('supplier', supplier);
+                } else {
+                    formData.append('description', fileDescription || description || '');
+                }
 
                 const response = await fetch('/api/upload', {
                     method: 'POST',
@@ -188,7 +239,7 @@ export default function FileUploadModal({
             }
 
             toast({
-                title: `${selectedFiles.length} files uploaded successfully.`,
+                title: `${selectedFiles.length} ${fileType} file(s) uploaded successfully.`,
                 status: 'success',
                 duration: 5000,
                 isClosable: true,
@@ -196,6 +247,13 @@ export default function FileUploadModal({
 
             onUploadComplete(uploadedAttachmentIds);
             handleClearAllFiles();
+            // Reset invoice fields
+            if (fileType === 'invoice') {
+                setInvoiceNumber('');
+                setInvoiceDate('');
+                setInvoiceAmount('');
+                setSupplier('');
+            }
             onClose();
         } catch (error: any) {
             toast({
@@ -227,16 +285,20 @@ export default function FileUploadModal({
     };
 
     return (
-        // Set modal size responsively, e.g., full on mobile and xl on larger screens
         <Modal
             isOpen={isOpen}
             onClose={handleClose}
-            size={{ base: 'full', md: 'xl' }}
+            size={{ base: 'full', md: fileType === 'invoice' ? '2xl' : 'xl' }}
             scrollBehavior="inside"
         >
             <ModalOverlay />
             <ModalContent>
-                <ModalHeader>{title}</ModalHeader>
+                <ModalHeader>
+                    <HStack>
+                        <Icon as={fileType === 'invoice' ? FiDollarSign : FiUpload} />
+                        <Text>{title}</Text>
+                    </HStack>
+                </ModalHeader>
                 <ModalCloseButton />
                 <ModalBody>
                     <VStack spacing={4}>
@@ -245,8 +307,8 @@ export default function FileUploadModal({
                             ref={fileInputRef}
                             type="file"
                             onChange={handleFileChange}
-                            accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.xls,.xlsx"
-                            multiple
+                            accept={fileType === 'invoice' ? ".pdf,.jpg,.jpeg,.png" : ".pdf,.doc,.docx,.jpg,.jpeg,.png,.xls,.xlsx"}
+                            multiple={fileType !== 'invoice'} // Single file for invoices
                             display="none"
                         />
                         <Input
@@ -255,12 +317,11 @@ export default function FileUploadModal({
                             onChange={handleCameraCapture}
                             accept="image/*"
                             capture="environment"
-                            multiple={supportsMultipleCapture}
+                            multiple={supportsMultipleCapture && fileType !== 'invoice'}
                             display="none"
                         />
 
                         {/* Action Buttons */}
-                        {/* Use responsive grid for two-column layout */}
                         <SimpleGrid columns={{ base: 1, sm: 2 }} spacing={3} w="100%">
                             <Button
                                 leftIcon={<Icon as={FiCamera} />}
@@ -282,7 +343,16 @@ export default function FileUploadModal({
                             </Button>
                         </SimpleGrid>
 
-                        {supportsMultipleCapture && (
+                        {fileType === 'invoice' && (
+                            <Alert status="info" size="sm" borderRadius="md">
+                                <AlertIcon />
+                                <Text fontSize="sm">
+                                    For invoices, please upload clear images or PDFs showing invoice details
+                                </Text>
+                            </Alert>
+                        )}
+
+                        {supportsMultipleCapture && fileType !== 'invoice' && (
                             <Alert status="info" size="sm" borderRadius="md">
                                 <AlertIcon />
                                 <Text fontSize="sm">
@@ -291,11 +361,74 @@ export default function FileUploadModal({
                             </Alert>
                         )}
 
+                        {/* Invoice-specific fields */}
+                        {fileType === 'invoice' && (
+                            <Box w="100%" p={4} borderWidth="1px" borderRadius="md" borderColor={borderColor} bg={cardBg}>
+                                <Text fontWeight="bold" mb={3} color="blue.600">
+                                    Invoice Details
+                                </Text>
+                                <Grid templateColumns={{ base: '1fr', md: 'repeat(2, 1fr)' }} gap={3}>
+                                    <GridItem>
+                                        <FormControl isRequired>
+                                            <FormLabel fontSize="sm">Invoice Number</FormLabel>
+                                            <Input
+                                                value={invoiceNumber}
+                                                onChange={(e) => setInvoiceNumber(e.target.value)}
+                                                placeholder="e.g., INV-2024-001"
+                                                size="sm"
+                                                isDisabled={isUploading}
+                                            />
+                                        </FormControl>
+                                    </GridItem>
+                                    <GridItem>
+                                        <FormControl isRequired>
+                                            <FormLabel fontSize="sm">Invoice Date</FormLabel>
+                                            <Input
+                                                type="date"
+                                                value={invoiceDate}
+                                                onChange={(e) => setInvoiceDate(e.target.value)}
+                                                size="sm"
+                                                isDisabled={isUploading}
+                                            />
+                                        </FormControl>
+                                    </GridItem>
+                                    <GridItem>
+                                        <FormControl>
+                                            <FormLabel fontSize="sm">Invoice Amount (E)</FormLabel>
+                                            <Input
+                                                type="number"
+                                                step="0.01"
+                                                value={invoiceAmount}
+                                                onChange={(e) => setInvoiceAmount(e.target.value)}
+                                                placeholder="0.00"
+                                                size="sm"
+                                                isDisabled={isUploading}
+                                            />
+                                        </FormControl>
+                                    </GridItem>
+                                    <GridItem>
+                                        <FormControl>
+                                            <FormLabel fontSize="sm">Supplier</FormLabel>
+                                            <Input
+                                                value={supplier}
+                                                onChange={(e) => setSupplier(e.target.value)}
+                                                placeholder="Supplier name"
+                                                size="sm"
+                                                isDisabled={isUploading}
+                                            />
+                                        </FormControl>
+                                    </GridItem>
+                                </Grid>
+                            </Box>
+                        )}
+
                         {/* Selected Files Preview */}
                         {selectedFiles.length > 0 && (
                             <VStack w="100%" spacing={3} align="stretch">
                                 <Flex justify="space-between" align="center" w="100%">
-                                    <Text fontWeight="medium">Selected files ({selectedFiles.length}):</Text>
+                                    <Text fontWeight="medium">
+                                        Selected {fileType} file{selectedFiles.length > 1 ? 's' : ''} ({selectedFiles.length}):
+                                    </Text>
                                     <Button
                                         size="sm"
                                         variant="ghost"
@@ -308,7 +441,7 @@ export default function FileUploadModal({
                                     </Button>
                                 </Flex>
 
-                                <SimpleGrid columns={{ base: 2, sm: 3, md: 4 }} spacing={3} maxH="200px" overflowY="auto">
+                                <SimpleGrid columns={{ base: 2, sm: 3, md: fileType === 'invoice' ? 2 : 4 }} spacing={3} maxH="200px" overflowY="auto">
                                     {selectedFiles.map((file, index) => (
                                         <Box
                                             key={`${file.name}-${index}`}
@@ -316,8 +449,8 @@ export default function FileUploadModal({
                                             borderWidth="1px"
                                             borderRadius="md"
                                             p={2}
-                                            borderColor={borderColor} // Use theme border color
-                                            bg={cardBg} // Use theme card background
+                                            borderColor={borderColor}
+                                            bg={cardBg}
                                         >
                                             {file.preview ? (
                                                 <VStack spacing={1}>
@@ -336,13 +469,13 @@ export default function FileUploadModal({
                                                 <VStack spacing={1}>
                                                     <Box
                                                         boxSize="60px"
-                                                        bg={cardBg} // Use primary background color
+                                                        bg={cardBg}
                                                         display="flex"
                                                         alignItems="center"
                                                         justifyContent="center"
                                                         borderRadius="sm"
                                                     >
-                                                        <Icon as={FiFolder} boxSize={6} color={textSecondaryColor} /> {/* Use secondary text color for icon */}
+                                                        <Icon as={FiFolder} boxSize={6} color={textSecondaryColor} />
                                                     </Box>
                                                     <Text fontSize="xs" noOfLines={1} title={file.name}>
                                                         {file.name}
@@ -381,6 +514,7 @@ export default function FileUploadModal({
                             <Select value={fileType} isDisabled>
                                 <option value={fileType}>
                                     {fileType.charAt(0).toUpperCase() + fileType.slice(1).replace('-', ' ')}
+                                    {fileType === 'invoice' && ' Tracking'}
                                 </option>
                             </Select>
                         </FormControl>
@@ -389,7 +523,11 @@ export default function FileUploadModal({
                             <FormLabel>Description</FormLabel>
                             <Textarea
                                 name="description"
-                                placeholder={description || "Describe what these files are for"}
+                                placeholder={
+                                    fileType === 'invoice'
+                                        ? "Additional notes about this invoice..."
+                                        : description || "Describe what these files are for"
+                                }
                                 rows={3}
                                 value={fileDescription}
                                 onChange={(e) => setFileDescription(e.target.value)}
@@ -400,7 +538,7 @@ export default function FileUploadModal({
                         {isUploading && (
                             <Box width="100%">
                                 <Progress value={uploadProgress} size="sm" colorScheme="blue" />
-                                <Text fontSize="sm" textAlign="center" mt={2} color={textSecondaryColor}> {/* Use theme color for text */}
+                                <Text fontSize="sm" textAlign="center" mt={2} color={textSecondaryColor}>
                                     Uploading... {Math.round(uploadProgress)}%
                                 </Text>
                             </Box>
@@ -412,13 +550,13 @@ export default function FileUploadModal({
                         Cancel
                     </Button>
                     <Button
-                        colorScheme="brand"
+                        colorScheme={fileType === 'invoice' ? 'green' : 'brand'}
                         onClick={handleSubmit}
                         isLoading={isUploading}
                         isDisabled={selectedFiles.length === 0 || isUploading}
-                        leftIcon={<Icon as={FiUpload} />}
+                        leftIcon={<Icon as={fileType === 'invoice' ? FiDollarSign : FiUpload} />}
                     >
-                        Upload ({selectedFiles.length})
+                        {fileType === 'invoice' ? 'Upload Invoice' : `Upload (${selectedFiles.length})`}
                     </Button>
                 </ModalFooter>
             </ModalContent>

@@ -1,4 +1,4 @@
-// src/app/reports/page.tsx - FIXED VERSION
+// src/app/reports/page.tsx - WITH VAT CALCULATIONS
 'use client';
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
@@ -15,7 +15,7 @@ import {
     FiDownload, FiSearch, FiCalendar, FiFilter, FiTrendingUp, FiPackage,
     FiTruck, FiRepeat, FiBarChart2, FiPieChart, FiUsers,
     FiShoppingCart, FiArchive, FiAlertTriangle, FiDollarSign, FiUser,
-    FiRefreshCw
+    FiRefreshCw, FiPercent
 } from 'react-icons/fi';
 
 // Chart components
@@ -61,6 +61,7 @@ interface StockItem {
     primarySupplier?: { _id: string; name: string };
     suppliers: Array<{ _id: string; name: string }>;
     currentStock?: number;
+    isVATApplicable?: boolean; // New field for VAT applicability
 }
 
 interface PurchaseOrder {
@@ -74,8 +75,12 @@ interface PurchaseOrder {
         orderedQuantity: number;
         unitPrice: number;
         totalPrice: number;
+        vatAmount?: number; // New field for VAT
+        totalWithVAT?: number; // New field for total with VAT
     }>;
     totalAmount: number;
+    vatAmount?: number; // New field for VAT
+    totalWithVAT?: number; // New field for total with VAT
     orderedBy: AppUser;
     site: Site;
     evidenceStatus: string;
@@ -95,6 +100,8 @@ interface GoodsReceipt {
         expiryDate?: string;
         condition: string;
         unitPrice?: number;
+        vatAmount?: number; // New field for VAT
+        totalWithVAT?: number; // New field for total with VAT
     }>;
     evidenceStatus: string;
 }
@@ -111,9 +118,13 @@ interface DispatchLog {
         dispatchedQuantity: number;
         unitPrice: number;
         totalCost: number;
+        vatAmount?: number; // New field for VAT
+        totalWithVAT?: number; // New field for total with VAT
     }>;
     peopleFed: number;
     totalCost: number;
+    vatAmount?: number; // New field for VAT
+    totalWithVAT?: number; // New field for total with VAT
     costPerPerson: number;
     sellingPrice: number;
     totalSales: number;
@@ -159,9 +170,10 @@ interface Supplier {
     phone: string;
     address: string;
     isActive: boolean;
+    vatNumber?: string; // New field for VAT registration
 }
 
-// Enhanced Analytics Data Interface
+// Enhanced Analytics Data Interface with VAT
 interface EnhancedAnalyticsData {
     summary: {
         totalPurchaseOrders: number;
@@ -177,14 +189,19 @@ interface EnhancedAnalyticsData {
         totalPeopleFed: number;
         lowStockItems: number;
         criticalStockItems: number;
+        totalVATCollected: number; // New VAT summary
+        totalVATPaid: number; // New VAT summary
+        netVATLiability: number; // New VAT summary
     };
     purchaseOrders: {
         byStatus: Array<{ name: string; value: number }>;
         bySite: Array<{ name: string; value: number }>;
         byMonth: Array<{ name: string; value: number }>;
         totalValue: number;
+        vatAmount: number; // New VAT field
+        totalWithVAT: number; // New VAT field
         avgOrderValue: number;
-        topItems: Array<{ name: string; quantity: number; value: number }>;
+        topItems: Array<{ name: string; quantity: number; value: number; vatAmount: number }>;
         statusBreakdown: { [key: string]: number };
     };
     goodsReceipts: {
@@ -192,14 +209,22 @@ interface EnhancedAnalyticsData {
         bySite: Array<{ name: string; value: number }>;
         efficiency: number;
         conditionBreakdown: { [key: string]: number };
+        totalValue: number; // New field
+        vatAmount: number; // New VAT field
+        totalWithVAT: number; // New VAT field
     };
     dispatches: {
         byType: Array<{ name: string; value: number }>;
         bySite: Array<{ name: string; value: number }>;
         totalPeopleFed: number;
         totalCost: number;
+        vatAmount: number; // New VAT field
+        totalWithVAT: number; // New VAT field
         costPerPerson: number;
-        topItems: Array<{ name: string; quantity: number; cost: number }>;
+        topItems: Array<{ name: string; quantity: number; cost: number; vatAmount: number }>;
+        totalSales: number;
+        salesVAT: number; // New VAT field
+        salesWithVAT: number; // New VAT field
     };
     transfers: {
         byStatus: Array<{ name: string; value: number }>;
@@ -209,6 +234,7 @@ interface EnhancedAnalyticsData {
     inventory: {
         byCategory: Array<{ name: string; value: number }>;
         totalValue: number;
+        vatIncluded: number; // New VAT field
         lowStockBreakdown: {
             critical: number;
             warning: number;
@@ -225,7 +251,7 @@ interface EnhancedAnalyticsData {
         };
     };
     financial: {
-        monthlySpending: Array<{ month: string; spending: number }>;
+        monthlySpending: Array<{ month: string; spending: number; vat: number; totalWithVAT: number }>;
         costPerPersonTrend: Array<{ date: string; cost: number }>;
         inventoryTurnover: number;
         totalReceivedGoodsValue: number;
@@ -239,14 +265,34 @@ interface EnhancedAnalyticsData {
         periodSales: number;
         openingStock: number;
         netVariances: number;
+        // VAT-specific financials
+        vatOnPurchases: number;
+        vatOnSales: number;
+        netVATPayable: number;
+        grossProfitBeforeVAT: number;
+        grossProfitAfterVAT: number;
     };
     suppliers: {
-        performance: Array<{ name: string; orders: number; value: number }>;
+        performance: Array<{ name: string; orders: number; value: number; vatAmount: number }>;
         activeCount: number;
+        vatRegisteredCount: number; // New VAT field
     };
     users: {
         byRole: Array<{ name: string; value: number }>;
         activity: Array<{ name: string; actions: number }>;
+    };
+    vat: {
+        summary: {
+            totalOutputVAT: number;
+            totalInputVAT: number;
+            netVATPayable: number;
+            vatRate: number;
+        };
+        breakdown: {
+            purchases: { vatAmount: number; totalWithVAT: number };
+            sales: { vatAmount: number; totalWithVAT: number };
+            inventory: { vatAmount: number; totalWithVAT: number };
+        };
     };
 }
 
@@ -267,6 +313,23 @@ interface ReportConfig {
     };
 }
 
+// VAT Configuration - Eswatini 15%
+const VAT_CONFIG = {
+    rate: 0.15, // 15% VAT rate for Eswatini
+    ratePercentage: 15,
+    calculateVAT: (amount: number, isVATApplicable: boolean = true): { vatAmount: number; totalWithVAT: number } => {
+        if (!isVATApplicable) {
+            return { vatAmount: 0, totalWithVAT: amount };
+        }
+        const vatAmount = amount * VAT_CONFIG.rate;
+        const totalWithVAT = amount + vatAmount;
+        return { vatAmount, totalWithVAT };
+    },
+    formatVAT: (amount: number): string => {
+        return `SZL ${amount.toFixed(2)}`;
+    }
+};
+
 // Chart color schemes
 const CHART_COLORS = {
     primary: ['#3182CE', '#63B3ED', '#90CDF4', '#BEE3F8'],
@@ -275,7 +338,8 @@ const CHART_COLORS = {
     error: ['#E53E3E', '#FC8181', '#FEB2B2', '#FED7D7'],
     purple: ['#805AD5', '#B794F4', '#D6BCFA', '#E9D8FD'],
     pink: ['#D53F8C', '#F687B3', '#FBB6CE', '#FED7E2'],
-    gray: ['#4A5568', '#718096', '#A0AEC0', '#CBD5E0']
+    gray: ['#4A5568', '#718096', '#A0AEC0', '#CBD5E0'],
+    vat: ['#2D3748', '#4A5568', '#718096', '#A0AEC0'] // VAT-specific colors
 };
 
 const STATUS_COLORS: { [key: string]: string } = {
@@ -375,7 +439,7 @@ export default function ComprehensiveReportsPage() {
             title: 'Purchase Orders',
             description: 'Detailed purchase order history and status',
             endpoint: '/api/purchase-orders',
-            columns: ['poNumber', 'orderDate', 'status', 'supplierNames', 'site.name', 'totalAmount', 'orderedItems'],
+            columns: ['poNumber', 'orderDate', 'status', 'supplierNames', 'site.name', 'totalAmount', 'vatAmount', 'totalWithVAT', 'orderedItems'],
             filters: {
                 dateRange: true,
                 site: true,
@@ -386,7 +450,7 @@ export default function ComprehensiveReportsPage() {
             title: 'Goods Receipts',
             description: 'Goods receipt transactions and inventory updates',
             endpoint: '/api/goods-receipts',
-            columns: ['receiptNumber', 'receiptDate', 'status', 'purchaseOrder.poNumber', 'purchaseOrder.site.name', 'receivedItems', 'receivingBin.name'],
+            columns: ['receiptNumber', 'receiptDate', 'status', 'purchaseOrder.poNumber', 'purchaseOrder.site.name', 'receivedItems', 'receivingBin.name', 'vatAmount', 'totalWithVAT'],
             filters: {
                 dateRange: true,
                 site: true,
@@ -397,7 +461,7 @@ export default function ComprehensiveReportsPage() {
             title: 'Dispatches',
             description: 'Dispatch records and consumption tracking',
             endpoint: '/api/dispatches',
-            columns: ['dispatchNumber', 'dispatchDate', 'dispatchType.name', 'sourceBin.site.name', 'peopleFed', 'totalCost', 'evidenceStatus', 'dispatchedBy.name'],
+            columns: ['dispatchNumber', 'dispatchDate', 'dispatchType.name', 'sourceBin.site.name', 'peopleFed', 'totalCost', 'vatAmount', 'totalWithVAT', 'evidenceStatus', 'dispatchedBy.name'],
             filters: {
                 dateRange: true,
                 site: true,
@@ -407,7 +471,7 @@ export default function ComprehensiveReportsPage() {
         {
             title: 'Transfers',
             description: 'Internal stock transfers between bins and sites',
-            endpoint: '/api/transfers', // FIXED: Changed from /api/operations/transfers
+            endpoint: '/api/transfers',
             columns: ['transferNumber', 'transferDate', 'status', 'fromBin.site.name', 'toBin.site.name', 'transferredItems', 'requestedBy.name'],
             filters: {
                 dateRange: true,
@@ -464,6 +528,128 @@ export default function ComprehensiveReportsPage() {
         end: new Date(primaryDateRange.end)
     }), [primaryDateRange.start, primaryDateRange.end]);
 
+    // ========== VAT CALCULATION FUNCTIONS ==========
+
+    // Calculate VAT for purchase order items
+    const calculatePurchaseOrderVAT = useCallback((purchaseOrders: any[]): any[] => {
+        return purchaseOrders.map(po => {
+            let totalVAT = 0;
+            let totalWithVAT = 0;
+
+            const itemsWithVAT = po.orderedItems?.map((item: any) => {
+                const isVATApplicable = item.stockItem?.isVATApplicable !== false; // Default to true if not specified
+                const itemTotal = (item.orderedQuantity || 0) * (item.unitPrice || 0);
+                const { vatAmount, totalWithVAT: itemTotalWithVAT } = VAT_CONFIG.calculateVAT(itemTotal, isVATApplicable);
+
+                totalVAT += vatAmount;
+                totalWithVAT += itemTotalWithVAT;
+
+                return {
+                    ...item,
+                    vatAmount,
+                    totalWithVAT: itemTotalWithVAT
+                };
+            }) || [];
+
+            return {
+                ...po,
+                orderedItems: itemsWithVAT,
+                vatAmount: totalVAT,
+                totalWithVAT: totalWithVAT || po.totalAmount
+            };
+        });
+    }, []);
+
+    // Calculate VAT for goods receipt items
+    const calculateGoodsReceiptVAT = useCallback((goodsReceipts: any[]): any[] => {
+        return goodsReceipts.map(gr => {
+            let totalVAT = 0;
+            let totalWithVAT = 0;
+
+            const itemsWithVAT = gr.receivedItems?.map((item: any) => {
+                const isVATApplicable = item.stockItem?.isVATApplicable !== false;
+                const itemTotal = (item.receivedQuantity || 0) * (item.unitPrice || item.stockItem?.unitPrice || 0);
+                const { vatAmount, totalWithVAT: itemTotalWithVAT } = VAT_CONFIG.calculateVAT(itemTotal, isVATApplicable);
+
+                totalVAT += vatAmount;
+                totalWithVAT += itemTotalWithVAT;
+
+                return {
+                    ...item,
+                    vatAmount,
+                    totalWithVAT: itemTotalWithVAT
+                };
+            }) || [];
+
+            return {
+                ...gr,
+                receivedItems: itemsWithVAT,
+                vatAmount: totalVAT,
+                totalWithVAT: totalWithVAT
+            };
+        });
+    }, []);
+
+    // Calculate VAT for dispatch items
+    const calculateDispatchVAT = useCallback((dispatches: any[]): any[] => {
+        return dispatches.map(dispatch => {
+            let totalVAT = 0;
+            let totalWithVAT = 0;
+
+            const itemsWithVAT = dispatch.dispatchedItems?.map((item: any) => {
+                const isVATApplicable = item.stockItem?.isVATApplicable !== false;
+                const itemTotal = item.totalCost || (item.dispatchedQuantity || 0) * (item.unitPrice || 0);
+                const { vatAmount, totalWithVAT: itemTotalWithVAT } = VAT_CONFIG.calculateVAT(itemTotal, isVATApplicable);
+
+                totalVAT += vatAmount;
+                totalWithVAT += itemTotalWithVAT;
+
+                return {
+                    ...item,
+                    vatAmount,
+                    totalWithVAT: itemTotalWithVAT
+                };
+            }) || [];
+
+            // Calculate VAT on sales
+            const salesVAT = VAT_CONFIG.calculateVAT(dispatch.totalSales || 0, true).vatAmount;
+            const salesWithVAT = (dispatch.totalSales || 0) + salesVAT;
+
+            return {
+                ...dispatch,
+                dispatchedItems: itemsWithVAT,
+                vatAmount: totalVAT,
+                totalWithVAT: totalWithVAT,
+                salesVAT: salesVAT,
+                salesWithVAT: salesWithVAT
+            };
+        });
+    }, []);
+
+    // Calculate VAT for inventory values
+    const calculateInventoryVAT = useCallback((stockItems: any[]): { items: any[], totalVAT: number } => {
+        let totalVAT = 0;
+
+        const itemsWithVAT = stockItems.map(item => {
+            const isVATApplicable = item.isVATApplicable !== false;
+            const stockValue = (item.currentStock || 0) * (item.unitPrice || 0);
+            const { vatAmount } = VAT_CONFIG.calculateVAT(stockValue, isVATApplicable);
+
+            totalVAT += vatAmount;
+
+            return {
+                ...item,
+                stockVAT: vatAmount,
+                stockValueWithVAT: stockValue + vatAmount
+            };
+        });
+
+        return {
+            items: itemsWithVAT,
+            totalVAT
+        };
+    }, []);
+
     // ========== NEW ANALYTICS FUNCTIONS ==========
 
     // Filter data by date range with memoization
@@ -484,11 +670,11 @@ export default function ComprehensiveReportsPage() {
         });
     }, [dateRangeMemo]);
 
-    // Enhanced fetchAllData function with better loading states and UX
+    // Enhanced fetchAllData function with VAT calculations
     const fetchAllData = useCallback(async (forceRefresh = false) => {
         setAnalyticsLoading(true);
         try {
-            console.log('🔄 Starting comprehensive data fetch for analytics...', { forceRefresh });
+            console.log('🔄 Starting comprehensive data fetch for analytics with VAT...', { forceRefresh });
 
             // Clear existing data if forcing refresh
             if (forceRefresh) {
@@ -508,7 +694,7 @@ export default function ComprehensiveReportsPage() {
                 '/api/purchase-orders',
                 '/api/goods-receipts',
                 '/api/dispatches',
-                '/api/transfers', // FIXED: Changed from /api/operations/transfers
+                '/api/transfers',
                 '/api/bin-counts',
                 '/api/analytics/stock-values',
                 '/api/low-stock',
@@ -543,6 +729,12 @@ export default function ComprehensiveReportsPage() {
                 }
             });
 
+            // Apply VAT calculations to data
+            const purchaseOrdersWithVAT = calculatePurchaseOrderVAT(purchaseOrders || []);
+            const goodsReceiptsWithVAT = calculateGoodsReceiptVAT(goodsReceipts || []);
+            const dispatchesWithVAT = calculateDispatchVAT(dispatches || []);
+            const inventoryWithVAT = calculateInventoryVAT(stockValues?.items || stockValues || []);
+
             // Validate we have at least some data
             const totalDataItems = [
                 purchaseOrders, goodsReceipts, dispatches, transfers,
@@ -561,15 +753,14 @@ export default function ComprehensiveReportsPage() {
                 return;
             }
 
-            // Store raw data for export
-            const stockItemsData = stockValues?.items || stockValues || [];
+            // Store raw data for export (with VAT calculations)
             const newRawData = {
-                purchaseOrders: purchaseOrders || [],
-                goodsReceipts: goodsReceipts || [],
-                dispatches: dispatches || [],
+                purchaseOrders: purchaseOrdersWithVAT,
+                goodsReceipts: goodsReceiptsWithVAT,
+                dispatches: dispatchesWithVAT,
                 transfers: transfers || [],
                 binCounts: binCounts || [],
-                stockItems: Array.isArray(stockItemsData) ? stockItemsData : [],
+                stockItems: inventoryWithVAT.items,
                 lowStock: lowStock || [],
                 suppliers: suppliers || [],
                 users: users || [],
@@ -578,14 +769,22 @@ export default function ComprehensiveReportsPage() {
 
             setRawData(newRawData);
 
-            // Process analytics data
+            // Process analytics data with VAT
             const analytics = await processAnalyticsData({
-                purchaseOrders: purchaseOrders || [],
-                goodsReceipts: goodsReceipts || [],
-                dispatches: dispatches || [],
+                purchaseOrders: purchaseOrdersWithVAT,
+                goodsReceipts: goodsReceiptsWithVAT,
+                dispatches: dispatchesWithVAT,
                 transfers: transfers || [],
                 binCounts: binCounts || [],
-                stockValues: stockValues || { items: [], summary: { totalInventoryValue: 0 } },
+                stockValues: {
+                    items: inventoryWithVAT.items,
+                    summary: {
+                        totalInventoryValue: inventoryWithVAT.items.reduce((sum: number, item: any) =>
+                            sum + ((item.currentStock || 0) * (item.unitPrice || 0)), 0
+                        ),
+                        totalVAT: inventoryWithVAT.totalVAT
+                    }
+                },
                 lowStock: lowStock || [],
                 suppliers: suppliers || [],
                 users: users || [],
@@ -593,7 +792,7 @@ export default function ComprehensiveReportsPage() {
             }, dateRangeMemo);
 
             setAnalyticsData(analytics);
-            console.log('✅ Analytics data processed successfully');
+            console.log('✅ Analytics data with VAT processed successfully');
 
         } catch (error) {
             console.error('❌ Error fetching analytics data:', error);
@@ -607,7 +806,7 @@ export default function ComprehensiveReportsPage() {
         } finally {
             setAnalyticsLoading(false);
         }
-    }, [toast, rawData, analyticsData, dateRangeMemo]);
+    }, [toast, rawData, analyticsData, dateRangeMemo, calculatePurchaseOrderVAT, calculateGoodsReceiptVAT, calculateDispatchVAT, calculateInventoryVAT]);
 
     const handleUpdateAnalytics = () => {
         fetchAllData(true);
@@ -650,7 +849,7 @@ export default function ComprehensiveReportsPage() {
         }
     };
 
-    // UPDATED processAnalyticsData function with simplified calculations
+    // UPDATED processAnalyticsData function with VAT calculations
     const processAnalyticsData = async (data: any, dateRange: { start: Date; end: Date }): Promise<EnhancedAnalyticsData> => {
 
         const {
@@ -659,14 +858,14 @@ export default function ComprehensiveReportsPage() {
             dispatches = [],
             transfers = [],
             binCounts = [],
-            stockValues = { items: [], summary: { totalInventoryValue: 0 } },
+            stockValues = { items: [], summary: { totalInventoryValue: 0, totalVAT: 0 } },
             lowStock = [],
             suppliers = [],
             users = [],
             sites = []
         } = data;
 
-        console.log('📊 Processing analytics data with period filtering...');
+        console.log('📊 Processing analytics data with VAT calculations...');
 
         // Filter data by date range for period-based calculations
         const periodPOs = filterDataByDateRange(purchaseOrders, 'orderDate');
@@ -674,7 +873,21 @@ export default function ComprehensiveReportsPage() {
         const periodDispatches = filterDataByDateRange(dispatches, 'dispatchDate');
         const periodBinCounts = filterDataByDateRange(binCounts, 'countDate');
 
-        // SIMPLIFIED FINANCIAL CALCULATIONS
+        // VAT CALCULATIONS
+        // 1. VAT on Purchases (Input VAT)
+        const vatOnPurchases = periodGoodsReceipts.reduce((sum: number, gr: any) =>
+            sum + (gr.vatAmount || 0), 0
+        );
+
+        // 2. VAT on Sales (Output VAT)
+        const vatOnSales = periodDispatches.reduce((sum: number, d: any) =>
+            sum + (d.salesVAT || 0), 0
+        );
+
+        // 3. Net VAT Payable (Output VAT - Input VAT)
+        const netVATPayable = vatOnSales - vatOnPurchases;
+
+        // SIMPLIFIED FINANCIAL CALCULATIONS WITH VAT
         // 1. PURCHASES = Goods Receipts value in the period
         const periodPurchasesValue = periodGoodsReceipts.reduce((sum: number, gr: any) => {
             const receiptValue = gr.receivedItems?.reduce((itemSum: number, item: any) => {
@@ -723,18 +936,25 @@ export default function ComprehensiveReportsPage() {
         // 6. CLOSING STOCK = Opening + Purchases - Consumption + Variances
         const closingStockValue = openingStockValue + periodPurchasesValue - periodConsumption + netVariancesValue;
 
-        // NEW (correct) calculation:
+        // FINANCIAL CALCULATIONS WITH VAT
         const COGS = openingStockValue + periodPurchasesValue - closingStockValue;
-        const profit = periodSales - COGS;
+        const grossProfitBeforeVAT = periodSales - COGS;
+        const grossProfitAfterVAT = grossProfitBeforeVAT - netVATPayable;
+        const profit = grossProfitAfterVAT;
         const profitPercentage = periodSales > 0 ? (profit / periodSales) * 100 : 0;
 
-        console.log('💰 Final financial calculations:', {
+        console.log('💰 Final financial calculations with VAT:', {
             openingStockValue,
             periodPurchasesValue,
             periodConsumption,
             netVariancesValue,
             closingStockValue,
             periodSales,
+            vatOnPurchases,
+            vatOnSales,
+            netVATPayable,
+            grossProfitBeforeVAT,
+            grossProfitAfterVAT,
             profit,
             profitPercentage
         });
@@ -780,31 +1000,35 @@ export default function ComprehensiveReportsPage() {
             return Object.entries(monthlyCounts).map(([name, value]) => ({ name, value }));
         };
 
-        // Process purchase orders with accurate data
+        // Process purchase orders with VAT data
         const poStatusBreakdown = getStatusBreakdown(periodPOs);
         const poSiteBreakdown = getSiteBreakdown(periodPOs);
         const poMonthlyBreakdown = getMonthlyBreakdown(periodPOs, 'orderDate');
         const poTotalValue = periodPOs.reduce((sum: number, po: any) => sum + (po.totalAmount || 0), 0);
+        const poVATAmount = periodPOs.reduce((sum: number, po: any) => sum + (po.vatAmount || 0), 0);
+        const poTotalWithVAT = periodPOs.reduce((sum: number, po: any) => sum + (po.totalWithVAT || po.totalAmount || 0), 0);
 
-        // Top items by quantity ordered
+        // Top items by quantity ordered with VAT
         const topItems = periodPOs.flatMap((po: any) =>
             po.orderedItems?.map((item: any) => ({
                 name: item.stockItem?.name || 'Unknown Item',
                 quantity: item.orderedQuantity || 0,
-                value: (item.orderedQuantity || 0) * (item.unitPrice || 0)
+                value: (item.orderedQuantity || 0) * (item.unitPrice || 0),
+                vatAmount: item.vatAmount || 0
             })) || []
         ).reduce((acc: any[], item: any) => {
             const existing = acc.find(i => i.name === item.name);
             if (existing) {
                 existing.quantity += item.quantity;
                 existing.value += item.value;
+                existing.vatAmount += item.vatAmount;
             } else {
                 acc.push({ ...item });
             }
             return acc;
         }, []).sort((a: any, b: any) => b.quantity - a.quantity).slice(0, 10);
 
-        // Process dispatches with accurate data
+        // Process dispatches with VAT data
         const dispatchByType = periodDispatches.reduce((acc: any[], dispatch: any) => {
             const type = dispatch.dispatchType?.name || 'Unknown Type';
             const existing = acc.find(item => item.name === type);
@@ -820,20 +1044,22 @@ export default function ComprehensiveReportsPage() {
             dispatch.dispatchedItems?.map((item: any) => ({
                 name: item.stockItem?.name || 'Unknown Item',
                 quantity: item.dispatchedQuantity || 0,
-                cost: item.totalCost || 0
+                cost: item.totalCost || 0,
+                vatAmount: item.vatAmount || 0
             })) || []
         ).reduce((acc: any[], item: any) => {
             const existing = acc.find(i => i.name === item.name);
             if (existing) {
                 existing.quantity += item.quantity;
                 existing.cost += item.cost;
+                existing.vatAmount += item.vatAmount;
             } else {
                 acc.push({ ...item });
             }
             return acc;
         }, []).sort((a: any, b: any) => b.quantity - a.quantity).slice(0, 10);
 
-        // Process inventory with accurate data
+        // Process inventory with VAT data
         const inventoryByCategory = stockItemsArray.reduce((acc: any[], item: any) => {
             const category = item.category?.title || 'Uncategorized';
             const existing = acc.find(cat => cat.name === category);
@@ -869,23 +1095,66 @@ export default function ComprehensiveReportsPage() {
             return acc;
         }, { positive: 0, negative: 0, zero: 0 });
 
-        // Process suppliers with accurate data
+        // Process suppliers with VAT data
         const supplierPerformance = periodPOs.flatMap((po: any) =>
             po.orderedItems?.map((item: any) => ({
                 name: item.supplier?.name || 'Unknown Supplier',
                 orders: 1,
-                value: (item.orderedQuantity || 0) * (item.unitPrice || 0)
+                value: (item.orderedQuantity || 0) * (item.unitPrice || 0),
+                vatAmount: item.vatAmount || 0
             })) || []
         ).reduce((acc: any[], supplier: any) => {
             const existing = acc.find(s => s.name === supplier.name);
             if (existing) {
                 existing.orders += supplier.orders;
                 existing.value += supplier.value;
+                existing.vatAmount += supplier.vatAmount;
             } else {
                 acc.push(supplier);
             }
             return acc;
         }, []).sort((a: any, b: any) => b.value - a.value).slice(0, 10);
+
+        // Process goods receipts with VAT data
+        const goodsReceiptsTotalValue = periodGoodsReceipts.reduce((sum: number, gr: any) => {
+            const receiptValue = gr.receivedItems?.reduce((itemSum: number, item: any) => {
+                return itemSum + ((item.receivedQuantity || 0) * (item.unitPrice || 0));
+            }, 0) || 0;
+            return sum + receiptValue;
+        }, 0);
+
+        const goodsReceiptsVATAmount = periodGoodsReceipts.reduce((sum: number, gr: any) =>
+            sum + (gr.vatAmount || 0), 0
+        );
+
+        const goodsReceiptsTotalWithVAT = periodGoodsReceipts.reduce((sum: number, gr: any) =>
+            sum + (gr.totalWithVAT || 0), 0
+        );
+
+        // Process dispatches with VAT data
+        const dispatchesTotalCost = periodDispatches.reduce((sum: number, d: any) =>
+            sum + (d.totalCost || 0), 0
+        );
+
+        const dispatchesVATAmount = periodDispatches.reduce((sum: number, d: any) =>
+            sum + (d.vatAmount || 0), 0
+        );
+
+        const dispatchesTotalWithVAT = periodDispatches.reduce((sum: number, d: any) =>
+            sum + (d.totalWithVAT || 0), 0
+        );
+
+        const dispatchesTotalSales = periodDispatches.reduce((sum: number, d: any) =>
+            sum + (d.totalSales || 0), 0
+        );
+
+        const dispatchesSalesVAT = periodDispatches.reduce((sum: number, d: any) =>
+            sum + (d.salesVAT || 0), 0
+        );
+
+        const dispatchesSalesWithVAT = periodDispatches.reduce((sum: number, d: any) =>
+            sum + (d.salesWithVAT || d.totalSales || 0), 0
+        );
 
         return {
             summary: {
@@ -901,13 +1170,18 @@ export default function ComprehensiveReportsPage() {
                 totalInventoryValue: openingStockValue,
                 totalPeopleFed: periodDispatches.reduce((sum: number, d: any) => sum + (d.peopleFed || 0), 0),
                 lowStockItems: lowStock.length,
-                criticalStockItems
+                criticalStockItems,
+                totalVATCollected: vatOnSales,
+                totalVATPaid: vatOnPurchases,
+                netVATLiability: netVATPayable
             },
             purchaseOrders: {
                 byStatus: poStatusBreakdown,
                 bySite: poSiteBreakdown,
                 byMonth: poMonthlyBreakdown,
                 totalValue: poTotalValue,
+                vatAmount: poVATAmount,
+                totalWithVAT: poTotalWithVAT,
                 avgOrderValue: periodPOs.length ? poTotalValue / periodPOs.length : 0,
                 topItems,
                 statusBreakdown: poStatusBreakdown.reduce((acc, item) => {
@@ -924,16 +1198,24 @@ export default function ComprehensiveReportsPage() {
                 ).reduce((acc: { [key: string]: number }, condition: string) => {
                     acc[condition] = (acc[condition] || 0) + 1;
                     return acc;
-                }, {})
+                }, {}),
+                totalValue: goodsReceiptsTotalValue,
+                vatAmount: goodsReceiptsVATAmount,
+                totalWithVAT: goodsReceiptsTotalWithVAT
             },
             dispatches: {
                 byType: dispatchByType,
                 bySite: getSiteBreakdown(periodDispatches),
                 totalPeopleFed: periodDispatches.reduce((sum: number, d: any) => sum + (d.peopleFed || 0), 0),
-                totalCost: periodConsumption,
+                totalCost: dispatchesTotalCost,
+                vatAmount: dispatchesVATAmount,
+                totalWithVAT: dispatchesTotalWithVAT,
                 costPerPerson: periodDispatches.reduce((sum: number, d: any) => sum + (d.peopleFed || 0), 0) > 0 ?
-                    periodConsumption / periodDispatches.reduce((sum: number, d: any) => sum + (d.peopleFed || 0), 0) : 0,
-                topItems: dispatchTopItems
+                    dispatchesTotalCost / periodDispatches.reduce((sum: number, d: any) => sum + (d.peopleFed || 0), 0) : 0,
+                topItems: dispatchTopItems,
+                totalSales: dispatchesTotalSales,
+                salesVAT: dispatchesSalesVAT,
+                salesWithVAT: dispatchesSalesWithVAT
             },
             transfers: {
                 byStatus: getStatusBreakdown(transfers),
@@ -945,6 +1227,7 @@ export default function ComprehensiveReportsPage() {
             inventory: {
                 byCategory: inventoryByCategory,
                 totalValue: openingStockValue,
+                vatIncluded: stockValues.summary.totalVAT || 0,
                 lowStockBreakdown: {
                     critical: criticalStockItems,
                     warning: warningStockItems,
@@ -965,8 +1248,15 @@ export default function ComprehensiveReportsPage() {
                             const existing = acc.find(item => item.month === month);
                             if (existing) {
                                 existing.spending += po.totalAmount || 0;
+                                existing.vat += po.vatAmount || 0;
+                                existing.totalWithVAT += po.totalWithVAT || po.totalAmount || 0;
                             } else {
-                                acc.push({ month, spending: po.totalAmount || 0 });
+                                acc.push({
+                                    month,
+                                    spending: po.totalAmount || 0,
+                                    vat: po.vatAmount || 0,
+                                    totalWithVAT: po.totalWithVAT || po.totalAmount || 0
+                                });
                             }
                         }
                     } catch (error) {
@@ -999,11 +1289,18 @@ export default function ComprehensiveReportsPage() {
                 periodConsumption,
                 periodSales,
                 openingStock: openingStockValue,
-                netVariances: netVariancesValue
+                netVariances: netVariancesValue,
+                // VAT-specific financials
+                vatOnPurchases,
+                vatOnSales,
+                netVATPayable,
+                grossProfitBeforeVAT,
+                grossProfitAfterVAT
             },
             suppliers: {
                 performance: supplierPerformance,
-                activeCount: suppliers.filter((s: any) => s.isActive).length
+                activeCount: suppliers.filter((s: any) => s.isActive).length,
+                vatRegisteredCount: suppliers.filter((s: any) => s.vatNumber).length
             },
             users: {
                 byRole: users.reduce((acc: any[], user: any) => {
@@ -1017,6 +1314,28 @@ export default function ComprehensiveReportsPage() {
                     return acc;
                 }, []),
                 activity: [] // This would need user activity tracking
+            },
+            vat: {
+                summary: {
+                    totalOutputVAT: vatOnSales,
+                    totalInputVAT: vatOnPurchases,
+                    netVATPayable,
+                    vatRate: VAT_CONFIG.ratePercentage
+                },
+                breakdown: {
+                    purchases: {
+                        vatAmount: vatOnPurchases,
+                        totalWithVAT: periodPurchasesValue + vatOnPurchases
+                    },
+                    sales: {
+                        vatAmount: vatOnSales,
+                        totalWithVAT: periodSales + vatOnSales
+                    },
+                    inventory: {
+                        vatAmount: stockValues.summary.totalVAT || 0,
+                        totalWithVAT: openingStockValue + (stockValues.summary.totalVAT || 0)
+                    }
+                }
             }
         };
     };
@@ -1090,7 +1409,7 @@ export default function ComprehensiveReportsPage() {
         }
     };
 
-    // Helper function to create formatted Executive Summary
+    // Helper function to create formatted Executive Summary with VAT
     const createFormattedSummaryData = () => {
         return [
             // HEADER SECTION WITH DATES (ONLY IN EXECUTIVE SUMMARY)
@@ -1098,6 +1417,7 @@ export default function ComprehensiveReportsPage() {
             ['', ''],
             ['Generated On', new Date().toLocaleDateString()],
             ['Report Period', `${format(new Date(primaryDateRange.start), 'MM/dd/yyyy')} to ${format(new Date(primaryDateRange.end), 'MM/dd/yyyy')}`],
+            ['VAT Rate', `${VAT_CONFIG.ratePercentage}% (Eswatini)`],
             ['', ''],
             ['', ''],
 
@@ -1114,6 +1434,15 @@ export default function ComprehensiveReportsPage() {
             ['', ''],
             ['', ''],
 
+            // VAT SUMMARY SECTION
+            ['VAT SUMMARY', ''],
+            ['', ''],
+            ['Total Output VAT (Sales)', analyticsData?.vat.summary.totalOutputVAT || 0],
+            ['Total Input VAT (Purchases)', analyticsData?.vat.summary.totalInputVAT || 0],
+            ['Net VAT Payable', analyticsData?.vat.summary.netVATPayable || 0],
+            ['', ''],
+            ['', ''],
+
             // FINANCIAL OVERVIEW SECTION USING PERIOD-BASED CALCULATIONS
             ['FINANCIAL OVERVIEW', ''],
             ['', ''],
@@ -1123,12 +1452,14 @@ export default function ComprehensiveReportsPage() {
             ['Net Variances', analyticsData?.financial.netVariances || 0],
             ['Closing Stock Value', analyticsData?.financial.closingStockValue || 0],
             ['Total Sales', analyticsData?.financial.periodSales || 0],
-            ['Gross Profit', analyticsData?.financial.profit || 0],
+            ['Gross Profit Before VAT', analyticsData?.financial.grossProfitBeforeVAT || 0],
+            ['VAT Payable', analyticsData?.financial.netVATPayable || 0],
+            ['Gross Profit After VAT', analyticsData?.financial.grossProfitAfterVAT || 0],
             ['Profit Percentage', analyticsData?.financial.profitPercentage || 0]
         ];
     };
 
-    // Helper function to create formatted Analytics Data
+    // Helper function to create formatted Analytics Data with VAT
     const createFormattedAnalyticsData = () => {
         return [
             // HEADER
@@ -1136,20 +1467,32 @@ export default function ComprehensiveReportsPage() {
             ['', ''],
             ['Generated On', new Date().toLocaleDateString()],
             ['Report Period', `${primaryDateRange.start} to ${primaryDateRange.end}`],
+            ['VAT Rate', `${VAT_CONFIG.ratePercentage}% (Eswatini)`],
             ['', ''],
             ['', ''],
 
-            // PURCHASE ORDERS ANALYSIS
+            // PURCHASE ORDERS ANALYSIS WITH VAT
             ['PURCHASE ORDERS BY STATUS', ''],
             ['', ''],
             ...(analyticsData?.purchaseOrders.byStatus.map(item => [item.name, item.value]) || [['No Data', 0]]),
             ['', ''],
+            ['Purchase Orders Total (excl. VAT)', analyticsData?.purchaseOrders.totalValue || 0],
+            ['Purchase Orders VAT Amount', analyticsData?.purchaseOrders.vatAmount || 0],
+            ['Purchase Orders Total (incl. VAT)', analyticsData?.purchaseOrders.totalWithVAT || 0],
+            ['', ''],
             ['', ''],
 
-            // DISPATCHES ANALYSIS
+            // DISPATCHES ANALYSIS WITH VAT
             ['DISPATCHES BY TYPE', ''],
             ['', ''],
             ...(analyticsData?.dispatches.byType.map(item => [item.name, item.value]) || [['No Data', 0]]),
+            ['', ''],
+            ['Dispatches Total Cost (excl. VAT)', analyticsData?.dispatches.totalCost || 0],
+            ['Dispatches VAT Amount', analyticsData?.dispatches.vatAmount || 0],
+            ['Dispatches Total Cost (incl. VAT)', analyticsData?.dispatches.totalWithVAT || 0],
+            ['Sales Total (excl. VAT)', analyticsData?.dispatches.totalSales || 0],
+            ['Sales VAT Amount', analyticsData?.dispatches.salesVAT || 0],
+            ['Sales Total (incl. VAT)', analyticsData?.dispatches.salesWithVAT || 0],
             ['', ''],
             ['', ''],
 
@@ -1158,9 +1501,13 @@ export default function ComprehensiveReportsPage() {
             ['', ''],
             ...(analyticsData?.inventory.byCategory.map(item => [item.name, item.value]) || [['No Data', 0]]),
             ['', ''],
+            ['Inventory Value (excl. VAT)', analyticsData?.inventory.totalValue || 0],
+            ['Inventory VAT Amount', analyticsData?.inventory.vatIncluded || 0],
+            ['Inventory Value (incl. VAT)', (analyticsData?.inventory.totalValue || 0) + (analyticsData?.inventory.vatIncluded || 0)],
+            ['', ''],
             ['', ''],
 
-            // FINANCIAL METRICS SECTION - UPDATED WITH PERIOD-BASED CALCULATIONS
+            // FINANCIAL METRICS SECTION - UPDATED WITH PERIOD-BASED CALCULATIONS AND VAT
             ['FINANCIAL PERFORMANCE METRICS', ''],
             ['', ''],
             ['Opening Stock Value', analyticsData?.financial.openingStock || 0],
@@ -1168,15 +1515,20 @@ export default function ComprehensiveReportsPage() {
             ['Period Consumption', analyticsData?.financial.periodConsumption || 0],
             ['Closing Stock Value', analyticsData?.financial.closingStockValue || 0],
             ['Period Sales', analyticsData?.financial.periodSales || 0],
-            ['Gross Profit', analyticsData?.financial.profit || 0],
+            ['VAT on Purchases', analyticsData?.financial.vatOnPurchases || 0],
+            ['VAT on Sales', analyticsData?.financial.vatOnSales || 0],
+            ['Net VAT Payable', analyticsData?.financial.netVATPayable || 0],
+            ['Gross Profit Before VAT', analyticsData?.financial.grossProfitBeforeVAT || 0],
+            ['Gross Profit After VAT', analyticsData?.financial.grossProfitAfterVAT || 0],
             ['Profit Margin', analyticsData?.financial.profitPercentage || 0],
             ['', ''],
-            ['Calculation Method', 'Period-based accounting with actual dispatches as consumption'],
+            ['Calculation Method', 'Period-based accounting with VAT calculations'],
+            ['VAT Rate', `${VAT_CONFIG.ratePercentage}% (Eswatini)`],
             ['', '']
         ];
     };
 
-    // Helper function to create formatted Sales Summary
+    // Helper function to create formatted Sales Summary with VAT
     const createFormattedSalesSummaryData = (dispatches: any[]) => {
         if (!dispatches || dispatches.length === 0) {
             return [
@@ -1231,7 +1583,7 @@ export default function ComprehensiveReportsPage() {
         }
 
         // HEADER ROW
-        const headerRow = ['SUMMARY', '', ...allDates, 'TOTAL', 'UNIT PRICE', 'AMOUNT'];
+        const headerRow = ['SUMMARY', '', ...allDates, 'TOTAL', 'UNIT PRICE', 'AMOUNT (excl. VAT)', 'VAT AMOUNT', 'TOTAL (incl. VAT)'];
 
         // DATA ROWS FOR EACH DISPATCH TYPE
         const dataRows = dispatchTypes.map(type => {
@@ -1263,23 +1615,29 @@ export default function ComprehensiveReportsPage() {
             }
 
             const totalAmount = totalPeopleFed * unitPrice;
+            const vatAmount = VAT_CONFIG.calculateVAT(totalAmount, true).vatAmount;
+            const totalWithVAT = totalAmount + vatAmount;
 
-            return [type, '', ...dateTotals, totalPeopleFed, unitPrice, totalAmount];
+            return [type, '', ...dateTotals, totalPeopleFed, unitPrice, totalAmount, vatAmount, totalWithVAT];
         });
 
         // CALCULATE GRAND TOTALS
-        const totalSales = dataRows.reduce((sum, row) => sum + (row[row.length - 1] || 0), 0);
-        const totalPeopleFedAll = dataRows.reduce((sum, row) => sum + (row[row.length - 3] || 0), 0);
+        const totalSales = dataRows.reduce((sum, row) => sum + (row[row.length - 3] || 0), 0);
+        const totalVAT = dataRows.reduce((sum, row) => sum + (row[row.length - 2] || 0), 0);
+        const totalWithVAT = dataRows.reduce((sum, row) => sum + (row[row.length - 1] || 0), 0);
+        const totalPeopleFedAll = dataRows.reduce((sum, row) => sum + (row[row.length - 4] || 0), 0);
 
-        // FINANCIAL DATA
+        // FINANCIAL DATA WITH VAT
         const totalDispatchCost = analyticsData?.financial.periodConsumption || 0;
         const consumption = analyticsData?.financial.periodConsumption || 0;
         const profit = analyticsData?.financial.profit || 0;
         const profitPercentage = analyticsData?.financial.profitPercentage || 0;
+        const vatOnSales = analyticsData?.financial.vatOnSales || 0;
 
         return [
             // REPORT HEADER
             ['SALES SUMMARY REPORT', ''],
+            ['VAT Rate', `${VAT_CONFIG.ratePercentage}% (Eswatini)`],
             ['', ''],
 
             // MAIN DATA TABLE
@@ -1287,15 +1645,18 @@ export default function ComprehensiveReportsPage() {
             ...dataRows,
             ['', ''],
 
-            // FINANCIAL SUMMARY
-            ['TOTAL SALES', '', ...allDates.map(() => ''), '', '', totalSales],
+            // FINANCIAL SUMMARY WITH VAT
+            ['TOTAL SALES (excl. VAT)', '', ...allDates.map(() => ''), '', '', totalSales, '', ''],
+            ['TOTAL VAT', '', ...allDates.map(() => ''), '', '', '', totalVAT, ''],
+            ['TOTAL SALES (incl. VAT)', '', ...allDates.map(() => ''), '', '', '', '', totalWithVAT],
             ['', ''],
 
             // FINANCIAL BREAKDOWN
             ['FINANCIAL ANALYSIS', ''],
             ['', ''],
-            ['PARTICIPATION SALES', '', ...allDates.map(() => ''), '', '', totalSales],
-            ['TOTAL SALES', '', ...allDates.map(() => ''), '', '', totalSales],
+            ['PARTICIPATION SALES (excl. VAT)', '', ...allDates.map(() => ''), '', '', totalSales],
+            ['VAT ON SALES', '', ...allDates.map(() => ''), '', '', vatOnSales],
+            ['TOTAL SALES (incl. VAT)', '', ...allDates.map(() => ''), '', '', totalWithVAT],
             ['LESS ISSUE CONSUMPTION', '', ...allDates.map(() => ''), '', '', consumption],
             ['WEEKLY PROFIT', '', ...allDates.map(() => ''), '', '', profit],
             ['PROFIT PERCENTAGE', '', ...allDates.map(() => ''), '', '', profitPercentage],
@@ -1306,15 +1667,16 @@ export default function ComprehensiveReportsPage() {
             ['', ''],
             ['Total People Served', '', ...allDates.map(() => ''), '', '', totalPeopleFedAll],
             ['Average Cost Per Person', '', ...allDates.map(() => ''), '', '', analyticsData?.dispatches.costPerPerson || 0],
-            ['Sales Efficiency', '', ...allDates.map(() => ''), '', '', '95%']
+            ['Sales Efficiency', '', ...allDates.map(() => ''), '', '', '95%'],
+            ['VAT Rate Applied', '', ...allDates.map(() => ''), '', '', `${VAT_CONFIG.ratePercentage}%`]
         ];
     };
 
-    // FULL MULTI-SHEET EXCEL EXPORT FUNCTION
+    // FULL MULTI-SHEET EXCEL EXPORT FUNCTION WITH VAT
     const exportToExcel = useCallback(async () => {
         setExportLoading(true);
         try {
-            console.log('📊 Starting comprehensive Excel export...');
+            console.log('📊 Starting comprehensive Excel export with VAT...');
 
             // Validate we have data before exporting
             const hasData = Object.keys(rawData).length > 0 &&
@@ -1342,22 +1704,22 @@ export default function ComprehensiveReportsPage() {
 
             const workbook = XLSX.utils.book_new();
 
-            // 1. EXECUTIVE SUMMARY SHEET
-            console.log('📝 Creating Executive Summary sheet...');
+            // 1. EXECUTIVE SUMMARY SHEET WITH VAT
+            console.log('📝 Creating Executive Summary sheet with VAT...');
             const summaryData = createFormattedSummaryData();
             const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
             autoFitColumns(summarySheet);
             XLSX.utils.book_append_sheet(workbook, summarySheet, 'Executive Summary');
 
-            // 2. SALES SUMMARY SHEET
-            console.log('📝 Creating Sales Summary sheet...');
+            // 2. SALES SUMMARY SHEET WITH VAT
+            console.log('📝 Creating Sales Summary sheet with VAT...');
             const salesSummaryData = createFormattedSalesSummaryData(rawData.dispatches || []);
             const salesSummarySheet = XLSX.utils.aoa_to_sheet(salesSummaryData);
             autoFitColumns(salesSummarySheet);
             XLSX.utils.book_append_sheet(workbook, salesSummarySheet, 'Sales Summary');
 
-            // 3. PURCHASE ORDERS SHEET
-            console.log('📝 Creating Purchase Orders sheet...');
+            // 3. PURCHASE ORDERS SHEET WITH VAT
+            console.log('📝 Creating Purchase Orders sheet with VAT...');
             const periodPOs = filterDataByDateRange(rawData.purchaseOrders || [], 'orderDate');
             const poData = periodPOs.map((po: any) => ({
                 'PO Number': po.poNumber || 'N/A',
@@ -1365,7 +1727,9 @@ export default function ComprehensiveReportsPage() {
                 'Status': po.status || 'N/A',
                 'Ordered By': po.orderedBy?.name || 'N/A',
                 'Site': po.site?.name || 'N/A',
-                'Total Amount': po.totalAmount || 0,
+                'Total Amount (excl. VAT)': po.totalAmount || 0,
+                'VAT Amount': po.vatAmount || 0,
+                'Total Amount (incl. VAT)': po.totalWithVAT || 0,
                 'Evidence Status': po.evidenceStatus || 'N/A',
                 'Item Count': po.orderedItems?.length || 0
             }));
@@ -1376,8 +1740,8 @@ export default function ComprehensiveReportsPage() {
                 XLSX.utils.book_append_sheet(workbook, poSheet, 'Purchase Orders');
             }
 
-            // 4. GOODS RECEIPTS SHEET
-            console.log('📝 Creating Goods Receipts sheet...');
+            // 4. GOODS RECEIPTS SHEET WITH VAT
+            console.log('📝 Creating Goods Receipts sheet with VAT...');
             const periodGoodsReceipts = filterDataByDateRange(rawData.goodsReceipts || [], 'receiptDate');
             const grData = periodGoodsReceipts.map((gr: any) => ({
                 'Receipt Number': gr.receiptNumber || 'N/A',
@@ -1386,6 +1750,10 @@ export default function ComprehensiveReportsPage() {
                 'PO Number': gr.purchaseOrder?.poNumber || 'N/A',
                 'Receiving Bin': gr.receivingBin?.name || 'N/A',
                 'Site': gr.receivingBin?.site?.name || 'N/A',
+                'Total Value (excl. VAT)': gr.receivedItems?.reduce((sum: number, item: any) =>
+                    sum + ((item.receivedQuantity || 0) * (item.unitPrice || 0)), 0) || 0,
+                'VAT Amount': gr.vatAmount || 0,
+                'Total Value (incl. VAT)': gr.totalWithVAT || 0,
                 'Evidence Status': gr.evidenceStatus || 'N/A',
                 'Item Count': gr.receivedItems?.length || 0
             }));
@@ -1396,8 +1764,8 @@ export default function ComprehensiveReportsPage() {
                 XLSX.utils.book_append_sheet(workbook, grSheet, 'Goods Receipts');
             }
 
-            // 5. DISPATCHES SHEET
-            console.log('📝 Creating Dispatches sheet...');
+            // 5. DISPATCHES SHEET WITH VAT
+            console.log('📝 Creating Dispatches sheet with VAT...');
             const periodDispatches = filterDataByDateRange(rawData.dispatches || [], 'dispatchDate');
             const dispatchData = periodDispatches.map((dispatch: any) => ({
                 'Dispatch Number': dispatch.dispatchNumber || 'N/A',
@@ -1408,9 +1776,13 @@ export default function ComprehensiveReportsPage() {
                 'Site': dispatch.sourceBin?.site?.name || 'N/A',
                 'Dispatched By': dispatch.dispatchedBy?.name || 'N/A',
                 'People Fed': dispatch.peopleFed || 0,
-                'Total Cost': dispatch.totalCost || 0,
+                'Total Cost (excl. VAT)': dispatch.totalCost || 0,
+                'VAT on Cost': dispatch.vatAmount || 0,
+                'Total Cost (incl. VAT)': dispatch.totalWithVAT || 0,
                 'Cost Per Person': dispatch.costPerPerson || 0,
-                'Total Sales': (dispatch.dispatchType?.sellingPrice || dispatch.sellingPrice || 0) * (dispatch.peopleFed || 0),
+                'Total Sales (excl. VAT)': (dispatch.dispatchType?.sellingPrice || dispatch.sellingPrice || 0) * (dispatch.peopleFed || 0),
+                'VAT on Sales': dispatch.salesVAT || 0,
+                'Total Sales (incl. VAT)': dispatch.salesWithVAT || 0,
                 'Evidence Status': dispatch.evidenceStatus || 'N/A'
             }));
 
@@ -1420,7 +1792,38 @@ export default function ComprehensiveReportsPage() {
                 XLSX.utils.book_append_sheet(workbook, dispatchSheet, 'Dispatches');
             }
 
-            // 6. TRANSFERS SHEET
+            // 6. VAT ANALYSIS SHEET
+            console.log('📝 Creating VAT Analysis sheet...');
+            const vatAnalysisData = [
+                ['VAT ANALYSIS REPORT', ''],
+                ['', ''],
+                ['VAT Rate', `${VAT_CONFIG.ratePercentage}% (Eswatini)`],
+                ['Report Period', `${primaryDateRange.start} to ${primaryDateRange.end}`],
+                ['', ''],
+                ['VAT SUMMARY', ''],
+                ['Total Output VAT (Sales)', analyticsData?.vat.summary.totalOutputVAT || 0],
+                ['Total Input VAT (Purchases)', analyticsData?.vat.summary.totalInputVAT || 0],
+                ['Net VAT Payable', analyticsData?.vat.summary.netVATPayable || 0],
+                ['', ''],
+                ['VAT BREAKDOWN', ''],
+                ['Purchases VAT', analyticsData?.vat.breakdown.purchases.vatAmount || 0],
+                ['Purchases Total (incl. VAT)', analyticsData?.vat.breakdown.purchases.totalWithVAT || 0],
+                ['Sales VAT', analyticsData?.vat.breakdown.sales.vatAmount || 0],
+                ['Sales Total (incl. VAT)', analyticsData?.vat.breakdown.sales.totalWithVAT || 0],
+                ['Inventory VAT', analyticsData?.vat.breakdown.inventory.vatAmount || 0],
+                ['Inventory Total (incl. VAT)', analyticsData?.vat.breakdown.inventory.totalWithVAT || 0],
+                ['', ''],
+                ['FINANCIAL IMPACT', ''],
+                ['Gross Profit Before VAT', analyticsData?.financial.grossProfitBeforeVAT || 0],
+                ['VAT Payable', analyticsData?.financial.netVATPayable || 0],
+                ['Gross Profit After VAT', analyticsData?.financial.grossProfitAfterVAT || 0]
+            ];
+
+            const vatAnalysisSheet = XLSX.utils.aoa_to_sheet(vatAnalysisData);
+            autoFitColumns(vatAnalysisSheet);
+            XLSX.utils.book_append_sheet(workbook, vatAnalysisSheet, 'VAT Analysis');
+
+            // 7. TRANSFERS SHEET
             console.log('📝 Creating Transfers sheet...');
             const periodTransfers = filterDataByDateRange(rawData.transfers || [], 'transferDate');
             const transferData = periodTransfers.map((transfer: any) => ({
@@ -1442,7 +1845,7 @@ export default function ComprehensiveReportsPage() {
                 XLSX.utils.book_append_sheet(workbook, transferSheet, 'Transfers');
             }
 
-            // 7. BIN COUNTS SHEET
+            // 8. BIN COUNTS SHEET
             console.log('📝 Creating Bin Counts sheet...');
             const periodBinCounts = filterDataByDateRange(rawData.binCounts || [], 'countDate');
             const binCountData = periodBinCounts.map((count: any) => ({
@@ -1463,8 +1866,8 @@ export default function ComprehensiveReportsPage() {
                 XLSX.utils.book_append_sheet(workbook, binCountSheet, 'Bin Counts');
             }
 
-            // 8. STOCK ITEMS SHEET
-            console.log('📝 Creating Stock Items sheet...');
+            // 9. STOCK ITEMS SHEET WITH VAT
+            console.log('📝 Creating Stock Items sheet with VAT...');
             const stockItemsArray = Array.isArray(rawData.stockItems)
                 ? rawData.stockItems
                 : (rawData.stockItems as any)?.items || [];
@@ -1476,10 +1879,13 @@ export default function ComprehensiveReportsPage() {
                 'Item Type': item.itemType || 'N/A',
                 'Unit of Measure': item.unitOfMeasure || 'N/A',
                 'Unit Price': item.unitPrice || 0,
+                'VAT Applicable': item.isVATApplicable !== false ? 'Yes' : 'No',
                 'Minimum Stock Level': item.minimumStockLevel || 0,
                 'Reorder Quantity': item.reorderQuantity || 0,
                 'Current Stock': item.currentStock || 0,
-                'Stock Value': (item.currentStock || 0) * (item.unitPrice || 0),
+                'Stock Value (excl. VAT)': (item.currentStock || 0) * (item.unitPrice || 0),
+                'VAT Amount': item.stockVAT || 0,
+                'Stock Value (incl. VAT)': item.stockValueWithVAT || 0,
                 'Primary Supplier': item.primarySupplier?.name || 'N/A',
                 'Supplier Count': item.suppliers?.length || 0
             }));
@@ -1490,7 +1896,7 @@ export default function ComprehensiveReportsPage() {
                 XLSX.utils.book_append_sheet(workbook, stockItemSheet, 'Stock Items');
             }
 
-            // 9. LOW STOCK ALERTS SHEET
+            // 10. LOW STOCK ALERTS SHEET
             console.log('📝 Creating Low Stock Alerts sheet...');
             const lowStockData = rawData.lowStock?.map((item: any) => ({
                 'Name': item.name || 'N/A',
@@ -1500,6 +1906,7 @@ export default function ComprehensiveReportsPage() {
                 'Unit of Measure': item.unitOfMeasure || 'N/A',
                 'Category': item.category?.title || 'N/A',
                 'Primary Supplier': item.primarySupplier?.name || 'N/A',
+                'VAT Applicable': item.isVATApplicable !== false ? 'Yes' : 'No',
                 'Status': (item.currentStock || 0) === 0 ? 'CRITICAL' :
                     (item.currentStock || 0) <= (item.minimumStockLevel || 0) ? 'LOW STOCK' : 'HEALTHY'
             })) || [];
@@ -1510,19 +1917,21 @@ export default function ComprehensiveReportsPage() {
                 XLSX.utils.book_append_sheet(workbook, lowStockSheet, 'Low Stock Alerts');
             }
 
-            // 10. ANALYTICS DATA SHEET
-            console.log('📝 Creating Analytics Data sheet...');
+            // 11. ANALYTICS DATA SHEET WITH VAT
+            console.log('📝 Creating Analytics Data sheet with VAT...');
             const analyticsSheetData = createFormattedAnalyticsData();
             const analyticsSheet = XLSX.utils.aoa_to_sheet(analyticsSheetData);
             autoFitColumns(analyticsSheet);
             XLSX.utils.book_append_sheet(workbook, analyticsSheet, 'Analytics Data');
 
-            // 11. SUPPLIER PERFORMANCE SHEET
-            console.log('📝 Creating Supplier Performance sheet...');
+            // 12. SUPPLIER PERFORMANCE SHEET WITH VAT
+            console.log('📝 Creating Supplier Performance sheet with VAT...');
             const supplierData = analyticsData?.suppliers.performance.map(supplier => ({
                 'Supplier Name': supplier.name || 'N/A',
                 'Total Orders': supplier.orders || 0,
-                'Total Value': supplier.value || 0
+                'Total Value (excl. VAT)': supplier.value || 0,
+                'VAT Amount': supplier.vatAmount || 0,
+                'Total Value (incl. VAT)': (supplier.value || 0) + (supplier.vatAmount || 0)
             })) || [];
 
             if (supplierData.length > 0) {
@@ -1532,16 +1941,16 @@ export default function ComprehensiveReportsPage() {
             }
 
             // Generate Excel file
-            console.log('💾 Generating Excel file...');
+            console.log('💾 Generating Excel file with VAT...');
             const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
             const data = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-            const fileName = `Caterflow_Comprehensive_Report_${format(new Date(), 'yyyy-MM-dd')}.xlsx`;
+            const fileName = `Caterflow_Comprehensive_Report_VAT_${format(new Date(), 'yyyy-MM-dd')}.xlsx`;
             saveAs(data, fileName);
 
-            console.log('✅ Excel export completed successfully');
+            console.log('✅ Excel export with VAT completed successfully');
             toast({
                 title: 'Export Successful',
-                description: `Report exported with ${workbook.SheetNames.length} sheets`,
+                description: `Report exported with ${workbook.SheetNames.length} sheets including VAT analysis`,
                 status: 'success',
                 duration: 4000,
                 isClosable: true,
@@ -1562,7 +1971,7 @@ export default function ComprehensiveReportsPage() {
     }, [analyticsData, rawData, toast, fetchAllData, primaryDateRange, filterDataByDateRange]);
 
     // ========== OLD REPORTS FUNCTIONS ==========
-    // (Keeping all original old reports functionality)
+    // (Keeping all original old reports functionality with VAT columns added)
 
     // Helper function to get date from item based on report type
     const getItemDate = (item: any, reportTitle: string): string => {
@@ -1664,7 +2073,17 @@ export default function ComprehensiveReportsPage() {
             }
 
             let data = await response.json();
-            console.log(`✅ ${reportTitle} data fetched:`, data.length, 'items');
+
+            // Apply VAT calculations to fetched data
+            if (reportTitle === 'Purchase Orders') {
+                data = calculatePurchaseOrderVAT(data);
+            } else if (reportTitle === 'Goods Receipts') {
+                data = calculateGoodsReceiptVAT(data);
+            } else if (reportTitle === 'Dispatches') {
+                data = calculateDispatchVAT(data);
+            }
+
+            console.log(`✅ ${reportTitle} data fetched with VAT:`, data.length, 'items');
 
             setReportData(prev => ({ ...prev, [reportTitle]: data }));
             filterReportData(reportTitle, data);
@@ -1680,7 +2099,7 @@ export default function ComprehensiveReportsPage() {
         } finally {
             setLoading(prev => ({ ...prev, [reportTitle]: false }));
         }
-    }, [filterReportData, toast]);
+    }, [filterReportData, toast, calculatePurchaseOrderVAT, calculateGoodsReceiptVAT, calculateDispatchVAT]);
 
     // Initialize filter states for old reports
     useEffect(() => {
@@ -1786,7 +2205,7 @@ export default function ComprehensiveReportsPage() {
     const exportAllReports = useCallback(async () => {
         try {
             setAnalyticsLoading(true);
-            console.log('📊 Starting export of all reports...');
+            console.log('📊 Starting export of all reports with VAT...');
 
             const fetchPromises = reportConfigs.map(async (config) => {
                 console.log(`📡 Fetching ${config.title}...`);
@@ -1794,11 +2213,22 @@ export default function ComprehensiveReportsPage() {
                 if (!response.ok) {
                     throw new Error(`Failed to fetch ${config.title}`);
                 }
-                return response.json();
+                let data = await response.json();
+
+                // Apply VAT calculations
+                if (config.title === 'Purchase Orders') {
+                    data = calculatePurchaseOrderVAT(data);
+                } else if (config.title === 'Goods Receipts') {
+                    data = calculateGoodsReceiptVAT(data);
+                } else if (config.title === 'Dispatches') {
+                    data = calculateDispatchVAT(data);
+                }
+
+                return data;
             });
 
             const allData = await Promise.all(fetchPromises);
-            console.log('✅ All reports data fetched');
+            console.log('✅ All reports data fetched with VAT');
 
             let combinedCsv = '';
 
@@ -1835,16 +2265,16 @@ export default function ComprehensiveReportsPage() {
             const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = url;
-            link.download = `All_Reports_Combined_${new Date().toISOString().split('T')[0]}.csv`;
+            link.download = `All_Reports_Combined_VAT_${new Date().toISOString().split('T')[0]}.csv`;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
             URL.revokeObjectURL(url);
 
-            console.log('✅ All reports exported successfully');
+            console.log('✅ All reports with VAT exported successfully');
             toast({
                 title: 'Export Successful',
-                description: 'All reports combined into a single CSV file',
+                description: 'All reports combined into a single CSV file with VAT',
                 status: 'success',
                 duration: 3000,
                 isClosable: true,
@@ -1861,7 +2291,7 @@ export default function ComprehensiveReportsPage() {
         } finally {
             setAnalyticsLoading(false);
         }
-    }, [reportConfigs, toast]);
+    }, [reportConfigs, toast, calculatePurchaseOrderVAT, calculateGoodsReceiptVAT, calculateDispatchVAT]);
 
     // Helper to get nested object values
     const getNestedValue = (obj: any, path: string) => {
@@ -1897,7 +2327,7 @@ export default function ComprehensiveReportsPage() {
     useEffect(() => {
         if (status === 'authenticated' && activeTab === 0) {
             const timer = setTimeout(() => {
-                console.log('🔍 Loading analytics data on mount...');
+                console.log('🔍 Loading analytics data with VAT on mount...');
                 fetchAllData();
             }, 500);
 
@@ -1928,9 +2358,9 @@ export default function ComprehensiveReportsPage() {
             }
         }
 
-        if (column.includes('amount') || column.includes('cost') || column.includes('price')) {
+        if (column.includes('amount') || column.includes('cost') || column.includes('price') || column.includes('vat')) {
             if (typeof value === 'number') {
-                return value.toFixed(2);
+                return `SZL ${value.toFixed(2)}`;
             }
         }
 
@@ -1992,7 +2422,7 @@ export default function ComprehensiveReportsPage() {
                             Analytics & Reports
                         </Heading>
                         <Text color={secondaryTextColor}>
-                            Comprehensive analytics and exportable reports with accurate data
+                            Comprehensive analytics and exportable reports with VAT calculations (Eswatini 15%)
                         </Text>
                     </Box>
 
@@ -2013,11 +2443,29 @@ export default function ComprehensiveReportsPage() {
                                 isLoading={exportLoading}
                                 size="lg"
                             >
-                                Export Full Report (Excel)
+                                Export Full Report with VAT
                             </Button>
                         )}
                     </HStack>
                 </Flex>
+
+                {/* VAT Rate Display */}
+                <Card bg="blue.50" borderColor="blue.200">
+                    <CardBody>
+                        <HStack justify="space-between">
+                            <HStack>
+                                <Icon as={FiPercent} color="blue.500" />
+                                <VStack align="start" spacing={0}>
+                                    <Text fontWeight="bold" color="blue.700">VAT Rate Applied</Text>
+                                    <Text color="blue.600">Eswatini Standard Rate: {VAT_CONFIG.ratePercentage}%</Text>
+                                </VStack>
+                            </HStack>
+                            <Badge colorScheme="blue" fontSize="lg" p={2}>
+                                VAT {VAT_CONFIG.ratePercentage}%
+                            </Badge>
+                        </HStack>
+                    </CardBody>
+                </Card>
 
                 {/* Quick Date Range Presets */}
                 <Card>
@@ -2135,17 +2583,17 @@ export default function ComprehensiveReportsPage() {
                                             <Flex justify="center" align="center" py={10}>
                                                 <VStack spacing={4}>
                                                     <Spinner size="xl" />
-                                                    <Text>Loading accurate analytics data...</Text>
+                                                    <Text>Loading analytics data with VAT calculations...</Text>
                                                 </VStack>
                                             </Flex>
                                         ) : !analyticsData ? (
                                             <Alert status="info" borderRadius="md">
                                                 <AlertIcon />
-                                                No analytics data available. Click "Update Analytics" to load accurate data.
+                                                No analytics data available. Click "Update Analytics" to load data with VAT calculations.
                                             </Alert>
                                         ) : (
                                             <>
-                                                {/* Key Metrics Summary */}
+                                                {/* Key Metrics Summary with VAT */}
                                                 <Card>
                                                     <CardBody>
                                                         <Heading size="md" mb={6}>Key Performance Indicators</Heading>
@@ -2159,7 +2607,7 @@ export default function ComprehensiveReportsPage() {
                                                                 </StatLabel>
                                                                 <StatNumber>{analyticsData.summary.totalPurchaseOrders}</StatNumber>
                                                                 <StatHelpText>
-                                                                    {analyticsData.purchaseOrders.totalValue.toLocaleString()} total value
+                                                                    {analyticsData.purchaseOrders.totalValue.toLocaleString()} excl. VAT
                                                                 </StatHelpText>
                                                             </Stat>
                                                             <Stat>
@@ -2177,13 +2625,15 @@ export default function ComprehensiveReportsPage() {
                                                             <Stat>
                                                                 <StatLabel>
                                                                     <HStack>
-                                                                        <Icon as={FiArchive} />
-                                                                        <Text>Inventory Value</Text>
+                                                                        <Icon as={FiPercent} />
+                                                                        <Text>VAT Payable</Text>
                                                                     </HStack>
                                                                 </StatLabel>
-                                                                <StatNumber>{(analyticsData.summary.totalInventoryValue).toLocaleString()}</StatNumber>
+                                                                <StatNumber color={analyticsData.summary.netVATLiability >= 0 ? 'red.500' : 'green.500'}>
+                                                                    SZL {Math.abs(analyticsData.summary.netVATLiability).toLocaleString()}
+                                                                </StatNumber>
                                                                 <StatHelpText>
-                                                                    {analyticsData.summary.totalStockItems} items
+                                                                    {analyticsData.summary.netVATLiability >= 0 ? 'Payable' : 'Refundable'}
                                                                 </StatHelpText>
                                                             </Stat>
                                                             <Stat>
@@ -2196,6 +2646,39 @@ export default function ComprehensiveReportsPage() {
                                                                 <StatNumber>{analyticsData.summary.lowStockItems}</StatNumber>
                                                                 <StatHelpText>
                                                                     {analyticsData.summary.criticalStockItems} critical
+                                                                </StatHelpText>
+                                                            </Stat>
+                                                        </SimpleGrid>
+                                                    </CardBody>
+                                                </Card>
+
+                                                {/* VAT Summary Card */}
+                                                <Card borderLeft="4px" borderColor="blue.500">
+                                                    <CardBody>
+                                                        <Heading size="md" mb={4} color="blue.700">
+                                                            <HStack>
+                                                                <Icon as={FiPercent} />
+                                                                <Text>VAT Summary (Eswatini {VAT_CONFIG.ratePercentage}%)</Text>
+                                                            </HStack>
+                                                        </Heading>
+                                                        <SimpleGrid columns={{ base: 1, md: 3 }} spacing={6}>
+                                                            <Stat>
+                                                                <StatLabel>Output VAT (Sales)</StatLabel>
+                                                                <StatNumber>SZL {analyticsData.vat.summary.totalOutputVAT.toLocaleString()}</StatNumber>
+                                                                <StatHelpText>VAT collected on sales</StatHelpText>
+                                                            </Stat>
+                                                            <Stat>
+                                                                <StatLabel>Input VAT (Purchases)</StatLabel>
+                                                                <StatNumber>SZL {analyticsData.vat.summary.totalInputVAT.toLocaleString()}</StatNumber>
+                                                                <StatHelpText>VAT paid on purchases</StatHelpText>
+                                                            </Stat>
+                                                            <Stat>
+                                                                <StatLabel>Net VAT Payable</StatLabel>
+                                                                <StatNumber color={analyticsData.vat.summary.netVATPayable >= 0 ? 'red.500' : 'green.500'}>
+                                                                    SZL {Math.abs(analyticsData.vat.summary.netVATPayable).toLocaleString()}
+                                                                </StatNumber>
+                                                                <StatHelpText>
+                                                                    {analyticsData.vat.summary.netVATPayable >= 0 ? 'Amount due to tax authority' : 'Refund claimable'}
                                                                 </StatHelpText>
                                                             </Stat>
                                                         </SimpleGrid>
@@ -2248,55 +2731,64 @@ export default function ComprehensiveReportsPage() {
                                                     )}
                                                 </SimpleGrid>
 
-                                                {/* Financial Metrics - PERIOD-BASED CALCULATIONS */}
+                                                {/* Financial Metrics - PERIOD-BASED CALCULATIONS WITH VAT */}
                                                 <Card>
                                                     <CardBody>
-                                                        <Heading size="md" mb={4}>Financial Performance (Accurate Period Accounting)</Heading>
+                                                        <Heading size="md" mb={4}>Financial Performance (With VAT Accounting)</Heading>
 
                                                         {/* Success message when we have accurate data */}
                                                         <Alert status="success" mb={4} fontSize="sm">
                                                             <AlertIcon />
                                                             <Box>
-                                                                <Text fontWeight="bold">Accurate period accounting enabled</Text>
-                                                                <Text>Opening stock calculated from transaction history</Text>
+                                                                <Text fontWeight="bold">Accurate period accounting with VAT enabled</Text>
+                                                                <Text>Eswatini VAT rate of {VAT_CONFIG.ratePercentage}% applied to all transactions</Text>
                                                             </Box>
                                                         </Alert>
 
-                                                        <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={6}>
+                                                        <SimpleGrid columns={{ base: 1, md: 2, lg: 4 }} spacing={6}>
                                                             <Stat>
                                                                 <StatLabel>Opening Stock</StatLabel>
-                                                                <StatNumber>{analyticsData?.financial?.openingStock?.toLocaleString() || '0'}</StatNumber>
+                                                                <StatNumber>SZL {analyticsData?.financial?.openingStock?.toLocaleString() || '0'}</StatNumber>
                                                                 <StatHelpText>As of {format(new Date(primaryDateRange.start), 'MMM dd, yyyy')}</StatHelpText>
                                                             </Stat>
                                                             <Stat>
                                                                 <StatLabel>Goods Received</StatLabel>
-                                                                <StatNumber>{analyticsData?.financial?.periodPurchases?.toLocaleString() || '0'}</StatNumber>
+                                                                <StatNumber>SZL {analyticsData?.financial?.periodPurchases?.toLocaleString() || '0'}</StatNumber>
                                                                 <StatHelpText>{analyticsData?.summary.totalGoodsReceipts} receipts</StatHelpText>
                                                             </Stat>
                                                             <Stat>
                                                                 <StatLabel>Dispatch Consumption</StatLabel>
-                                                                <StatNumber>{analyticsData?.financial?.periodConsumption?.toLocaleString() || '0'}</StatNumber>
+                                                                <StatNumber>SZL {analyticsData?.financial?.periodConsumption?.toLocaleString() || '0'}</StatNumber>
                                                                 <StatHelpText>{analyticsData?.summary.totalDispatches} dispatches</StatHelpText>
                                                             </Stat>
                                                             <Stat>
                                                                 <StatLabel>Stock Variances</StatLabel>
-                                                                <StatNumber>{analyticsData?.financial?.netVariances?.toLocaleString() || '0'}</StatNumber>
+                                                                <StatNumber>SZL {analyticsData?.financial?.netVariances?.toLocaleString() || '0'}</StatNumber>
                                                                 <StatHelpText>{analyticsData?.summary.totalBinCounts} counts</StatHelpText>
                                                             </Stat>
                                                             <Stat>
                                                                 <StatLabel>Closing Stock</StatLabel>
-                                                                <StatNumber>{analyticsData?.financial?.closingStockValue?.toLocaleString() || '0'}</StatNumber>
+                                                                <StatNumber>SZL {analyticsData?.financial?.closingStockValue?.toLocaleString() || '0'}</StatNumber>
                                                                 <StatHelpText>Calculated value</StatHelpText>
                                                             </Stat>
                                                             <Stat>
                                                                 <StatLabel>Period Sales</StatLabel>
-                                                                <StatNumber>{analyticsData?.financial?.periodSales?.toLocaleString() || '0'}</StatNumber>
+                                                                <StatNumber>SZL {analyticsData?.financial?.periodSales?.toLocaleString() || '0'}</StatNumber>
                                                                 <StatHelpText>{analyticsData?.summary.totalPeopleFed?.toLocaleString()} people fed</StatHelpText>
                                                             </Stat>
                                                             <Stat>
+                                                                <StatLabel>VAT Payable</StatLabel>
+                                                                <StatNumber color={analyticsData?.financial?.netVATPayable >= 0 ? 'red.500' : 'green.500'}>
+                                                                    SZL {Math.abs(analyticsData?.financial?.netVATPayable || 0).toLocaleString()}
+                                                                </StatNumber>
+                                                                <StatHelpText>
+                                                                    {analyticsData?.financial?.netVATPayable >= 0 ? 'Due' : 'Refund'}
+                                                                </StatHelpText>
+                                                            </Stat>
+                                                            <Stat>
                                                                 <StatLabel>Gross Profit</StatLabel>
-                                                                <StatNumber color={analyticsData?.financial?.profit >= 0 ? 'green.500' : 'red.500'}>
-                                                                    {analyticsData?.financial?.profit?.toLocaleString() || '0'}
+                                                                <StatNumber color={analyticsData?.financial?.grossProfitAfterVAT >= 0 ? 'green.500' : 'red.500'}>
+                                                                    SZL {analyticsData?.financial?.grossProfitAfterVAT?.toLocaleString() || '0'}
                                                                 </StatNumber>
                                                                 <StatHelpText>
                                                                     {analyticsData?.financial?.profitPercentage?.toFixed(1) || '0'}% margin
@@ -2304,14 +2796,16 @@ export default function ComprehensiveReportsPage() {
                                                             </Stat>
                                                         </SimpleGrid>
 
-                                                        {/* Add calculation explanation */}
-                                                        <Box mt={4} p={3} borderRadius="md">
-                                                            <Text fontSize="sm" fontWeight="medium">Calculation Method:</Text>
+                                                        {/* Add calculation explanation with VAT */}
+                                                        <Box mt={4} p={3} borderRadius="md" bg="gray.50">
+                                                            <Text fontSize="sm" fontWeight="medium">Calculation Method (With VAT):</Text>
                                                             <Text fontSize="sm">• Opening Stock: Reconstructed from transaction history</Text>
-                                                            <Text fontSize="sm">• Goods Received: Actual receipts in period ({analyticsData?.financial?.periodPurchases?.toLocaleString()})</Text>
-                                                            <Text fontSize="sm">• Closing Stock: Calculated value ({analyticsData?.financial?.closingStockValue?.toLocaleString()})</Text>
+                                                            <Text fontSize="sm">• Goods Received: Actual receipts in period (SZL {analyticsData?.financial?.periodPurchases?.toLocaleString()})</Text>
+                                                            <Text fontSize="sm">• Closing Stock: Calculated value (SZL {analyticsData?.financial?.closingStockValue?.toLocaleString()})</Text>
                                                             <Text fontSize="sm">• COGS: Opening Stock + Purchases - Closing Stock</Text>
-                                                            <Text fontSize="sm">• Gross Profit: Sales - COGS</Text>
+                                                            <Text fontSize="sm">• Gross Profit Before VAT: Sales - COGS</Text>
+                                                            <Text fontSize="sm">• Gross Profit After VAT: Gross Profit Before VAT - Net VAT Payable</Text>
+                                                            <Text fontSize="sm">• VAT Rate: {VAT_CONFIG.ratePercentage}% (Eswatini Standard Rate)</Text>
                                                         </Box>
                                                     </CardBody>
                                                 </Card>
@@ -2328,6 +2822,7 @@ export default function ComprehensiveReportsPage() {
                                                                             <Th>Supplier</Th>
                                                                             <Th isNumeric>Orders</Th>
                                                                             <Th isNumeric>Total Value</Th>
+                                                                            <Th isNumeric>VAT Amount</Th>
                                                                         </Tr>
                                                                     </Thead>
                                                                     <Tbody>
@@ -2335,7 +2830,8 @@ export default function ComprehensiveReportsPage() {
                                                                             <Tr key={supplier.name}>
                                                                                 <Td>{supplier.name}</Td>
                                                                                 <Td isNumeric>{supplier.orders}</Td>
-                                                                                <Td isNumeric>{supplier.value.toLocaleString()}</Td>
+                                                                                <Td isNumeric>SZL {supplier.value.toLocaleString()}</Td>
+                                                                                <Td isNumeric>SZL {supplier.vatAmount.toLocaleString()}</Td>
                                                                             </Tr>
                                                                         ))}
                                                                     </Tbody>
@@ -2457,7 +2953,7 @@ const LineChartComponent = ({ data, title, dataKey, color = CHART_COLORS.primary
     </Card>
 );
 
-// Visual Analytics Tab Component
+// Visual Analytics Tab Component with VAT
 const VisualAnalyticsTab = ({ analyticsData, loading }: { analyticsData: EnhancedAnalyticsData | null, loading: boolean }) => {
     if (loading) {
         return (
@@ -2486,23 +2982,49 @@ const VisualAnalyticsTab = ({ analyticsData, loading }: { analyticsData: Enhance
     return (
         <VStack spacing={6} align="stretch">
             <Text fontSize="lg" color="gray.600">
-                Interactive visualizations and detailed analytics across all system modules
+                Interactive visualizations and detailed analytics across all system modules with VAT calculations
             </Text>
+
+            {/* VAT Analysis Chart */}
+            <Card>
+                <CardBody>
+                    <Text fontWeight="bold" mb={4}>VAT Analysis</Text>
+                    <Box height="300px" minWidth="100%">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={[
+                                { name: 'Output VAT (Sales)', value: analyticsData.vat.summary.totalOutputVAT, fill: CHART_COLORS.error[0] },
+                                { name: 'Input VAT (Purchases)', value: analyticsData.vat.summary.totalInputVAT, fill: CHART_COLORS.primary[0] },
+                                { name: 'Net VAT Payable', value: Math.abs(analyticsData.vat.summary.netVATPayable), fill: analyticsData.vat.summary.netVATPayable >= 0 ? CHART_COLORS.warning[0] : CHART_COLORS.success[0] }
+                            ]}>
+                                <CartesianGrid strokeDasharray="3 3" />
+                                <XAxis dataKey="name" />
+                                <YAxis />
+                                <Tooltip formatter={(value) => [`SZL ${Number(value).toLocaleString()}`, 'Amount']} />
+                                <Legend />
+                                <Bar dataKey="value" fill="#8884d8" />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </Box>
+                </CardBody>
+            </Card>
 
             {/* Financial Trends */}
             <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={6}>
                 <Card minH="400px">
                     <CardBody>
-                        <Text fontWeight="bold" mb={4}>Monthly Spending Trend</Text>
+                        <Text fontWeight="bold" mb={4}>Monthly Spending Trend (With VAT)</Text>
                         <Box height="300px" minWidth="100%">
                             <ResponsiveContainer width="100%" height="100%">
-                                <AreaChart data={analyticsData.financial.monthlySpending}>
+                                <ComposedChart data={analyticsData.financial.monthlySpending}>
                                     <CartesianGrid strokeDasharray="3 3" />
                                     <XAxis dataKey="month" />
                                     <YAxis />
-                                    <Tooltip formatter={(value) => [`${Number(value).toLocaleString()}`, 'Spending']} />
-                                    <Area type="monotone" dataKey="spending" stroke={CHART_COLORS.primary[0]} fill={CHART_COLORS.primary[2]} />
-                                </AreaChart>
+                                    <Tooltip formatter={(value) => [`SZL ${Number(value).toLocaleString()}`, 'Amount']} />
+                                    <Legend />
+                                    <Bar dataKey="spending" fill={CHART_COLORS.primary[0]} name="Spending (excl. VAT)" />
+                                    <Bar dataKey="vat" fill={CHART_COLORS.vat[0]} name="VAT Amount" />
+                                    <Line type="monotone" dataKey="totalWithVAT" stroke={CHART_COLORS.success[0]} strokeWidth={2} name="Total (incl. VAT)" />
+                                </ComposedChart>
                             </ResponsiveContainer>
                         </Box>
                     </CardBody>
@@ -2517,7 +3039,7 @@ const VisualAnalyticsTab = ({ analyticsData, loading }: { analyticsData: Enhance
                                     <CartesianGrid strokeDasharray="3 3" />
                                     <XAxis dataKey="date" />
                                     <YAxis />
-                                    <Tooltip formatter={(value) => [`${Number(value).toFixed(2)}`, 'Cost per Person']} />
+                                    <Tooltip formatter={(value) => [`SZL ${Number(value).toFixed(2)}`, 'Cost per Person']} />
                                     <Line type="monotone" dataKey="cost" stroke={CHART_COLORS.success[0]} strokeWidth={2} />
                                 </LineChart>
                             </ResponsiveContainer>
@@ -2586,11 +3108,11 @@ const VisualAnalyticsTab = ({ analyticsData, loading }: { analyticsData: Enhance
                 </Card>
             </SimpleGrid>
 
-            {/* Top Items Tables */}
+            {/* Top Items Tables with VAT */}
             <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={6}>
                 <Card>
                     <CardBody>
-                        <Heading size="sm" mb={4}>Top Purchased Items</Heading>
+                        <Heading size="sm" mb={4}>Top Purchased Items (With VAT)</Heading>
                         <TableContainer>
                             <Table variant="simple" size="sm">
                                 <Thead>
@@ -2598,6 +3120,7 @@ const VisualAnalyticsTab = ({ analyticsData, loading }: { analyticsData: Enhance
                                         <Th>Item</Th>
                                         <Th isNumeric>Quantity</Th>
                                         <Th isNumeric>Value</Th>
+                                        <Th isNumeric>VAT</Th>
                                     </Tr>
                                 </Thead>
                                 <Tbody>
@@ -2605,7 +3128,8 @@ const VisualAnalyticsTab = ({ analyticsData, loading }: { analyticsData: Enhance
                                         <Tr key={item.name}>
                                             <Td>{item.name}</Td>
                                             <Td isNumeric>{item.quantity}</Td>
-                                            <Td isNumeric>{item.value.toLocaleString()}</Td>
+                                            <Td isNumeric>SZL {item.value.toLocaleString()}</Td>
+                                            <Td isNumeric>SZL {item.vatAmount.toLocaleString()}</Td>
                                         </Tr>
                                     ))}
                                 </Tbody>
@@ -2616,7 +3140,7 @@ const VisualAnalyticsTab = ({ analyticsData, loading }: { analyticsData: Enhance
 
                 <Card>
                     <CardBody>
-                        <Heading size="sm" mb={4}>Top Dispatched Items</Heading>
+                        <Heading size="sm" mb={4}>Top Dispatched Items (With VAT)</Heading>
                         <TableContainer>
                             <Table variant="simple" size="sm">
                                 <Thead>
@@ -2624,6 +3148,7 @@ const VisualAnalyticsTab = ({ analyticsData, loading }: { analyticsData: Enhance
                                         <Th>Item</Th>
                                         <Th isNumeric>Quantity</Th>
                                         <Th isNumeric>Cost</Th>
+                                        <Th isNumeric>VAT</Th>
                                     </Tr>
                                 </Thead>
                                 <Tbody>
@@ -2631,7 +3156,8 @@ const VisualAnalyticsTab = ({ analyticsData, loading }: { analyticsData: Enhance
                                         <Tr key={item.name}>
                                             <Td>{item.name}</Td>
                                             <Td isNumeric>{item.quantity}</Td>
-                                            <Td isNumeric>{item.cost.toLocaleString()}</Td>
+                                            <Td isNumeric>SZL {item.cost.toLocaleString()}</Td>
+                                            <Td isNumeric>SZL {item.vatAmount.toLocaleString()}</Td>
                                         </Tr>
                                     ))}
                                 </Tbody>
@@ -2644,35 +3170,38 @@ const VisualAnalyticsTab = ({ analyticsData, loading }: { analyticsData: Enhance
     );
 };
 
-// Data Export Tab Component
+// Data Export Tab Component with VAT
 const DataExportTab = ({ exportToExcel, loading, dataAvailable }: { exportToExcel: () => void, loading: boolean, dataAvailable: boolean }) => (
     <VStack spacing={6} align="stretch">
         <Card>
             <CardBody>
                 <VStack spacing={4} align="start">
-                    <Heading size="md">Comprehensive Data Export</Heading>
+                    <Heading size="md">Comprehensive Data Export with VAT</Heading>
                     <Text>
                         Generate a complete Excel report with multiple sheets containing all system data,
-                        analytics, and visual summaries. The export includes accurate data without currency symbols.
+                        analytics, and visual summaries. The export includes accurate VAT calculations
+                        using the Eswatini standard rate of {VAT_CONFIG.ratePercentage}%.
                     </Text>
 
                     <SimpleGrid columns={2} spacing={4} width="100%">
                         <HStack><Box w="2" h="2" bg="green.500" borderRadius="full" /><Text>Executive Summary</Text></HStack>
-                        <HStack><Box w="2" h="2" bg="green.500" borderRadius="full" /><Text>Purchase Orders</Text></HStack>
-                        <HStack><Box w="2" h="2" bg="green.500" borderRadius="full" /><Text>Goods Receipts</Text></HStack>
-                        <HStack><Box w="2" h="2" bg="green.500" borderRadius="full" /><Text>Dispatches & Consumption</Text></HStack>
+                        <HStack><Box w="2" h="2" bg="green.500" borderRadius="full" /><Text>Purchase Orders with VAT</Text></HStack>
+                        <HStack><Box w="2" h="2" bg="green.500" borderRadius="full" /><Text>Goods Receipts with VAT</Text></HStack>
+                        <HStack><Box w="2" h="2" bg="green.500" borderRadius="full" /><Text>Dispatches & Consumption with VAT</Text></HStack>
                         <HStack><Box w="2" h="2" bg="green.500" borderRadius="full" /><Text>Stock Transfers</Text></HStack>
                         <HStack><Box w="2" h="2" bg="green.500" borderRadius="full" /><Text>Bin Counts & Adjustments</Text></HStack>
-                        <HStack><Box w="2" h="2" bg="green.500" borderRadius="full" /><Text>Inventory Catalog</Text></HStack>
+                        <HStack><Box w="2" h="2" bg="green.500" borderRadius="full" /><Text>Inventory Catalog with VAT</Text></HStack>
                         <HStack><Box w="2" h="2" bg="green.500" borderRadius="full" /><Text>Low Stock Alerts</Text></HStack>
-                        <HStack><Box w="2" h="2" bg="green.500" borderRadius="full" /><Text>Analytics Data</Text></HStack>
-                        <HStack><Box w="2" h="2" bg="green.500" borderRadius="full" /><Text>Supplier Performance</Text></HStack>
+                        <HStack><Box w="2" h="2" bg="green.500" borderRadius="full" /><Text>Analytics Data with VAT</Text></HStack>
+                        <HStack><Box w="2" h="2" bg="green.500" borderRadius="full" /><Text>Supplier Performance with VAT</Text></HStack>
+                        <HStack><Box w="2" h="2" bg="blue.500" borderRadius="full" /><Text>VAT Analysis Report</Text></HStack>
+                        <HStack><Box w="2" h="2" bg="blue.500" borderRadius="full" /><Text>Sales Summary with VAT</Text></HStack>
                     </SimpleGrid>
 
                     <Alert status="info" borderRadius="md">
                         <AlertIcon />
-                        The exported Excel file contains accurate, real-time data with proper formatting and no currency symbols.
-                        All financial values are exported as pure numbers for easy analysis.
+                        The exported Excel file contains accurate, real-time data with Eswatini VAT calculations.
+                        All financial values are clearly marked as either excluding or including VAT.
                     </Alert>
 
                     <Button
@@ -2683,12 +3212,12 @@ const DataExportTab = ({ exportToExcel, loading, dataAvailable }: { exportToExce
                         isDisabled={!dataAvailable}
                         size="lg"
                     >
-                        {dataAvailable ? 'Generate Comprehensive Report' : 'Load Data First'}
+                        {dataAvailable ? 'Generate Comprehensive Report with VAT' : 'Load Data First'}
                     </Button>
 
                     {!dataAvailable && (
                         <Text color="orange.500" fontSize="sm">
-                            Please load data from the Executive Dashboard tab first to ensure accurate exports.
+                            Please load data from the Executive Dashboard tab first to ensure accurate VAT calculations.
                         </Text>
                     )}
                 </VStack>

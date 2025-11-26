@@ -42,7 +42,7 @@ import {
     useColorModeValue,
     Flex
 } from '@chakra-ui/react';
-import { FiPlus, FiTrash2, FiRefreshCw, FiSave, FiSend } from 'react-icons/fi';
+import { FiPlus, FiTrash2, FiRefreshCw, FiSave, FiSend, FiFileText } from 'react-icons/fi';
 import StockItemSelectorModal from './StockItemSelectorModal';
 import { nanoid } from 'nanoid';
 import { useSession } from 'next-auth/react';
@@ -486,6 +486,329 @@ export default function TransferModal({ isOpen, onClose, transfer, onSave }: Tra
         );
     };
 
+    // Add this function to your TransferModal component
+    const exportTransferPDF = () => {
+        if (!transfer) return;
+
+        const htmlContent = `
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Transfer Document - ${transfer.transferNumber}</title>
+    <style>
+        body { 
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; 
+            margin: 40px; 
+            color: #151515;
+            background: #F5F7FA;
+        }
+        .header-container {
+            display: flex;
+            align-items: center;
+            margin-bottom: 30px;
+            border-bottom: 2px solid #E2E8F0;
+            padding-bottom: 20px;
+            gap: 20px;
+        }
+        .logo {
+            height: 80px;
+            width: auto;
+            opacity: 0.8;
+        }
+        .header-content {
+            text-align: left;
+            flex-grow: 1;
+        }
+        .header-content h1 { 
+            margin: 0; 
+            color: #0067FF;
+            font-size: 28px;
+            font-weight: 600;
+        }
+        .info-section { 
+            margin-bottom: 30px;
+            background: #FFFFFF;
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid #E2E8F0;
+        }
+        .info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        .info-item {
+            margin-bottom: 10px;
+        }
+        .info-label {
+            font-weight: 600;
+            color: #4A5568;
+            font-size: 14px;
+        }
+        .table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background: #FFFFFF;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.03);
+            border: 1px solid #E2E8F0;
+        }
+        .table th {
+            background-color: #F7FAFC;
+            border: 1px solid #E2E8F0;
+            padding: 12px 16px;
+            text-align: left;
+            font-weight: 600;
+            color: #2D3748;
+            font-size: 14px;
+        }
+        .table td {
+            border: 1px solid #E2E8F0;
+            padding: 12px 16px;
+            color: #4A5568;
+            font-size: 14px;
+        }
+        .signature-section {
+            margin-top: 40px;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            border-top: 2px solid #E2E8F0;
+            padding-top: 30px;
+        }
+        .signature-box {
+            text-align: center;
+            padding: 20px;
+            background: #F7FAFC;
+            border-radius: 8px;
+            border: 1px solid #E2E8F0;
+        }
+        .signature-line {
+            height: 2px;
+            background: #CBD5E0;
+            margin: 40px 0 10px 0;
+        }
+        .signature-label {
+            font-weight: 600;
+            color: #2D3748;
+            margin-bottom: 5px;
+        }
+        .signature-details {
+            font-size: 12px;
+            color: #718096;
+            margin-top: 5px;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-left: 10px;
+        }
+        .status-completed { background: #C6F6D5; color: #22543D; }
+        .status-approved { background: #BEE3F8; color: #1A365D; }
+        .status-pending { background: #FEEBC8; color: #744210; }
+        .status-draft { background: #E2E8F0; color: #2D3748; }
+        .footer {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #E2E8F0;
+            font-size: 12px;
+            color: #718096;
+            text-align: center;
+        }
+        @media print {
+            body { margin: 25px; background: white; }
+            .no-print { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header-container">
+        <div class="logo-container">
+            <img src="/icon-512x512.png" alt="Caterflow" class="logo" />
+        </div>
+        <div class="header-content">
+            <h1>INTERNAL TRANSFER DOCUMENT</h1>
+            <p style="font-size: 16px; margin: 5px 0;">
+                Transfer Number: <strong>${transfer.transferNumber}</strong>
+                <span class="status-badge status-${transfer.status}">
+                    ${transfer.status.toUpperCase()}
+                </span>
+            </p>
+            <p style="font-size: 14px; margin: 5px 0;">
+                Date: ${new Date(transfer.transferDate).toLocaleDateString()}
+            </p>
+        </div>
+    </div>
+
+    <div class="info-section">
+        <div class="info-grid">
+            <div>
+                <div class="info-item">
+                    <span class="info-label">From Bin:</span>
+                    <span> ${transfer.fromBin.name}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Site:</span>
+                    <span> ${transfer.fromBin.site.name}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Transferred By:</span>
+                    <span> ${transfer.transferredBy?.name || 'Not specified'}</span>
+                </div>
+            </div>
+            <div>
+                <div class="info-item">
+                    <span class="info-label">To Bin:</span>
+                    <span> ${transfer.toBin.name}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Site:</span>
+                    <span> ${transfer.toBin.site.name}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Approved By:</span>
+                    <span> ${transfer.approvedBy?.name || 'Pending approval'}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    ${transfer.notes ? `
+        <div class="info-section">
+            <h3 style="margin: 0 0 12px 0; color: #2D3748; font-size: 16px;">Transfer Notes:</h3>
+            <p style="margin: 0; color: #4A5568; line-height: 1.5;">${transfer.notes}</p>
+        </div>
+    ` : ''}
+
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Item Name</th>
+                <th>SKU</th>
+                <th>Quantity</th>
+                <th>Unit</th>
+                <th>Notes</th>
+            </tr>
+        </thead>
+        <tbody>
+            ${transfer.transferredItems.map(item => `
+                <tr>
+                    <td><strong>${item.stockItem.name}</strong></td>
+                    <td>${item.stockItem.sku || 'N/A'}</td>
+                    <td>${item.transferredQuantity}</td>
+                    <td>${item.stockItem.unitOfMeasure || 'Each'}</td>
+                    <td>${item.notes || '-'}</td>
+                </tr>
+            `).join('')}
+        </tbody>
+    </table>
+
+    <div class="signature-section">
+        <!-- Sender Signature -->
+        <div class="signature-box">
+            <div class="signature-label">SENDER</div>
+            <div class="signature-details">
+                Prepared and verified by
+            </div>
+            <div class="signature-line"></div>
+            <div class="signature-details">
+                Name: _________________________
+            </div>
+            <div class="signature-details">
+                Signature: 
+                <div style="height: 60px; margin: 10px 0; border-bottom: 1px solid #CBD5E0;"></div>
+            </div>
+            <div class="signature-details">
+                Date: _________________________
+            </div>
+        </div>
+
+        <!-- Driver Signature -->
+        <div class="signature-box">
+            <div class="signature-label">DRIVER / TRANSPORTER</div>
+            <div class="signature-details">
+                Received items for transport
+            </div>
+            <div class="signature-line"></div>
+            <div class="signature-details">
+                Name: _________________________
+            </div>
+            <div class="signature-details">
+                Signature: 
+                <div style="height: 60px; margin: 10px 0; border-bottom: 1px solid #CBD5E0;"></div>
+            </div>
+            <div class="signature-details">
+                Date: _________________________
+            </div>
+            <div class="signature-details">
+                Vehicle No: ____________________
+            </div>
+        </div>
+
+        <!-- Recipient Signature -->
+        <div class="signature-box">
+            <div class="signature-label">RECIPIENT</div>
+            <div class="signature-details">
+                Received and verified items
+            </div>
+            <div class="signature-line"></div>
+            <div class="signature-details">
+                Name: _________________________
+            </div>
+            <div class="signature-details">
+                Signature: 
+                <div style="height: 60px; margin: 10px 0; border-bottom: 1px solid #CBD5E0;"></div>
+            </div>
+            <div class="signature-details">
+                Date: _________________________
+            </div>
+            <div class="signature-details">
+                Time: _________________________
+            </div>
+        </div>
+    </div>
+
+    <div class="footer">
+        <p>Generated by Caterflow Inventory Management System</p>
+        <p>Document ID: ${transfer._id} | Printed on: ${new Date().toLocaleString()}</p>
+    </div>
+
+    <div class="no-print" style="text-align: center; margin-top: 20px;">
+        <button onclick="window.print()" style="background: #0067FF; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer;">
+            Print / Save as PDF
+        </button>
+    </div>
+
+    <script>
+        // Add status badge styling
+        const statusBadge = document.querySelector('.status-badge');
+        if (statusBadge) {
+            const status = '${transfer.status}';
+            const statusClasses = {
+                'completed': 'status-completed',
+                'approved': 'status-approved', 
+                'pending-approval': 'status-pending',
+                'draft': 'status-draft'
+            };
+            statusBadge.classList.add(statusClasses[status] || 'status-draft');
+        }
+    </script>
+</body>
+</html>`;
+
+        const exportWindow = window.open('', '_blank');
+        if (exportWindow) {
+            exportWindow.document.write(htmlContent);
+            exportWindow.document.close();
+            exportWindow.document.title = `Transfer - ${transfer.transferNumber}`;
+        }
+    };
+
     return (
         <>
             <Modal isOpen={isOpen} onClose={onClose} size="4xl">
@@ -773,6 +1096,19 @@ export default function TransferModal({ isOpen, onClose, transfer, onSave }: Tra
                                         Transfer completed - read only
                                     </Text>
                                 ) : null}
+
+                                {/* Add this Export PDF button */}
+                                {transfer && (
+                                    <Button
+                                        colorScheme="blue"
+                                        variant="outline"
+                                        onClick={exportTransferPDF}
+                                        leftIcon={<FiFileText />}
+                                        ml={3}
+                                    >
+                                        Export PDF
+                                    </Button>
+                                )}
                             </ModalFooter>
                         </form>
                     )}

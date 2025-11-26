@@ -227,6 +227,95 @@ export default function BinCountModal({ isOpen, onClose, binCount, onSave }: Bin
         };
     }, [isOpen]);
 
+    // Add this function inside the BinCountModal component
+    const loadAllStockItems = async () => {
+        if (!selectedBin || binCount) return; // Only for new counts with selected bin
+
+        setLoading(true);
+        try {
+            // Fetch all stock items
+            const response = await fetch('/api/stock-items');
+            if (!response.ok) throw new Error('Failed to fetch stock items');
+
+            const allStockItems: StockItemForSelector[] = await response.json();
+
+            if (allStockItems.length === 0) {
+                toast({
+                    title: 'No Stock Items',
+                    description: 'No stock items found in the system.',
+                    status: 'info',
+                    duration: 3000,
+                    isClosable: true,
+                });
+                return;
+            }
+
+            // Fetch system quantities for all items in parallel
+            const itemsWithQuantities = await Promise.all(
+                allStockItems.map(async (item) => {
+                    let systemQuantity = 0;
+                    try {
+                        const systemQuantityRes = await fetch(
+                            `/api/stock-items/${item._id}/in-bin/${selectedBin._id}`
+                        );
+                        if (systemQuantityRes.ok) {
+                            const { inStock } = await systemQuantityRes.json();
+                            systemQuantity = inStock || 0;
+                        }
+                    } catch (error) {
+                        console.warn(`Could not fetch system quantity for ${item.name}:`, error);
+                    }
+
+                    return {
+                        _key: nanoid(),
+                        stockItem: {
+                            _id: item._id,
+                            name: item.name,
+                            sku: item.sku || 'N/A'
+                        },
+                        countedQuantity: 0,
+                        systemQuantityAtCountTime: systemQuantity,
+                    };
+                })
+            );
+
+            setCountedItems(itemsWithQuantities);
+
+            toast({
+                title: 'All Items Loaded',
+                description: `${itemsWithQuantities.length} stock items added to bin count`,
+                status: 'success',
+                duration: 3000,
+                isClosable: true,
+            });
+
+        } catch (error: any) {
+            console.error("Error loading all stock items:", error);
+            toast({
+                title: 'Error',
+                description: 'Failed to load all stock items. Please try again.',
+                status: 'error',
+                duration: 5000,
+                isClosable: true,
+            });
+        } finally {
+            setLoading(false);
+        }
+    };
+
+
+    // Update the useEffect that handles bin selection
+    useEffect(() => {
+        if (selectedBin && !binCount) {
+            // Auto-load all stock items when a bin is selected for new counts
+            const timer = setTimeout(() => {
+                loadAllStockItems();
+            }, 500); // Small delay to prevent rapid calls
+
+            return () => clearTimeout(timer);
+        }
+    }, [selectedBin, binCount]);
+
     const fixBrokenBinCount = async (countId: string) => {
         if (isProcessing) return;
 
@@ -306,6 +395,11 @@ export default function BinCountModal({ isOpen, onClose, binCount, onSave }: Bin
     const handleBinSelect = (bin: Bin) => {
         setSelectedBin(bin);
         setIsBinModalOpen(false);
+
+        // Don't auto-load if we're editing an existing count
+        if (!binCount) {
+            // The useEffect above will handle the auto-loading
+        }
     };
 
     // In BinCountModal.tsx - Update the handleStockItemsSelect function
@@ -573,7 +667,11 @@ export default function BinCountModal({ isOpen, onClose, binCount, onSave }: Bin
                         </Heading>
                     </ModalHeader>
                     <ModalCloseButton />
-                    <ModalBody>
+                    <ModalBody
+                        overflowY="auto"
+                        maxH={{ base: 'calc(100vh - 200px)', md: 'calc(100vh - 300px)' }}
+                        pb={6}
+                    >
                         <VStack spacing={4} pt={4}>
                             <FormControl id="bin-name" isRequired>
                                 <FormLabel>Bin</FormLabel>
@@ -619,9 +717,16 @@ export default function BinCountModal({ isOpen, onClose, binCount, onSave }: Bin
                                 <Card bg={cardBg} shadow="md" borderWidth="1px" borderColor={borderColor}>
                                     <CardBody p={{ base: 2, md: 4 }}>
                                         {/* Desktop View: Table */}
-                                        <TableContainer display={{ base: 'none', md: 'block' }}>
+                                        <TableContainer
+                                            display={{ base: 'none', md: 'block' }}
+                                            maxH="400px"
+                                            overflowY="auto"
+                                            border="1px solid"
+                                            borderColor={borderColor}
+                                            borderRadius="md"
+                                        >
                                             <Table variant="simple" size="sm">
-                                                <Thead bg={tableHeaderBg}>
+                                                <Thead bg={tableHeaderBg} position="sticky" top={0} zIndex={1}>
                                                     <Tr>
                                                         <Th color={tableHeaderText}>Item</Th>
                                                         <Th color={tableHeaderText}>System Qty</Th>
@@ -651,6 +756,7 @@ export default function BinCountModal({ isOpen, onClose, binCount, onSave }: Bin
                                                                         value={item.countedQuantity === 0 ? '' : item.countedQuantity}
                                                                         onChange={(e) => handleCountedQuantityChange(item._key!, e.target.value)}
                                                                         placeholder="0"
+                                                                        size="sm"
                                                                     />
                                                                 )}
                                                             </Td>
@@ -680,7 +786,14 @@ export default function BinCountModal({ isOpen, onClose, binCount, onSave }: Bin
                                         </TableContainer>
 
                                         {/* Mobile View: Card List */}
-                                        <VStack display={{ base: 'flex', md: 'none' }} spacing={4} align="stretch">
+                                        <VStack
+                                            display={{ base: 'flex', md: 'none' }}
+                                            spacing={4}
+                                            align="stretch"
+                                            maxH="400px"
+                                            overflowY="auto"
+                                            pr={2}
+                                        >
                                             {countedItems.length > 0 ? (
                                                 countedItems.map((item) => (
                                                     <Card key={item._key} bg={cardBg} variant="outline" borderColor={borderColor}>
@@ -719,6 +832,7 @@ export default function BinCountModal({ isOpen, onClose, binCount, onSave }: Bin
                                                                             isDisabled={isViewMode}
                                                                             placeholder="0"
                                                                             width="100px"
+                                                                            size="sm"
                                                                         />
                                                                     </Box>
                                                                 </HStack>
