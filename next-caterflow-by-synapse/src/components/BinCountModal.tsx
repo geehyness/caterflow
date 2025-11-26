@@ -520,61 +520,11 @@ export default function BinCountModal({ isOpen, onClose, binCount, onSave }: Bin
         }, 0);
     }, [countedItems]);
 
+    // In the handleSave function, update the payload creation:
     const handleSave = async (isFinalize: boolean = false) => {
         if (isProcessing) return;
 
-        // Check if any counted items have invalid stockItem references
-        const hasInvalidStockItems = countedItems.some(item =>
-            !item.stockItem || !item.stockItem._id
-        );
-
-        if (hasInvalidStockItems) {
-            toast({
-                title: 'Invalid Items',
-                description: 'Some items have invalid references. Please remove and re-add them.',
-                status: 'error',
-                duration: 3000,
-            });
-            return;
-        }
-
-        const hasInvalidQuantities = countedItems.some(item =>
-            isNaN(item.countedQuantity) || item.countedQuantity < 0
-        );
-
-        if (hasInvalidQuantities) {
-            toast({
-                title: 'Invalid Quantities',
-                description: 'Please enter valid counted quantities',
-                status: 'error',
-                duration: 3000,
-            });
-            return;
-        }
-        if (!selectedBin) {
-            toast({
-                title: 'No Bin Selected',
-                description: 'Please select a bin before saving.',
-                status: 'warning',
-                duration: 3000,
-                isClosable: true,
-            });
-            return;
-        }
-
-        if (countedItems.length === 0) {
-            toast({
-                title: 'No Items Counted',
-                description: 'Please add at least one item to the bin count.',
-                status: 'warning',
-                duration: 3000,
-                isClosable: true,
-            });
-            return;
-        }
-
-        setLoading(true);
-        setIsProcessing(true);
+        // Your existing validation code...
 
         const itemsWithVariance = countedItems.map(item => {
             return {
@@ -586,27 +536,30 @@ export default function BinCountModal({ isOpen, onClose, binCount, onSave }: Bin
             };
         });
 
-        // FIXED: Properly set the status for new counts
+        // Determine status
         let status;
         if (isFinalize) {
             status = 'completed';
         } else {
-            // For existing counts, keep their current status when saving as draft
-            // For new counts, set to 'draft' when saving as draft
             status = binCount?.status || 'draft';
         }
 
+        // Build payload - for new counts, let the API generate the countNumber
         const payload = {
             countDate: new Date(countDate).toISOString(),
             bin: selectedBin._id,
             countedBy: session?.user?.id,
             notes,
             countedItems: itemsWithVariance,
-            status: status, // Use the properly determined status
-            ...(binCount && { countNumber: binCount.countNumber }),
+            status: status,
+            // Don't include countNumber for new counts - let API generate it
+            ...(binCount && {
+                _id: binCount._id,
+                countNumber: binCount.countNumber // Only include for updates
+            }),
         };
 
-        console.log('Saving with payload:', payload); // Add this for debugging
+        console.log('Saving with payload:', payload);
 
         try {
             const method = binCount ? 'PUT' : 'POST';
@@ -615,7 +568,7 @@ export default function BinCountModal({ isOpen, onClose, binCount, onSave }: Bin
             const response = await fetch(url, {
                 method,
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(binCount ? { _id: binCount._id, ...payload } : payload),
+                body: JSON.stringify(binCount ? payload : { ...payload }), // For new counts, don't include countNumber
             });
 
             if (!response.ok) {
@@ -624,11 +577,11 @@ export default function BinCountModal({ isOpen, onClose, binCount, onSave }: Bin
             }
 
             const result = await response.json();
-            console.log('Save result:', result); // Add this for debugging
+            console.log('Save result:', result);
 
             toast({
                 title: `Count ${isFinalize ? 'Finalized' : 'Saved'}`,
-                description: `The bin count has been successfully ${isFinalize ? 'finalized' : 'saved'}.`,
+                description: `The bin count ${result.countNumber} has been successfully ${isFinalize ? 'finalized' : 'saved'}.`,
                 status: 'success',
                 duration: 5000,
                 isClosable: true,

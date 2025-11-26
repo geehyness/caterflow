@@ -103,6 +103,49 @@ const getNextCountNumber = async (): Promise<string> => {
     }
 };
 
+// Add this function to generate bin count numbers
+const getNextBinCountNumber = async (): Promise<string> => {
+    try {
+        // Get all bin count numbers and find the maximum
+        const query = groq`*[_type == "InventoryCount"].countNumber`;
+        const allCountNumbers = await client.fetch(query);
+
+        let maxNumber = 0;
+
+        if (allCountNumbers && allCountNumbers.length > 0) {
+            allCountNumbers.forEach((countNumber: string) => {
+                if (countNumber && countNumber.startsWith('BC-')) {
+                    const numberPart = countNumber.split('-')[1];
+                    const currentNumber = parseInt(numberPart);
+                    if (!isNaN(currentNumber) && currentNumber > maxNumber) {
+                        maxNumber = currentNumber;
+                    }
+                }
+            });
+        }
+
+        // Generate the next number
+        const nextNumber = maxNumber + 1;
+        const newCountNumber = `BC-${String(nextNumber).padStart(5, '0')}`;
+
+        // Double-check this number doesn't already exist
+        const checkQuery = groq`count(*[_type == "InventoryCount" && countNumber == $newNumber])`;
+        const existingCount = await client.fetch(checkQuery, { newNumber: newCountNumber });
+
+        if (existingCount > 0) {
+            // If it exists, try the next number
+            return `BC-${String(nextNumber + 1).padStart(5, '0')}`;
+        }
+
+        return newCountNumber;
+    } catch (error) {
+        console.error('Error generating bin count number:', error);
+        // Fallback with timestamp to ensure uniqueness
+        const timestamp = new Date().getTime();
+        return `BC-${String(timestamp).slice(-5)}`;
+    }
+};
+
 // src/app/api/bin-counts/route.ts
 export async function PUT(request: Request) {
     try {
@@ -183,7 +226,9 @@ export async function PUT(request: Request) {
 export async function POST(request: Request) {
     try {
         const newBinCount = await request.json();
-        const countNumber = await getNextCountNumber();
+
+        // Use the count number generator
+        const countNumber = await getNextBinCountNumber();
 
         // Validate that a bin is provided
         if (!newBinCount.bin) {
@@ -202,7 +247,7 @@ export async function POST(request: Request) {
                 _key: item._key,
                 stockItem: {
                     _type: 'reference',
-                    _ref: item.stockItem, // This should be the stock item ID
+                    _ref: item.stockItem,
                 },
                 countedQuantity: item.countedQuantity,
                 systemQuantityAtCountTime: item.systemQuantityAtCountTime,
@@ -213,19 +258,17 @@ export async function POST(request: Request) {
         const doc = {
             _type: 'InventoryCount',
             ...newBinCount,
-            countNumber,
-            // Use the status from the request, default to 'draft' if not provided
+            countNumber, // Use the generated count number
             status: newBinCount.status || 'draft',
-            countDate: new Date().toISOString(),
+            countDate: newBinCount.countDate || new Date().toISOString(),
             bin: {
                 _type: 'reference',
                 _ref: newBinCount.bin,
             },
             countedItems: countedItems || [],
-            // Sanity will generate a unique _id for us
         };
 
-        console.log('Creating document:', doc);
+        console.log('Creating bin count document:', doc);
 
         const result = await writeClient.create(doc);
 

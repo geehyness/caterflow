@@ -120,6 +120,7 @@ export default function BinCountsPage() {
         }
     }, [fetchBinCounts, status]);
 
+    // In your BinCountsPage component, update the useEffect that filters and sorts counts:
     useEffect(() => {
         let filtered = binCounts.filter(count => {
             const term = searchTerm.toLowerCase();
@@ -133,14 +134,19 @@ export default function BinCountsPage() {
             ? filtered.filter(count => count.status === 'draft' || count.status === 'in-progress')
             : filtered;
 
+        // Sort by count number (extract numeric part for proper numerical sorting)
         countsToDisplay.sort((a, b) => {
-            const numA = parseInt(a.countNumber?.split('-')[1] || '0', 10);
-            const numB = parseInt(b.countNumber?.split('-')[1] || '0', 10);
-            return numB - numA;
+            const extractNumber = (countNumber: string) => {
+                const match = countNumber?.match(/BC-(\d+)/);
+                return match ? parseInt(match[1], 10) : 0;
+            };
+
+            const numA = extractNumber(a.countNumber);
+            const numB = extractNumber(b.countNumber);
+            return numB - numA; // Descending order (newest first)
         });
 
         setFilteredCounts(countsToDisplay);
-
     }, [binCounts, searchTerm, viewMode]);
 
     const handleAddBinCount = () => {
