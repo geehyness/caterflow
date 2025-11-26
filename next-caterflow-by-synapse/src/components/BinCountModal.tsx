@@ -547,7 +547,7 @@ export default function BinCountModal({ isOpen, onClose, binCount, onSave }: Bin
         // Build payload - for new counts, let the API generate the countNumber
         const payload = {
             countDate: new Date(countDate).toISOString(),
-            bin: selectedBin._id,
+            bin: selectedBin?._id || "",
             countedBy: session?.user?.id,
             notes,
             countedItems: itemsWithVariance,
