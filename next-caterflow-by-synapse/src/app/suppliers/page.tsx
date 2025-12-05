@@ -144,7 +144,7 @@ export default function SuppliersPage() {
     };
 
     // Assuming 'admin' and 'manager' roles have CRUD permissions
-    const canManage = user?.role === 'admin' || user?.role === 'manager';
+    const canManage = user?.role === 'admin' || user?.role === 'manager' || user?.role === 'procurer';
 
     const columns = [
         ...(canManage ? [{

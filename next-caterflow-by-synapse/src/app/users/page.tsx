@@ -259,7 +259,7 @@ export default function UsersPage() {
             isSortable: true,
             cell: (row: AppUserWithSite) => (
                 <Text fontSize="sm" color={secondaryTextColor}>
-                    {row.associatedSite?.name || 'N/A'}
+                    {row.associatedSite?._id || 'N/A'}
                 </Text>
             ),
         },
